@@ -1,0 +1,314 @@
+---
+/**
+ * An interactive Leaflet map of one or more GeoJSON layers.
+ *
+ * One layer, no legend:
+ *   <ProjectMap layers={[{ name: 'Sites', src: '/data/sites.geojson' }]} />
+ *
+ * Several layers — each toggleable, together forming the legend:
+ *   <ProjectMap layers={[
+ *     { name: 'Burn severity',   src: '/data/severity.geojson', color: '#a8452f' },
+ *     { name: 'Field validation', src: '/data/points.geojson',  color: '#1c5d5d', visible: false },
+ *   ]} caption="Toggle field validation over the modelled severity." />
+ *
+ * A layer's colour sets its legend swatch and its features. A feature may still
+ * override with its own `color` property. Popups are built from feature
+ * properties: `name`/`title` becomes the heading, `description` the body, and
+ * everything else a key/value table.
+ *
+ * Project pages get here through frontmatter (`map:` or `layers:`); see
+ * src/pages/projects/[...slug].astro, which normalises both into this shape.
+ */
+interface Layer {
+  name: string;
+  src: string;
+  color?: string;
+  visible?: boolean;
+}
+
+interface Props {
+  layers: Layer[];
+  /** [lat, lng] — only used when fit is false, or every layer is empty. */
+  center?: [number, number];
+  zoom?: number;
+  caption?: string;
+  /** Zoom to the combined extent of all layers on load. */
+  fit?: boolean;
+}
+
+const { layers, center = [37.98, 23.73], zoom = 6, caption, fit = true } = Astro.props;
+---
+
+<figure class="map-figure">
+  <div
+    class="map"
+    data-map
+    data-layers={JSON.stringify(layers)}
+    data-center={JSON.stringify(center)}
+    data-zoom={String(zoom)}
+    data-fit={String(fit)}
+    role="application"
+    aria-label={caption ?? 'Interactive map'}
+  >
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<script>
+  // Namespace import, not a default import: Leaflet's ESM build (which is what
+  // Vite resolves) exports named bindings only and has no default export.
+  import * as L from 'leaflet';
+  import 'leaflet/dist/leaflet.css';
+
+  interface LayerSpec {
+    name: string;
+    src: string;
+    color?: string;
+    visible?: boolean;
+  }
+
+  // CARTO Positron: muted enough that your data stays the loudest thing on the
+  // map. Free for low volume; both attributions below are required by their
+  // terms. To go fully self-hosted later, swap the URL for your own tile server
+  // and keep the OpenStreetMap attribution.
+  const BASEMAP = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+  const ATTRIBUTION =
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, ' +
+    '&copy; <a href="https://carto.com/attributions">CARTO</a>';
+
+  const accent = () =>
+    getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#1c5d5d';
+
+  const escapeHtml = (value: unknown) =>
+    String(value).replace(
+      /[&<>"']/g,
+      (c) =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string,
+    );
+
+  function popupHtml(props: Record<string, unknown> | null): string {
+    if (!props) return '';
+    const { name, title, description, color, ...rest } = props;
+    const heading = name ?? title;
+    let html = '';
+    if (heading) html += `<strong>${escapeHtml(heading)}</strong><br />`;
+    if (description) html += `${escapeHtml(description)}`;
+
+    const extras = Object.entries(rest).filter(([, v]) => v !== null && v !== '');
+    if (extras.length) {
+      html += '<dl class="popup-meta">';
+      for (const [k, v] of extras) {
+        html += `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`;
+      }
+      html += '</dl>';
+    }
+    return html;
+  }
+
+  // Build a Leaflet layer for one GeoJSON source, coloured by the layer spec.
+  function makeLayer(geojson: GeoJSON.FeatureCollection, fallbackColor: string) {
+    return L.geoJSON(geojson, {
+      pointToLayer: (feature, latlng) =>
+        // Circle markers rather than pin icons: no image assets to break, and
+        // they read better when several points cluster together.
+        L.circleMarker(latlng, {
+          radius: 6,
+          color: feature.properties?.color || fallbackColor,
+          weight: 2,
+          fillColor: feature.properties?.color || fallbackColor,
+          fillOpacity: 0.45,
+        }),
+      style: (feature) => ({
+        color: feature?.properties?.color || fallbackColor,
+        weight: 2,
+        fillOpacity: 0.15,
+      }),
+      onEachFeature: (feature, lyr) => {
+        const html = popupHtml(feature.properties);
+        if (html) lyr.bindPopup(html);
+      },
+    });
+  }
+
+  // A combined legend + layer toggle: one row per layer, each a checkbox, a
+  // colour swatch and the layer name. Clicking the row switches the layer on or
+  // off. Standard Leaflet has a layers control, but it hides the colours; a
+  // reader needs the swatch to know what each colour means, so this does both.
+  function makeLegend(
+    entries: { name: string; color: string; layer: L.Layer; visible: boolean; error?: boolean }[],
+    map: L.Map,
+  ) {
+    const control = new L.Control({ position: 'bottomright' });
+    control.onAdd = () => {
+      const box = L.DomUtil.create('div', 'map-legend');
+      // Keep clicks and scrolls on the control from panning/zooming the map.
+      L.DomEvent.disableClickPropagation(box);
+      L.DomEvent.disableScrollPropagation(box);
+
+      for (const entry of entries) {
+        const row = L.DomUtil.create('label', 'map-legend__row', box);
+        const input = L.DomUtil.create('input', 'map-legend__toggle', row) as HTMLInputElement;
+        input.type = 'checkbox';
+        input.checked = entry.visible;
+        input.disabled = !!entry.error;
+
+        const swatch = L.DomUtil.create('span', 'map-legend__swatch', row);
+        swatch.style.background = entry.color;
+
+        const label = L.DomUtil.create('span', 'map-legend__name', row);
+        label.textContent = entry.error ? `${entry.name} (unavailable)` : entry.name;
+
+        input.addEventListener('change', () => {
+          if (input.checked) map.addLayer(entry.layer);
+          else map.removeLayer(entry.layer);
+        });
+      }
+      return box;
+    };
+    return control;
+  }
+
+  async function initMap(el: HTMLElement) {
+    let specs: LayerSpec[];
+    try {
+      specs = JSON.parse(el.dataset.layers || '[]');
+    } catch {
+      specs = [];
+    }
+    if (!specs.length) return;
+
+    const map = L.map(el, { scrollWheelZoom: false }).setView(
+      JSON.parse(el.dataset.center || '[37.98, 23.73]'),
+      Number(el.dataset.zoom || 6),
+    );
+
+    // Scroll-wheel zoom is off by default so the page doesn't hijack scrolling
+    // when someone skims past. Click the map and it turns on.
+    map.on('click', () => map.scrollWheelZoom.enable());
+    map.on('mouseout', () => map.scrollWheelZoom.disable());
+
+    L.tileLayer(BASEMAP, { attribution: ATTRIBUTION, maxZoom: 19 }).addTo(map);
+    L.control.scale({ imperial: false }).addTo(map);
+
+    // Load every layer in parallel. A layer that fails to load does not sink
+    // the others — it just shows as unavailable in the legend.
+    const results = await Promise.all(
+      specs.map(async (spec) => {
+        try {
+          const res = await fetch(spec.src);
+          if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+          return { spec, geojson: (await res.json()) as GeoJSON.FeatureCollection };
+        } catch (err) {
+          console.error(`Could not load ${spec.src}:`, err);
+          return { spec, geojson: null };
+        }
+      }),
+    );
+
+    const bounds = L.latLngBounds([]);
+    const legendEntries: {
+      name: string;
+      color: string;
+      layer: L.Layer;
+      visible: boolean;
+      error?: boolean;
+    }[] = [];
+
+    for (const { spec, geojson } of results) {
+      const color = spec.color || accent();
+      const visible = spec.visible !== false;
+
+      if (!geojson) {
+        legendEntries.push({ name: spec.name, color, layer: L.layerGroup(), visible: false, error: true });
+        continue;
+      }
+
+      const layer = makeLayer(geojson, color);
+      if (visible) layer.addTo(map);
+      // Extend the fit-bounds with every layer, even one that starts hidden, so
+      // switching it on never reveals data off the edge of the map.
+      const b = layer.getBounds();
+      if (b.isValid()) bounds.extend(b);
+
+      legendEntries.push({ name: spec.name, color, layer, visible });
+    }
+
+    if (legendEntries.every((e) => e.error)) {
+      el.insertAdjacentHTML(
+        'beforeend',
+        '<p class="map-error">This map’s data could not be loaded.</p>',
+      );
+      return;
+    }
+
+    // Show the legend/toggle whenever there is more than one layer. A single
+    // layer needs neither a swatch to disambiguate nor a switch to compare
+    // against, so it stays clean, exactly as before.
+    if (legendEntries.length > 1) {
+      makeLegend(legendEntries, map).addTo(map);
+    }
+
+    if (el.dataset.fit === 'true' && bounds.isValid()) {
+      map.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 });
+    }
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-map]').forEach(initMap);
+</script>
+
+<style is:global>
+  .popup-meta {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.1rem 0.75rem;
+    margin: 0.6rem 0 0;
+    font-size: 0.8rem;
+  }
+  .popup-meta dt {
+    color: var(--text-muted);
+    text-transform: capitalize;
+  }
+  .popup-meta dd {
+    margin: 0;
+  }
+  .map-error {
+    padding: 1rem;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+  }
+
+  /* Legend / layer toggle */
+  .map-legend {
+    background: var(--bg-surface);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    padding: 0.5rem 0.65rem;
+    font-size: 0.8rem;
+    line-height: 1.4;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+    max-width: 15rem;
+  }
+  .map-legend__row {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    cursor: pointer;
+    padding: 0.15rem 0;
+  }
+  .map-legend__toggle {
+    margin: 0;
+    flex: none;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+  .map-legend__swatch {
+    flex: none;
+    width: 0.85rem;
+    height: 0.85rem;
+    border-radius: 2px;
+    border: 1px solid rgba(0, 0, 0, 0.25);
+  }
+  .map-legend__name {
+    color: var(--text);
+  }
+</style>

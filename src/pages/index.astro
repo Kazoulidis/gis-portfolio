@@ -1,0 +1,143 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { site, projectCategories, projectsHref } from '../site';
+import { getCollection } from 'astro:content';
+
+// Only categories flagged `homepage: true` in src/site.ts are eligible here.
+// This is the one page a recruiter is guaranteed to see, so the 30 daily
+// challenge entries stay out of it and let the real work show.
+const homepageCategories = projectCategories
+  .filter((category) => category.homepage)
+  .map((category) => category.slug);
+
+const recent = (
+  await getCollection(
+    'projects',
+    ({ data }) => !data.draft && homepageCategories.includes(data.category),
+  )
+)
+  .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf())
+  .slice(0, 3);
+
+// The sidebar. Group your skills the way you'd want them scanned — the first
+// group is the one people read.
+const skills = [
+  {
+    heading: 'GIS & Remote Sensing',
+    items: ['ArcGIS Pro', 'ArcGIS Online', 'QGIS', 'GDAL/OGR', 'ERDAS Imagine', 'SNAP'],
+  },
+  {
+    heading: 'Programming',
+    items: ['Python (ArcPy, GeoPandas)', 'SQL / PostGIS', 'JavaScript (Leaflet)', 'R'],
+  },
+  {
+    heading: 'Data & Web',
+    items: ['PostgreSQL', 'GeoServer', 'Google Earth Engine', 'FME'],
+  },
+  {
+    heading: 'Languages',
+    items: ['Greek — native', 'English — fluent'],
+  },
+];
+---
+
+<BaseLayout description={site.tagline}>
+  <div class="split">
+    <div>
+      <p class="eyebrow">About</p>
+      <h1>{site.name}</h1>
+      <p class="lede">{site.tagline}</p>
+
+      <!--
+        Two or three short paragraphs. Say what you do, what you have worked on,
+        and what you are looking for. Resist writing more — the projects page is
+        where the depth belongs.
+      -->
+      <p>
+        I am a GIS specialist based in {site.location}, working across spatial
+        analysis, remote sensing and cartographic design. My work has covered
+        environmental monitoring, land-use change and field data collection, and
+        I am equally comfortable in a desktop GIS, in Python, or in a spatial
+        database.
+      </p>
+      <p>
+        I care about the parts of this job that do not make it into screenshots:
+        clean data models, reproducible processing, and maps that answer the
+        question they were made for.
+      </p>
+      <p>
+        I am currently open to roles in spatial analysis and geospatial data
+        engineering. The best way to reach me is <a href={`mailto:${site.email}`}>
+          by email</a>.
+      </p>
+
+      {
+        site.cv && (
+          <p>
+            <a class="button" href={site.cv}>
+              Download CV (PDF)
+            </a>
+          </p>
+        )
+      }
+
+      <hr />
+
+      <h2>Recent projects</h2>
+      <ul class="recent">
+        {
+          recent.map((project) => (
+            <li>
+              <a href={`/projects/${project.id}`}>{project.data.title}</a>
+              <span class="muted"> — {project.data.summary}</span>
+            </li>
+          ))
+        }
+      </ul>
+      <p><a href={projectsHref}>Browse all projects &rarr;</a></p>
+    </div>
+
+    <aside class="sidebar">
+      <h3>Contact</h3>
+      <ul>
+        <li><a href={`mailto:${site.email}`}>Email</a></li>
+        {site.linkedin && <li><a href={site.linkedin}>LinkedIn</a></li>}
+        {site.github && <li><a href={site.github}>GitHub</a></li>}
+      </ul>
+
+      {
+        skills.map((group) => (
+          <>
+            <h3>{group.heading}</h3>
+            <ul>
+              {group.items.map((item) => (
+                <li>{item}</li>
+              ))}
+            </ul>
+          </>
+        ))
+      }
+    </aside>
+  </div>
+</BaseLayout>
+
+<style>
+  .lede {
+    font-family: var(--font-serif);
+    font-size: 1.25rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+    margin-bottom: 1.5rem;
+  }
+
+  .recent {
+    list-style: none;
+    padding: 0;
+  }
+
+  .recent li {
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--rule);
+  }
+</style>

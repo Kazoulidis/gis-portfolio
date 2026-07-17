@@ -1,0 +1,98 @@
+---
+import { site, nav } from '../site';
+import '../styles/global.css';
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+
+const { title, description = site.tagline } = Astro.props;
+const pageTitle = title ? `${title} — ${site.name}` : `${site.name} — ${site.role}`;
+
+// Normalise so "/projects/foo" marks the "Projects" tab, and trailing
+// slashes or .html suffixes don't break the match.
+const path = Astro.url.pathname.replace(/\.html$/, '').replace(/\/$/, '') || '/';
+// A nav item may set `match` to a path prefix it owns, so Projects stays
+// highlighted across every /projects/* page rather than only the one it links
+// to. Falls back to the href.
+const isCurrent = (item: { href: string; match?: string }) => {
+  const base = item.match ?? item.href;
+  return base === '/' ? path === '/' : path === base || path.startsWith(base + '/');
+};
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{pageTitle}</title>
+    <meta name="description" content={description} />
+    <meta name="author" content={site.name} />
+    <link rel="canonical" href={new URL(path, Astro.site)} />
+    <meta property="og:title" content={pageTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+  </head>
+
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="site-header">
+      <div class="page site-header__inner">
+        <a class="site-title" href="/">
+          {site.name}
+          <span>{site.role}</span>
+        </a>
+        <nav class="nav" aria-label="Main">
+          {
+            nav.map((item) => (
+              // 'load' rather than the site-wide 'hover' default: the nav is
+              // always on screen, there are only five of them, and they are a
+              // few KB each — so fetch them up front and every tab switch is a
+              // cache hit, even for a keyboard user who never hovers.
+              // ('viewport' would do the same via IntersectionObserver; 'load'
+              // fires unconditionally, which for an always-visible nav is the
+              // same outcome with one less thing to go wrong.)
+              <a
+                href={item.href}
+                data-astro-prefetch="load"
+                aria-current={isCurrent(item) ? 'page' : undefined}
+              >
+                {item.label}
+              </a>
+            ))
+          }
+        </nav>
+      </div>
+    </header>
+
+    <main id="main" class="page">
+      <slot />
+    </main>
+
+    <footer class="site-footer">
+      <div class="page site-footer__inner">
+        <span>&copy; {new Date().getFullYear()} {site.name}</span>
+        <span>
+          <a href={`mailto:${site.email}`}>{site.email}</a>
+        </span>
+      </div>
+    </footer>
+
+    <style>
+      .skip-link {
+        position: absolute;
+        left: -9999px;
+        top: 0;
+        background: var(--bg-surface);
+        padding: 0.5rem 1rem;
+        z-index: 100;
+      }
+      .skip-link:focus {
+        left: 0;
+      }
+    </style>
+  </body>
+</html>

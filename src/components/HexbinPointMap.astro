@@ -1,0 +1,335 @@
+---
+/**
+ * A bespoke map for point data that is too dense to show raw at country scale.
+ *
+ * Zoomed out, points are aggregated into hexagons coloured by the MEAN of a
+ * chosen numeric field. Zoom past `pointZoom` and the hexagons give way to the
+ * individual points, each coloured by its own value. Both hexagons and points
+ * are clickable. A colour legend explains the scale.
+ *
+ * Written for the #30DayMapChallenge Day 1 refugee map, but the fields are
+ * props, so it works for any "percentage-ish point layer" — hence its home in
+ * components/ rather than being hard-coded to one dataset.
+ *
+ *   src        GeoJSON of Points under public/, e.g. /data/refugees.geojson
+ *   valueField numeric property to colour by (0..1 fraction). Default 'percent'
+ *   nameField  property used as the popup heading. Default 'name'
+ *   countField integer property summed in hexagon popups. Default 'refugees'
+ *   pointZoom  zoom at which hexagons become individual points. Default 9
+ *   radius     hexagon radius in pixels. Default 20
+ */
+interface Props {
+  src: string;
+  caption?: string;
+  valueField?: string;
+  nameField?: string;
+  countField?: string;
+  pointZoom?: number;
+  radius?: number;
+}
+
+const {
+  src,
+  caption,
+  valueField = 'percent',
+  nameField = 'name',
+  countField = 'refugees',
+  pointZoom = 9,
+  radius = 20,
+} = Astro.props;
+---
+
+<figure class="map-figure">
+  <div
+    class="map"
+    data-hexmap
+    data-src={src}
+    data-value={valueField}
+    data-name={nameField}
+    data-count={countField}
+    data-point-zoom={String(pointZoom)}
+    data-radius={String(radius)}
+    role="application"
+    aria-label={caption ?? 'Interactive map'}
+  >
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<script>
+  import * as L from 'leaflet';
+  import 'leaflet/dist/leaflet.css';
+  import { hexbin as d3hexbin } from 'd3-hexbin';
+
+  const BASEMAP = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+  const ATTRIBUTION =
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, ' +
+    '&copy; <a href="https://carto.com/attributions">CARTO</a>';
+
+  // Sequential ColorBrewer YlOrRd, spanning the value range set below. The data
+  // is a fraction 0..1; the scale is pinned to [0.5, 1.0] because that is the
+  // meaningful range here (villages were filtered to >=50% refugee), which
+  // keeps the whole palette in play rather than squashing it into the top half.
+  const RAMP: [number, number, number][] = [
+    [255, 255, 178],
+    [254, 204, 92],
+    [253, 141, 60],
+    [240, 59, 32],
+    [189, 0, 38],
+  ];
+  const VMIN = 0.5;
+  const VMAX = 1.0;
+
+  function colorFor(value: number): string {
+    const t = Math.max(0, Math.min(1, (value - VMIN) / (VMAX - VMIN)));
+    const seg = t * (RAMP.length - 1);
+    const i = Math.min(RAMP.length - 2, Math.floor(seg));
+    const f = seg - i;
+    const [r1, g1, b1] = RAMP[i];
+    const [r2, g2, b2] = RAMP[i + 1];
+    const mix = (a: number, b: number) => Math.round(a + (b - a) * f);
+    return `rgb(${mix(r1, r2)}, ${mix(g1, g2)}, ${mix(b1, b2)})`;
+  }
+
+  const escapeHtml = (value: unknown) =>
+    String(value).replace(
+      /[&<>"']/g,
+      (c) =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string,
+    );
+
+  const pct = (fraction: number) => `${(fraction * 100).toFixed(1)}%`;
+  // Fixed locale, not the visitor's: the UI is English, and the default locale
+  // renders 1425 as "1.425" in much of Europe — misleading in an English popup.
+  const num = (n: number) => n.toLocaleString('en-GB');
+
+  interface Pt {
+    lat: number;
+    lng: number;
+    value: number;
+    props: Record<string, unknown>;
+  }
+
+  function pointPopup(p: Pt, nameField: string, countField: string): string {
+    const heading = p.props[nameField];
+    let html = heading ? `<strong>${escapeHtml(heading)}</strong><br />` : '';
+    html += `<dl class="popup-meta">`;
+    html += `<dt>Refugee share</dt><dd>${pct(p.value)}</dd>`;
+    if (p.props[countField] != null)
+      html += `<dt>Refugees</dt><dd>${num(Number(p.props[countField]))}</dd>`;
+    if (p.props.total_pop != null)
+      html += `<dt>Total population</dt><dd>${num(Number(p.props.total_pop))}</dd>`;
+    html += `</dl>`;
+    return html;
+  }
+
+  function hexPopup(bin: Pt[], countField: string): string {
+    const n = bin.length;
+    const meanVal = bin.reduce((s, p) => s + p.value, 0) / n;
+    const totalCount = bin.reduce((s, p) => s + (Number(p.props[countField]) || 0), 0);
+    const top = [...bin].sort((a, b) => b.value - a.value)[0];
+    let html = `<strong>${n} ${n === 1 ? 'village' : 'villages'}</strong>`;
+    html += `<dl class="popup-meta">`;
+    html += `<dt>Mean refugee share</dt><dd>${pct(meanVal)}</dd>`;
+    html += `<dt>Refugees here</dt><dd>${num(totalCount)}</dd>`;
+    if (top?.props)
+      html += `<dt>Highest</dt><dd>${escapeHtml(top.props['name'])} (${pct(top.value)})</dd>`;
+    html += `</dl>`;
+    html += `<p class="popup-hint">Zoom in to separate individual villages.</p>`;
+    return html;
+  }
+
+  // Regular hexagon corner offsets matching d3-hexbin's own orientation
+  // (pointy-top): vertex at angle a is (sin a, -cos a) * radius.
+  const CORNER_ANGLES = [0, 1, 2, 3, 4, 5].map((i) => (i * Math.PI) / 3);
+
+  async function initMap(el: HTMLElement) {
+    const src = el.dataset.src;
+    if (!src) return;
+    const valueField = el.dataset.value || 'percent';
+    const nameField = el.dataset.name || 'name';
+    const countField = el.dataset.count || 'refugees';
+    const pointZoom = Number(el.dataset.pointZoom || 9);
+    const radius = Number(el.dataset.radius || 20);
+
+    const map = L.map(el, { scrollWheelZoom: false });
+    map.on('click', () => map.scrollWheelZoom.enable());
+    map.on('mouseout', () => map.scrollWheelZoom.disable());
+
+    L.tileLayer(BASEMAP, { attribution: ATTRIBUTION, maxZoom: 19 }).addTo(map);
+    L.control.scale({ imperial: false }).addTo(map);
+
+    let data: GeoJSON.FeatureCollection;
+    try {
+      const res = await fetch(src);
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      data = await res.json();
+    } catch (err) {
+      console.error(`Could not load ${src}:`, err);
+      el.insertAdjacentHTML('beforeend', '<p class="map-error">This map’s data could not be loaded.</p>');
+      return;
+    }
+
+    const points: Pt[] = data.features
+      .filter((f) => f.geometry?.type === 'Point')
+      .map((f) => {
+        const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates;
+        return { lat, lng, value: Number(f.properties?.[valueField]), props: f.properties ?? {} };
+      });
+
+    if (!points.length) {
+      el.insertAdjacentHTML('beforeend', '<p class="map-error">No points to show.</p>');
+      return;
+    }
+
+    // Fit to the data before we draw, so the first bin layout is for the view
+    // the reader actually starts on.
+    const bounds = L.latLngBounds(points.map((p) => [p.lat, p.lng] as [number, number]));
+    map.fitBounds(bounds, { padding: [24, 24] });
+
+    // --- The two representations, swapped by zoom -------------------------
+    const hexLayer = L.layerGroup();
+    const pointLayer = L.layerGroup();
+
+    // Individual points: built once, in lat/lng, so they pan and zoom for free.
+    for (const p of points) {
+      L.circleMarker([p.lat, p.lng], {
+        radius: 5,
+        color: '#4d2600',
+        weight: 0.6,
+        fillColor: colorFor(p.value),
+        fillOpacity: 0.85,
+      })
+        .bindPopup(pointPopup(p, nameField, countField))
+        .addTo(pointLayer);
+    }
+
+    // Hexagons: rebuilt on every zoom, because binning happens in pixel space
+    // and the pixel positions of the points change with zoom. Panning needs no
+    // rebuild — the hexagons are drawn as lat/lng polygons, which Leaflet moves
+    // for us.
+    function buildHexbins() {
+      hexLayer.clearLayers();
+      const projected = points.map((p) => {
+        const q = map.project([p.lat, p.lng]);
+        return { x: q.x, y: q.y, src: p };
+      });
+      const bins = d3hexbin<(typeof projected)[number]>()
+        .radius(radius)
+        .x((d) => d.x)
+        .y((d) => d.y)(projected);
+
+      for (const bin of bins) {
+        const members = bin.map((d) => d.src);
+        const meanVal = members.reduce((s, p) => s + p.value, 0) / members.length;
+        const corners = CORNER_ANGLES.map((a) =>
+          map.unproject([bin.x + Math.sin(a) * radius, bin.y - Math.cos(a) * radius]),
+        );
+        L.polygon(
+          corners.map((c) => [c.lat, c.lng] as [number, number]),
+          {
+            color: '#ffffff',
+            weight: 1,
+            fillColor: colorFor(meanVal),
+            fillOpacity: 0.82,
+          },
+        )
+          .bindPopup(hexPopup(members, countField))
+          .addTo(hexLayer);
+      }
+    }
+
+    // Show hexagons or points depending on zoom, rebuilding hexagons as needed.
+    function refresh() {
+      if (map.getZoom() >= pointZoom) {
+        if (map.hasLayer(hexLayer)) map.removeLayer(hexLayer);
+        if (!map.hasLayer(pointLayer)) pointLayer.addTo(map);
+      } else {
+        if (map.hasLayer(pointLayer)) map.removeLayer(pointLayer);
+        buildHexbins();
+        if (!map.hasLayer(hexLayer)) hexLayer.addTo(map);
+      }
+    }
+
+    map.on('zoomend', refresh);
+    refresh();
+
+    // --- Legend -----------------------------------------------------------
+    const legend = new L.Control({ position: 'bottomright' });
+    legend.onAdd = () => {
+      const box = L.DomUtil.create('div', 'map-legend map-legend--ramp');
+      L.DomEvent.disableClickPropagation(box);
+      const stops = RAMP.map(([r, g, b]) => `rgb(${r},${g},${b})`).join(', ');
+      box.innerHTML =
+        `<div class="map-legend__title">Refugee share</div>` +
+        `<div class="map-legend__bar" style="background:linear-gradient(to right, ${stops})"></div>` +
+        `<div class="map-legend__scale"><span>${VMIN * 100}%</span><span>${VMAX * 100}%</span></div>` +
+        `<div class="map-legend__note">Hexagons show the mean of the villages they cover.</div>`;
+      return box;
+    };
+    legend.addTo(map);
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-hexmap]').forEach(initMap);
+</script>
+
+<style is:global>
+  .popup-meta {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.1rem 0.75rem;
+    margin: 0.5rem 0 0;
+    font-size: 0.8rem;
+  }
+  .popup-meta dt {
+    color: var(--text-muted);
+  }
+  .popup-meta dd {
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .popup-hint {
+    margin: 0.5rem 0 0;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+  .map-error {
+    padding: 1rem;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+  }
+
+  .map-legend {
+    background: var(--bg-surface);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    padding: 0.5rem 0.65rem;
+    font-size: 0.8rem;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  }
+  .map-legend--ramp {
+    width: 12rem;
+  }
+  .map-legend__title {
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+  }
+  .map-legend__bar {
+    height: 0.7rem;
+    border-radius: 2px;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+  }
+  .map-legend__scale {
+    display: flex;
+    justify-content: space-between;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    margin-top: 0.2rem;
+  }
+  .map-legend__note {
+    margin-top: 0.4rem;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    line-height: 1.35;
+  }
+</style>

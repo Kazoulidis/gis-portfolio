@@ -1,0 +1,67 @@
+---
+/**
+ * The list of projects, shared by /projects and each /projects/<category> page
+ * so the two can never drift apart.
+ */
+import type { CollectionEntry } from 'astro:content';
+
+interface Props {
+  projects: CollectionEntry<'projects'>[];
+  /** Shown when the list is empty — e.g. a category with nothing in it yet. */
+  emptyMessage?: string;
+}
+
+const { projects, emptyMessage = 'No projects published yet.' } = Astro.props;
+---
+
+{
+  projects.length === 0 ? (
+    <p class="muted">{emptyMessage}</p>
+  ) : (
+    <ul class="project-list">
+      {projects.map((project) => (
+        <li class="project-item">
+          <div>
+            {project.data.thumbnail ? (
+              <a href={`/projects/${project.id}`}>
+                <img
+                  class="project-item__thumb"
+                  src={project.data.thumbnail}
+                  alt={project.data.thumbnailAlt ?? ''}
+                  loading="lazy"
+                  width="416"
+                  height="312"
+                />
+              </a>
+            ) : (
+              <span class="project-item__thumb" aria-hidden="true" />
+            )}
+          </div>
+          <div>
+            <h2 class="project-item__title">
+              <a href={`/projects/${project.id}`}>{project.data.title}</a>
+            </h2>
+            <p class="project-item__meta">
+              {project.data.date.getFullYear()}
+              {project.data.context && <> &middot; {project.data.context}</>}
+            </p>
+            <p>{project.data.summary}</p>
+            {project.data.tags.length > 0 && (
+              <ul class="tags">
+                {project.data.tags.map((tag) => (
+                  <li class="tag">{tag}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+<style>
+  .project-item__title {
+    margin-top: 0;
+  }
+</style>

@@ -1,0 +1,82 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { site } from '../site';
+
+/**
+ * Replace these with your real roles, newest first.
+ * Keep each `points` list to 2–4 bullets: what you were responsible for, what
+ * you built, and the outcome where you can name one.
+ */
+const roles = [
+  {
+    date: '2023 — present',
+    title: 'GIS Analyst',
+    org: 'Organisation name, City',
+    points: [
+      'Describe the core responsibility of the role in one line.',
+      'Built or automated something — name the tool and the effect.',
+      'Worked with a dataset or stakeholder group worth naming.',
+    ],
+  },
+  {
+    date: '2021 — 2023',
+    title: 'Junior GIS Technician',
+    org: 'Organisation name, City',
+    points: [
+      'Digitised and quality-controlled spatial datasets.',
+      'Produced cartographic outputs for reports and public consultation.',
+    ],
+  },
+  {
+    date: '2020 — 2021',
+    title: 'Field Surveyor (contract)',
+    org: 'Organisation name, City',
+    points: ['Collected field data with GNSS and mobile capture tools.'],
+  },
+];
+---
+
+<BaseLayout
+  title="Experience"
+  description={`Work experience of ${site.name}, ${site.role}.`}
+>
+  <h1>Experience</h1>
+  <p class="muted">A summary of my professional roles. The full CV is available as a PDF.</p>
+
+  {
+    site.cv && (
+      <p>
+        <a class="button button--ghost" href={site.cv}>
+          Download CV (PDF)
+        </a>
+      </p>
+    )
+  }
+
+  <hr />
+
+  <div>
+    {
+      roles.map((role) => (
+        <article class="entry">
+          <div class="entry__date">{role.date}</div>
+          <div class="entry__body">
+            <h2 class="entry__title">{role.title}</h2>
+            <p class="entry__org">{role.org}</p>
+            <ul>
+              {role.points.map((point) => (
+                <li>{point}</li>
+              ))}
+            </ul>
+          </div>
+        </article>
+      ))
+    }
+  </div>
+</BaseLayout>
+
+<style>
+  .entry__title {
+    margin-top: 0;
+  }
+</style>

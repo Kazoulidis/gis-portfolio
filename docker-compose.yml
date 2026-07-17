@@ -1,0 +1,28 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: gis-portfolio:latest
+    container_name: gis-portfolio
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      # HTTP/3. Harmless if your firewall drops it.
+      - "443:443/udp"
+    environment:
+      # Set these in a .env file next to this one. With SITE_ADDRESS unset the
+      # container serves plain HTTP on :80, which is what you want locally.
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+      ACME_EMAIL: ${ACME_EMAIL:-admin@example.com}
+    volumes:
+      # These two matter. Caddy keeps the issued TLS certificates in /data, and
+      # losing them on every `docker compose down` means re-issuing from
+      # Let's Encrypt, whose rate limit (5 per domain per week) you will hit.
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

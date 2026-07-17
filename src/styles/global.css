@@ -1,0 +1,576 @@
+/* ---------------------------------------------------------------------------
+   Design tokens
+
+   The whole look of the site comes from these values. Change them here rather
+   than hunting through components. Fonts are system stacks on purpose: nothing
+   is fetched from Google, so the site stays self-contained and loads instantly.
+--------------------------------------------------------------------------- */
+
+:root {
+  /* Light only. Tell the browser so it doesn't dark-style scrollbars and
+     form controls out from under us. */
+  color-scheme: light;
+
+  --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+
+  /* Warm paper rather than pure white — markedly less glare over long reads. */
+  --bg: #f7f5f1;
+  --bg-surface: #fdfcfa;
+  --bg-subtle: #efece6;
+  --text: #23282d;
+  --text-muted: #5f6b76;
+  --rule: #e0dcd5;
+  --accent: #1c5d5d;
+  --accent-hover: #0f3d3d;
+
+  /* No background texture — a solid fill, by preference. If you ever want to
+     try one again, this takes any CSS background-image (it was previously a
+     tiling SVG noise data URI) and body applies it over --bg. */
+  --texture: none;
+
+  /* Line length, not page width. Around 72ch lands at ~75 characters per line,
+     which is the top of the comfortable range — going wider makes the eye lose
+     its place on the return sweep. Widen --page-width instead if you want less
+     empty margin; the two are deliberately independent. */
+  --measure: 72ch;
+  /* The frame: header, footer, rules and entry borders all span this, which is
+     what makes the page read as wide even though the text column stays narrow.
+     Raise it if the side margins still feel too heavy on your monitor. */
+  --page-width: 72rem;
+  --radius: 3px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg);
+  background-image: var(--texture);
+  /* Fixed, so the grain belongs to the page rather than sliding under the
+     text as you scroll. */
+  background-attachment: fixed;
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 1.0625rem;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* --- Typography ---------------------------------------------------------- */
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  margin: 0 0 0.4em;
+}
+
+h1 { font-size: 2.15rem; }
+h2 { font-size: 1.5rem; margin-top: 2.5rem; }
+h3 { font-size: 1.15rem; margin-top: 1.75rem; }
+
+p,
+ul,
+ol {
+  max-width: var(--measure);
+}
+
+p { margin: 0 0 1.1em; }
+
+a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+  transition: color 0.12s ease;
+}
+
+a:hover { color: var(--accent-hover); }
+
+/* Visible focus for keyboard users — recruiters tab through things. */
+a:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius);
+}
+
+small,
+.muted {
+  color: var(--text-muted);
+}
+
+.eyebrow {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+
+/* --- Page frame ---------------------------------------------------------- */
+
+.page {
+  max-width: var(--page-width);
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+main {
+  padding: 3rem 0 4rem;
+  min-height: 60vh;
+}
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--rule);
+  margin: 2.5rem 0;
+}
+
+/* --- Header / navigation ------------------------------------------------- */
+
+.site-header {
+  border-bottom: 1px solid var(--rule);
+  /* Transparent, not a solid fill: the page grain runs through the header too,
+     so the whole thing reads as one sheet of paper. The rule does the
+     separating. */
+  background: transparent;
+}
+
+.site-header__inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 2rem;
+  padding-top: 1.25rem;
+  padding-bottom: 1.25rem;
+}
+
+.site-title {
+  font-family: var(--font-serif);
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+  letter-spacing: -0.01em;
+}
+
+.site-title:hover { color: var(--text); }
+
+.site-title span {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+}
+
+.nav a {
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 0.95rem;
+  padding-bottom: 2px;
+  border-bottom: 2px solid transparent;
+}
+
+.nav a:hover {
+  color: var(--text);
+}
+
+.nav a[aria-current="page"] {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+/* --- Footer -------------------------------------------------------------- */
+
+.site-footer {
+  border-top: 1px solid var(--rule);
+  padding: 1.75rem 0;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.site-footer__inner {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem 1.5rem;
+}
+
+/* --- Two-column layout (content + sidebar) ------------------------------- */
+
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 15rem;
+  gap: 3rem;
+  align-items: start;
+}
+
+@media (max-width: 46rem) {
+  .split { grid-template-columns: 1fr; gap: 2rem; }
+}
+
+.sidebar {
+  font-size: 0.9rem;
+  border-left: 1px solid var(--rule);
+  padding-left: 1.5rem;
+}
+
+@media (max-width: 46rem) {
+  .sidebar {
+    border-left: 0;
+    border-top: 1px solid var(--rule);
+    padding-left: 0;
+    padding-top: 1.5rem;
+  }
+}
+
+.sidebar h3 {
+  margin-top: 0;
+  font-size: 0.75rem;
+  font-family: var(--font-sans);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.sidebar h3:not(:first-child) { margin-top: 1.75rem; }
+
+.sidebar ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sidebar li { margin-bottom: 0.35rem; }
+
+/* --- Entries (jobs, degrees) --------------------------------------------- */
+
+/* A dated CV entry: date column on the left, detail on the right. Skimmable
+   because every date lands on the same vertical line. */
+.entry {
+  display: grid;
+  grid-template-columns: 9.5rem minmax(0, 1fr);
+  gap: 0 2rem;
+  padding: 1.5rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.entry:last-child { border-bottom: 0; }
+
+@media (max-width: 40rem) {
+  .entry { grid-template-columns: 1fr; gap: 0.35rem; }
+}
+
+.entry__date {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  padding-top: 0.3rem;
+}
+
+.entry__title {
+  font-family: var(--font-serif);
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 0 0 0.15rem;
+}
+
+.entry__org {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  margin: 0 0 0.6rem;
+}
+
+.entry__body p:last-child,
+.entry__body ul:last-child { margin-bottom: 0; }
+
+.entry__body ul { padding-left: 1.1rem; }
+.entry__body li { margin-bottom: 0.3rem; }
+
+/* --- Tag pills ----------------------------------------------------------- */
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  list-style: none;
+  padding: 0;
+  margin: 0.75rem 0 0;
+  max-width: none;
+}
+
+.tag {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 0.15rem 0.45rem;
+  white-space: nowrap;
+}
+
+/* --- Project sub-tabs ---------------------------------------------------- */
+
+/* Sits on the rule rather than above it: the -1px pull lets the active tab's
+   underline replace that segment of the border, which is what makes it read as
+   a tab rather than a row of links. */
+.subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1.75rem;
+  margin: 1.75rem 0 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.subnav a {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  text-decoration: none;
+  padding: 0.35rem 0;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+
+.subnav a:hover {
+  color: var(--text);
+}
+
+.subnav a[aria-current='page'] {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+/* --- Project list -------------------------------------------------------- */
+
+.project-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-width: none;
+}
+
+.project-item {
+  display: grid;
+  grid-template-columns: 13rem minmax(0, 1fr);
+  gap: 0 2rem;
+  padding: 1.75rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+@media (max-width: 44rem) {
+  .project-item { grid-template-columns: 1fr; gap: 1rem; }
+}
+
+.project-item__thumb {
+  display: block;
+  aspect-ratio: 4 / 3;
+  width: 100%;
+  object-fit: cover;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+}
+
+.project-item__title {
+  font-family: var(--font-serif);
+  font-size: 1.25rem;
+  margin: 0 0 0.2rem;
+}
+
+.project-item__title a { text-decoration: none; }
+.project-item__title a:hover { text-decoration: underline; }
+
+.project-item__meta {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin: 0 0 0.6rem;
+}
+
+/* --- Map ----------------------------------------------------------------- */
+
+.map-figure {
+  margin: 2rem 0;
+  max-width: none;
+}
+
+.map {
+  height: 460px;
+  width: 100%;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+  z-index: 0; /* keep Leaflet panes from covering the header */
+}
+
+@media (max-width: 40rem) {
+  .map { height: 340px; }
+}
+
+.map-figure figcaption {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-top: 0.6rem;
+  max-width: var(--measure);
+}
+
+/* Leaflet's own chrome, toned down to match the page. */
+.leaflet-container {
+  font-family: var(--font-sans) !important;
+  font-size: 0.85rem !important;
+  background: var(--bg-subtle) !important;
+}
+
+.leaflet-popup-content {
+  font-size: 0.875rem;
+  line-height: 1.55;
+  margin: 0.75rem 0.9rem;
+}
+
+.leaflet-popup-content strong { font-family: var(--font-serif); }
+
+/* --- Prose from Markdown ------------------------------------------------- */
+
+.prose img {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  display: block;
+  margin: 1.75rem 0 0.5rem;
+}
+
+.prose figure { margin: 1.75rem 0; max-width: none; }
+
+.prose figcaption {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-top: 0.5rem;
+}
+
+.prose blockquote {
+  border-left: 2px solid var(--accent);
+  margin: 1.5rem 0;
+  padding: 0.25rem 0 0.25rem 1.25rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.prose code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--bg-subtle);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 0.1em 0.3em;
+}
+
+.prose pre {
+  background: var(--bg-subtle);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 1rem;
+  overflow-x: auto;
+  max-width: none;
+}
+
+.prose pre code {
+  background: none;
+  border: 0;
+  padding: 0;
+}
+
+/* A Markdown table can be wider than a phone. Making the table itself the
+   scroll container keeps a wide data table from pushing the whole page
+   sideways: max-content sizes it to its columns, max-width caps it at the
+   page, and overflow-x lets the overspill scroll on its own. */
+.prose table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+  font-size: 0.9rem;
+}
+
+.prose th,
+.prose td {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.prose th {
+  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* --- Buttons ------------------------------------------------------------- */
+
+.button {
+  display: inline-block;
+  font-size: 0.9rem;
+  text-decoration: none;
+  color: var(--bg-surface);
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 0.45rem 1rem;
+}
+
+.button:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: var(--bg-surface);
+}
+
+.button--ghost {
+  color: var(--accent);
+  background: transparent;
+}
+
+.button--ghost:hover {
+  background: var(--bg-subtle);
+  color: var(--accent-hover);
+}
+
+/* --- Print (recruiters do print these) ----------------------------------- */
+
+@media print {
+  .site-header,
+  .site-footer,
+  .map-figure { display: none; }
+
+  body { background: #fff; color: #000; font-size: 11pt; }
+  a { color: #000; text-decoration: none; }
+  .entry { break-inside: avoid; }
+}

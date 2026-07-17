@@ -1,0 +1,34 @@
+---
+/**
+ * The tabs under the Projects heading. Categories come from
+ * `projectCategories` in src/site.ts.
+ *
+ * There is deliberately no combined "All" tab: the categories are separate
+ * collections rather than one pool, and a challenge with 30 entries would
+ * otherwise bury everything else.
+ */
+import { projectCategories } from '../site';
+
+interface Props {
+  current: string;
+}
+
+const { current } = Astro.props;
+---
+
+<nav class="subnav" aria-label="Project categories">
+  {/* 'load' rather than the site-wide 'hover' default, matching the main nav:
+      there are only three of them and they are a few KB each, so fetching them
+      up front makes every tab switch a cache hit. */}
+  {
+    projectCategories.map((category) => (
+      <a
+        href={`/projects/${category.slug}`}
+        data-astro-prefetch="load"
+        aria-current={current === category.slug ? 'page' : undefined}
+      >
+        {category.label}
+      </a>
+    ))
+  }
+</nav>

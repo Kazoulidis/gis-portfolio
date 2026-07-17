@@ -1,0 +1,130 @@
+---
+import { getCollection, render, type CollectionEntry } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import ProjectMap from '../../components/ProjectMap.astro';
+import HexbinPointMap from '../../components/HexbinPointMap.astro';
+import { projectCategories } from '../../site';
+
+// Bespoke map components a project can select via `mapComponent:` in
+// frontmatter. Add a component here and reference its key; the data path comes
+// from the project's `map:` field.
+const CUSTOM_MAPS: Record<string, typeof ProjectMap> = {
+  'refugee-hexbin': HexbinPointMap,
+};
+
+export async function getStaticPaths() {
+  const projects = await getCollection('projects', ({ data }) => !data.draft);
+  return projects.map((project) => ({
+    params: { slug: project.id },
+    props: { project },
+  }));
+}
+
+interface Props {
+  project: CollectionEntry<'projects'>;
+}
+
+const { project } = Astro.props;
+const { Content } = await render(project);
+const { title, summary, date, context, tags, map, mapComponent, layers, mapCaption, links } =
+  project.data;
+
+// A bespoke map wins when the project asks for one and it exists; it reads its
+// data from `map:`. Otherwise fall through to the generic layer map.
+const CustomMap = mapComponent ? CUSTOM_MAPS[mapComponent] : undefined;
+
+// The generic component always takes a list of layers. `map` (one file) is just
+// the one-layer case, so fold it in here. The schema guarantees at most one of
+// map/layers is set, so this is unambiguous. Its lone layer is unnamed — with a
+// single layer the legend is suppressed anyway, so the name is never shown.
+const mapLayers = layers ?? (map ? [{ name: '', src: map }] : undefined);
+
+// Send the reader back to the tab this project lives under, not to a generic
+// index — landing on "School" after reading a school project is what they
+// expect. The category is schema-validated, so this always resolves.
+const category = projectCategories.find((c) => c.slug === project.data.category)!;
+
+const formattedDate = date.toLocaleDateString('en-GB', {
+  year: 'numeric',
+  month: 'long',
+});
+---
+
+<BaseLayout title={title} description={summary}>
+  <article>
+    <p class="eyebrow">
+      {formattedDate}
+      {context && <> &middot; {context}</>}
+    </p>
+    <h1>{title}</h1>
+    <p class="lede">{summary}</p>
+
+    {
+      tags.length > 0 && (
+        <ul class="tags">
+          {tags.map((tag) => (
+            <li class="tag">{tag}</li>
+          ))}
+        </ul>
+      )
+    }
+
+    {
+      CustomMap && map ? (
+        <CustomMap src={map} caption={mapCaption} />
+      ) : (
+        mapLayers && <ProjectMap layers={mapLayers} caption={mapCaption} />
+      )
+    }
+
+    <div class="prose">
+      <Content />
+    </div>
+
+    {
+      links.length > 0 && (
+        <>
+          <hr />
+          <h2 class="links-heading">Related</h2>
+          <ul class="links">
+            {links.map((link) => (
+              <li>
+                <a href={link.href}>{link.label}</a>
+              </li>
+            ))}
+          </ul>
+        </>
+      )
+    }
+
+    <hr />
+    <p><a href={`/projects/${category.slug}`}>&larr; {category.label}</a></p>
+  </article>
+</BaseLayout>
+
+<style>
+  .lede {
+    font-family: var(--font-serif);
+    font-size: 1.2rem;
+    line-height: 1.55;
+    color: var(--text-muted);
+  }
+
+  .links-heading {
+    margin-top: 0;
+    font-size: 0.75rem;
+    font-family: var(--font-sans);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .links {
+    list-style: none;
+    padding: 0;
+  }
+
+  .links li {
+    margin-bottom: 0.3rem;
+  }
+</style>

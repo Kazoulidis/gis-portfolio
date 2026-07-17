@@ -1,0 +1,94 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { site } from '../site';
+---
+
+<BaseLayout title="Contact" description={`Get in touch with ${site.name}.`}>
+  <h1>Contact</h1>
+
+  <p class="lede">
+    The quickest way to reach me is by email. I read everything and reply to
+    anything that isn’t automated.
+  </p>
+
+  <hr />
+
+  <dl class="contact">
+    <dt>Email</dt>
+    <dd><a href={`mailto:${site.email}`}>{site.email}</a></dd>
+
+    {
+      site.linkedin && (
+        <>
+          <dt>LinkedIn</dt>
+          <dd>
+            <a href={site.linkedin}>{site.linkedin.replace(/^https?:\/\/(www\.)?/, '')}</a>
+          </dd>
+        </>
+      )
+    }
+
+    {
+      site.github && (
+        <>
+          <dt>GitHub</dt>
+          <dd>
+            <a href={site.github}>{site.github.replace(/^https?:\/\/(www\.)?/, '')}</a>
+          </dd>
+        </>
+      )
+    }
+
+    <dt>Location</dt>
+    <dd>{site.location}</dd>
+
+    {
+      site.cv && (
+        <>
+          <dt>CV</dt>
+          <dd>
+            <a href={site.cv}>Download as PDF</a>
+          </dd>
+        </>
+      )
+    }
+  </dl>
+</BaseLayout>
+
+<style>
+  .lede {
+    font-family: var(--font-serif);
+    font-size: 1.2rem;
+    line-height: 1.55;
+    color: var(--text-muted);
+  }
+
+  .contact {
+    display: grid;
+    grid-template-columns: 8rem 1fr;
+    gap: 0.75rem 2rem;
+    max-width: var(--measure);
+  }
+
+  @media (max-width: 32rem) {
+    .contact {
+      grid-template-columns: 1fr;
+      gap: 0.1rem;
+    }
+    .contact dd {
+      margin-bottom: 1rem;
+    }
+  }
+
+  .contact dt {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding-top: 0.3rem;
+  }
+
+  .contact dd {
+    margin: 0;
+  }
+</style>

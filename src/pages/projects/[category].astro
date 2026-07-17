@@ -1,0 +1,80 @@
+---
+/**
+ * One page per project category: /projects/30-day-map-challenge, etc.
+ *
+ * This sits alongside [...slug].astro, which renders the individual projects.
+ * Both are dynamic routes over the same segment, and they coexist because each
+ * only generates the paths its getStaticPaths returns, and those sets are
+ * disjoint. If a project slug ever collides with a category slug, the build
+ * fails on a duplicate route — noisily, which is what you want.
+ */
+import { getCollection } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import CategoryTabs from '../../components/CategoryTabs.astro';
+import ProjectList from '../../components/ProjectList.astro';
+import { projectCategories, type ProjectCategory } from '../../site';
+
+export async function getStaticPaths() {
+  const all = await getCollection('projects', ({ data }) => !data.draft);
+
+  return projectCategories.map((category) => ({
+    params: { category: category.slug },
+    props: {
+      category,
+      projects: all
+        .filter((project) => project.data.category === category.slug)
+        .sort((a, b) =>
+          category.order === 'asc'
+            ? a.data.date.valueOf() - b.data.date.valueOf()
+            : b.data.date.valueOf() - a.data.date.valueOf(),
+        ),
+    },
+  }));
+}
+
+interface Props {
+  category: ProjectCategory;
+  projects: Awaited<ReturnType<typeof getCollection<'projects'>>>;
+}
+
+const { category, projects } = Astro.props;
+---
+
+<BaseLayout title={`${category.label} — Projects`} description={category.blurb}>
+  <h1>Projects</h1>
+  <p class="muted">
+    Selected work in spatial analysis, remote sensing and cartography. Each entry
+    has a short write-up and, where the data allows, an interactive map.
+  </p>
+
+  <CategoryTabs current={category.slug} />
+
+  <section class="category-intro">
+    <h2>{category.label}</h2>
+    <p>
+      {category.blurb}
+      {category.link && <> <a href={category.link.href}>{category.link.label}</a></>}
+    </p>
+  </section>
+
+  <ProjectList
+    projects={projects}
+    emptyMessage={`Nothing under ${category.label} yet.`}
+  />
+</BaseLayout>
+
+<style>
+  .category-intro {
+    margin: 2rem 0 0;
+  }
+
+  .category-intro h2 {
+    margin-top: 0;
+    font-size: 1.25rem;
+  }
+
+  .category-intro p {
+    color: var(--text-muted);
+    margin-bottom: 0;
+  }
+</style>

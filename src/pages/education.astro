@@ -1,0 +1,84 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { site } from '../site';
+
+const degrees = [
+  {
+    date: '2019 — 2021',
+    title: 'MSc Geographical Information Science',
+    org: 'University name, City',
+    body: 'Thesis: title of your thesis. One sentence on what it did and what it found.',
+    points: [
+      'Relevant coursework: spatial statistics, remote sensing, spatial databases.',
+      'Grade or distinction, if it helps you.',
+    ],
+  },
+  {
+    date: '2015 — 2019',
+    title: 'BSc Geography',
+    org: 'University name, City',
+    body: 'One line on focus or dissertation.',
+    points: [],
+  },
+];
+
+const certifications = [
+  { date: '2024', title: 'Certification name', org: 'Issuing body' },
+  { date: '2022', title: 'Certification name', org: 'Issuing body' },
+];
+---
+
+<BaseLayout
+  title="Education"
+  description={`Education and certifications of ${site.name}.`}
+>
+  <h1>Education</h1>
+
+  <hr />
+
+  {
+    degrees.map((degree) => (
+      <article class="entry">
+        <div class="entry__date">{degree.date}</div>
+        <div class="entry__body">
+          <h2 class="entry__title">{degree.title}</h2>
+          <p class="entry__org">{degree.org}</p>
+          {degree.body && <p>{degree.body}</p>}
+          {degree.points.length > 0 && (
+            <ul>
+              {degree.points.map((point) => (
+                <li>{point}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </article>
+    ))
+  }
+
+  <h2 class="section">Certifications & training</h2>
+
+  {
+    certifications.map((cert) => (
+      <article class="entry">
+        <div class="entry__date">{cert.date}</div>
+        <div class="entry__body">
+          <h3 class="entry__title">{cert.title}</h3>
+          <p class="entry__org">{cert.org}</p>
+        </div>
+      </article>
+    ))
+  }
+</BaseLayout>
+
+<style>
+  .entry__title {
+    margin-top: 0;
+  }
+
+  .section {
+    margin-top: 3rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--rule);
+  }
+</style>
