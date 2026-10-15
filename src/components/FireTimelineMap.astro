@@ -1,0 +1,808 @@
+---
+/**
+ * An animated map of burned areas over time.
+ *
+ * 17,971 polygons spanning 26 years, each with a burn date. Four views:
+ *   Total     every patch at once - the composite, and the default
+ *   By day    a continuous run through the record; a patch ignites on its burn
+ *             date and fades over the following months, so a whole fire season
+ *             stays on screen and clears through the winter
+ *   By month  one discrete frame per month
+ *   By year   one discrete frame per year
+ *
+ * Drawn on a custom canvas layer rather than as Leaflet vector layers. Adding
+ * and removing thousands of paths every frame would be hopeless; instead the
+ * polygons are projected once per zoom level, cached in layer-pixel space, and
+ * redrawn each frame with only their alpha changing. Panning moves the canvas
+ * by CSS transform and needs no reprojection at all.
+ *
+ * Fields read (the web copy is trimmed to just these):
+ *   d  burn date, "YYYY-MM-DD"
+ *   a  burned area in square kilometres
+ */
+interface Props {
+  src: string;
+  caption?: string;
+}
+
+const { src, caption } = Astro.props;
+---
+
+<figure class="map-figure">
+  <div class="fire-map">
+    <div
+      class="map map--tall"
+      data-firemap
+      data-src={src}
+      role="application"
+      aria-label={caption ?? 'Animated map of burned areas'}
+    >
+    </div>
+
+    <div class="fire-ui" data-fire-ui hidden>
+      <div class="fire-ui__modes" role="group" aria-label="View">
+        <button type="button" class="fire-ui__mode is-active" data-fire-mode="total">Total</button>
+        <button type="button" class="fire-ui__mode" data-fire-mode="day">By day</button>
+        <button type="button" class="fire-ui__mode" data-fire-mode="month">By month</button>
+        <button type="button" class="fire-ui__mode" data-fire-mode="year">By year</button>
+      </div>
+
+      <div class="fire-ui__row">
+        <button type="button" class="fire-ui__play" data-fire-play aria-label="Play">
+          <span data-fire-play-icon>&#9654;</span>
+        </button>
+        <div class="fire-ui__readout">
+          <strong data-fire-date>&nbsp;</strong>
+          <span data-fire-stats>&nbsp;</span>
+        </div>
+        <label class="fire-ui__speed">
+          Speed
+          <select data-fire-speed aria-label="Animation speed">
+            <option value="0.5">0.5&times;</option>
+            <option value="1" selected>1&times;</option>
+            <option value="2">2&times;</option>
+            <option value="4">4&times;</option>
+            <option value="8">8&times;</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="fire-ui__track">
+        <button
+          type="button"
+          class="fire-ui__step"
+          data-fire-prev
+          aria-label="Previous day with recorded fire"
+          title="Previous with recorded fire"
+        >&#8249;</button>
+        <div class="fire-ui__trackmid">
+          <input
+            class="fire-ui__slider"
+            type="range"
+            min="0"
+            max="1"
+            value="0"
+            step="1"
+            data-fire-slider
+            aria-label="Timeline"
+          />
+          <div class="fire-ui__ticks" data-fire-ticks></div>
+        </div>
+        <button
+          type="button"
+          class="fire-ui__step"
+          data-fire-next
+          aria-label="Next day with recorded fire"
+          title="Next with recorded fire"
+        >&#8250;</button>
+      </div>
+    </div>
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<script>
+  import * as L from 'leaflet';
+  import 'leaflet/dist/leaflet.css';
+
+  // A dark basemap, because the subject is fire: warm polygons need somewhere
+  // dark to glow against, and a pale basemap washes them out entirely.
+  const BASEMAP = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+  const ATTRIBUTION =
+    'Tiles &copy; <a href="https://www.esri.com/">Esri</a> - Esri, HERE, Garmin, ' +
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
+  // In By day, how long a burn stays visible after its date. A season is
+  // roughly four months, so a 120-day fade keeps a whole summer on screen at
+  // once and clears through the winter.
+  const FADE_DAYS = 120;
+
+  // Frames per second at 1x for the discrete modes. By day runs on
+  // requestAnimationFrame instead, one calendar day per frame at 1x, so no day
+  // is skipped - see start() below.
+  const FPS = { month: 8, year: 1.6 };
+  // Everything is drawn additively, so a lower alpha in Total mode keeps the
+  // 26-year composite from saturating to a solid sheet.
+  const ALPHA = { total: 0.5, group: 0.88 };
+
+  // Six classes on area burned per day, matching the printed version of this
+  // map. The colours are sampled from its legend so the two are identical
+  // rather than merely similar. The breaks are a geometric progression, which
+  // is what a log scale would have given: most polygons are a single 500 m
+  // cell, while the largest single day is 348 km2.
+  //
+  // Ordered high to low - the first class a value clears is the one it takes.
+  const CLASSES: { min: number; label: string; rgb: [number, number, number] }[] = [
+    { min: 125, label: '125 - 350', rgb: [139, 57, 65] },
+    { min: 25, label: '25 - 125', rgb: [171, 61, 67] },
+    { min: 5, label: '5 - 25', rgb: [229, 97, 77] },
+    { min: 1, label: '1 - 5', rgb: [249, 145, 78] },
+    { min: 0.25, label: '0.25 - 1', rgb: [255, 192, 98] },
+    { min: 0, label: '0 - 0.25', rgb: [255, 240, 177] },
+  ];
+
+  function colorFor(area: number): [number, number, number] {
+    for (const c of CLASSES) if (area >= c.min) return c.rgb;
+    return CLASSES[CLASSES.length - 1].rgb;
+  }
+
+  const DAY_MS = 86400000;
+  const toDay = (iso: string) => Math.floor(Date.parse(iso + 'T00:00:00Z') / DAY_MS);
+  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+  interface Burn {
+    day: number;
+    year: number;
+    ym: string; // "YYYY-MM"
+    area: number;
+    rgb: [number, number, number];
+    /** Polygon rings as flat [lat, lng, lat, lng, ...] for compact storage. */
+    rings: number[][];
+    /** Cached projection for the current zoom, in layer-pixel space. */
+    proj: number[][] | null;
+  }
+
+  type Mode = 'total' | 'day' | 'month' | 'year';
+
+  async function initMap(el: HTMLElement) {
+    const src = el.dataset.src;
+    if (!src) return;
+    const root = el.closest('.fire-map') as HTMLElement;
+    const ui = root.querySelector('[data-fire-ui]') as HTMLElement;
+
+    const map = L.map(el, { scrollWheelZoom: true, zoomControl: true });
+    // Esri's canvas basemaps have real tiles only to z16 over Greece; past that
+    // they answer with a "Map data not yet available" placeholder. maxNativeZoom
+    // makes Leaflet stretch the z16 tiles instead, so the data can still be
+    // zoomed into.
+    L.tileLayer(BASEMAP, { attribution: ATTRIBUTION, maxZoom: 19, maxNativeZoom: 16 }).addTo(map);
+    L.control.scale({ imperial: false }).addTo(map);
+
+    let data: GeoJSON.FeatureCollection;
+    try {
+      const res = await fetch(src);
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      data = await res.json();
+    } catch (err) {
+      console.error(`Could not load ${src}:`, err);
+      el.insertAdjacentHTML(
+        'beforeend',
+        '<p class="map-error">This map’s data could not be loaded.</p>',
+      );
+      return;
+    }
+
+    // --- Flatten to a compact drawing list -------------------------------
+    const burns: Burn[] = [];
+    const bounds = L.latLngBounds([]);
+    for (const f of data.features) {
+      const g = f.geometry;
+      if (!g) continue;
+      const polys =
+        g.type === 'Polygon'
+          ? [(g as GeoJSON.Polygon).coordinates]
+          : g.type === 'MultiPolygon'
+            ? (g as GeoJSON.MultiPolygon).coordinates
+            : [];
+      if (!polys.length) continue;
+
+      const rings: number[][] = [];
+      for (const poly of polys) {
+        for (const ring of poly) {
+          const flat: number[] = [];
+          for (const [lng, lat] of ring) {
+            flat.push(lat, lng);
+            bounds.extend([lat, lng]);
+          }
+          rings.push(flat);
+        }
+      }
+      const date = String(f.properties?.d);
+      const area = Number(f.properties?.a) || 0;
+      burns.push({
+        day: toDay(date),
+        year: Number(date.slice(0, 4)),
+        ym: date.slice(0, 7),
+        area,
+        rgb: colorFor(area),
+        rings,
+        proj: null,
+      });
+    }
+
+    if (!burns.length) {
+      el.insertAdjacentHTML('beforeend', '<p class="map-error">No burned areas to show.</p>');
+      return;
+    }
+
+    burns.sort((a, b) => a.day - b.day);
+    const firstDay = burns[0].day;
+    const lastDay = burns[burns.length - 1].day;
+
+    // --- Group indexes ----------------------------------------------------
+    const yearTotals = new Map<number, number>();
+    const monthTotals = new Map<string, number>();
+    for (const b of burns) {
+      yearTotals.set(b.year, (yearTotals.get(b.year) ?? 0) + b.area);
+      monthTotals.set(b.ym, (monthTotals.get(b.ym) ?? 0) + b.area);
+    }
+    const years = [...yearTotals.keys()].sort((a, b) => a - b);
+    const ymKeys = [...monthTotals.keys()].sort();
+    // Every month between the first and last, including quiet ones, so the
+    // animation runs at a constant rate through time rather than skipping.
+    const months: string[] = [];
+    {
+      let [y, m] = ymKeys[0].split('-').map(Number);
+      const [ey, em] = ymKeys.at(-1)!.split('-').map(Number);
+      while (y < ey || (y === ey && m <= em)) {
+        months.push(`${y}-${String(m).padStart(2, '0')}`);
+        m++;
+        if (m > 12) { m = 1; y++; }
+      }
+    }
+    const grandTotal = burns.reduce((s, b) => s + b.area, 0);
+
+    // Which positions actually contain fire, per mode, for the step buttons.
+    // The timeline itself covers every calendar day whether it burned or not;
+    // these lists are only for jumping between the days that did.
+    const fireDayIdx = [...new Set(burns.map((b) => b.day - firstDay))].sort((a, b) => a - b);
+    const fireMonthIdx = months
+      .map((ym, i) => ((monthTotals.get(ym) ?? 0) > 0 ? i : -1))
+      .filter((i) => i >= 0);
+    const fireYearIdx = years.map((_, i) => i);
+
+    // --- Canvas layer -----------------------------------------------------
+    // `index` is always 0-based into the active mode's range, so the slider can
+    // stay a plain 0..count-1 control whatever the mode is.
+    let mode: Mode = 'total';
+    let index = 0;
+
+    /**
+     * Paint the burns for one point in time onto a context, in layer-pixel
+     * space offset by (ox, oy).
+     */
+    function paintBurns(
+      ctx: CanvasRenderingContext2D,
+      m: L.Map,
+      ox: number,
+      oy: number,
+      state: { mode: Mode; index: number },
+    ) {
+      // Lighter compositing so overlapping burns build up rather than
+      // flatly overwriting one another - a reburn should read as hotter.
+      ctx.globalCompositeOperation = 'lighter';
+
+      const wantYear = state.mode === 'year' ? years[state.index] : null;
+      const wantYm = state.mode === 'month' ? months[state.index] : null;
+      const currentDay = firstDay + state.index;
+      const windowFrom = currentDay - FADE_DAYS;
+
+      for (const b of burns) {
+        let alpha: number;
+        if (state.mode === 'total') {
+          alpha = ALPHA.total;
+        } else if (state.mode === 'day') {
+          if (b.day > currentDay || b.day < windowFrom) continue;
+          // Full intensity on the day, easing out across the fade window.
+          const t = Math.max(0, 1 - (currentDay - b.day) / FADE_DAYS);
+          alpha = 0.18 + 0.82 * t * t;
+        } else {
+          if (wantYear !== null && b.year !== wantYear) continue;
+          if (wantYm !== null && b.ym !== wantYm) continue;
+          alpha = ALPHA.group;
+        }
+
+        if (!b.proj) {
+          b.proj = b.rings.map((flat) => {
+            const out = new Array(flat.length);
+            for (let i = 0; i < flat.length; i += 2) {
+              const p = m.latLngToLayerPoint([flat[i], flat[i + 1]]);
+              out[i] = p.x;
+              out[i + 1] = p.y;
+            }
+            return out;
+          });
+        }
+
+        ctx.beginPath();
+        for (const ring of b.proj) {
+          ctx.moveTo(ring[0] - ox, ring[1] - oy);
+          for (let i = 2; i < ring.length; i += 2) ctx.lineTo(ring[i] - ox, ring[i + 1] - oy);
+          ctx.closePath();
+        }
+        const [r, g, bl] = b.rgb;
+        ctx.fillStyle = `rgba(${r},${g},${bl},${alpha.toFixed(3)})`;
+        ctx.fill();
+      }
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
+    const FireLayer = L.Layer.extend({
+      onAdd(m: L.Map) {
+        this._map = m;
+        const canvas = (this._canvas = L.DomUtil.create('canvas', 'fire-canvas'));
+        canvas.style.position = 'absolute';
+        canvas.style.pointerEvents = 'none';
+        m.getPanes().overlayPane.appendChild(canvas);
+        m.on('moveend zoomend resize', this._reset, this);
+        this._zoom = null;
+        this._reset();
+      },
+      onRemove(m: L.Map) {
+        m.off('moveend zoomend resize', this._reset, this);
+        this._canvas.remove();
+      },
+      _reset() {
+        const m = this._map as L.Map;
+        const size = m.getSize();
+        const topLeft = m.containerPointToLayerPoint([0, 0]);
+        L.DomUtil.setPosition(this._canvas, topLeft);
+        const dpr = window.devicePixelRatio || 1;
+        this._canvas.width = Math.round(size.x * dpr);
+        this._canvas.height = Math.round(size.y * dpr);
+        this._canvas.style.width = size.x + 'px';
+        this._canvas.style.height = size.y + 'px';
+        this._dpr = dpr;
+        this._origin = topLeft;
+        // Panning does not change layer coordinates, so the projection cache
+        // only has to be thrown away when the zoom changes.
+        const z = m.getZoom();
+        if (z !== this._zoom) {
+          this._zoom = z;
+          for (const b of burns) b.proj = null;
+        }
+        this.draw();
+      },
+      draw() {
+        const m = this._map as L.Map;
+        if (!m) return;
+        const ctx = this._canvas.getContext('2d') as CanvasRenderingContext2D;
+        const dpr = this._dpr;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, this._canvas.width / dpr, this._canvas.height / dpr);
+        paintBurns(ctx, m, this._origin.x, this._origin.y, { mode, index });
+      },
+    });
+
+    const fireLayer = new (FireLayer as unknown as new () => L.Layer)();
+    if (bounds.isValid()) map.fitBounds(bounds, { padding: [10, 10] });
+    map.addLayer(fireLayer);
+
+    // --- UI ---------------------------------------------------------------
+    const slider = root.querySelector('[data-fire-slider]') as HTMLInputElement;
+    const dateEl = root.querySelector('[data-fire-date]') as HTMLElement;
+    const statsEl = root.querySelector('[data-fire-stats]') as HTMLElement;
+    const playBtn = root.querySelector('[data-fire-play]') as HTMLButtonElement;
+    const playIcon = root.querySelector('[data-fire-play-icon]') as HTMLElement;
+    const ticks = root.querySelector('[data-fire-ticks]') as HTMLElement;
+    const speedSel = root.querySelector('[data-fire-speed]') as HTMLSelectElement;
+    const prevBtn = root.querySelector('[data-fire-prev]') as HTMLButtonElement;
+    const nextBtn = root.querySelector('[data-fire-next]') as HTMLButtonElement;
+    const modeBtns = [...root.querySelectorAll<HTMLButtonElement>('[data-fire-mode]')];
+    ui.hidden = false;
+
+    const groupCount = () =>
+      mode === 'day'
+        ? lastDay - firstDay + 1
+        : mode === 'month'
+          ? months.length
+          : mode === 'year'
+            ? years.length
+            : 1;
+
+    const fmt = (n: number) => (n >= 100 ? n.toFixed(0) : n >= 10 ? n.toFixed(1) : n.toFixed(2));
+
+    /** Positions holding fire in the active mode, for the step buttons. */
+    const fireIdx = () =>
+      mode === 'day' ? fireDayIdx : mode === 'month' ? fireMonthIdx : mode === 'year' ? fireYearIdx : [];
+
+    function renderTicks() {
+      ticks.innerHTML = '';
+      if (mode === 'total') return;
+      const n = groupCount();
+      for (let y = 2005; y <= 2025; y += 5) {
+        let i: number;
+        if (mode === 'year') i = years.indexOf(y);
+        else if (mode === 'month') i = months.indexOf(`${y}-01`);
+        else i = toDay(`${y}-01-01`) - firstDay;
+        if (i < 0 || i > n - 1) continue;
+        const tick = document.createElement('span');
+        tick.className = 'fire-ui__tick';
+        tick.style.left = (i / (n - 1)) * 100 + '%';
+        tick.textContent = String(y);
+        ticks.appendChild(tick);
+      }
+    }
+
+    function render() {
+      (fireLayer as unknown as { draw: () => void }).draw();
+
+      if (mode === 'total') {
+        dateEl.textContent = 'November 2000 - May 2026';
+        statsEl.textContent = `${fmt(grandTotal)} km² burned in total · ${burns.length.toLocaleString('en-GB')} patches`;
+      } else if (mode === 'day') {
+        const currentDay = firstDay + index;
+        const d = new Date(currentDay * DAY_MS);
+        dateEl.textContent = `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+        const from = currentDay - FADE_DAYS;
+        let windowArea = 0;
+        for (const b of burns) if (b.day <= currentDay && b.day >= from) windowArea += b.area;
+        const y = d.getUTCFullYear();
+        statsEl.textContent = `${fmt(windowArea)} km² burning · ${fmt(yearTotals.get(y) ?? 0)} km² in ${y}`;
+      } else if (mode === 'month') {
+        const ym = months[index];
+        const [y, m] = ym.split('-').map(Number);
+        dateEl.textContent = `${MONTHS[m - 1]} ${y}`;
+        const t = monthTotals.get(ym) ?? 0;
+        statsEl.textContent = t > 0 ? `${fmt(t)} km² burned` : 'nothing recorded';
+      } else {
+        const y = years[index];
+        dateEl.textContent = String(y);
+        statsEl.textContent = `${fmt(yearTotals.get(y) ?? 0)} km² burned${y === 2026 ? ' (to May)' : ''}`;
+      }
+
+      slider.value = String(index);
+    }
+
+    function setMode(next: Mode, { resetIndex = true } = {}) {
+      mode = next;
+      for (const b of modeBtns) b.classList.toggle('is-active', b.dataset.fireMode === next);
+      const n = groupCount();
+      slider.min = '0';
+      slider.max = String(Math.max(0, n - 1));
+      slider.step = '1';
+      slider.disabled = next === 'total';
+      slider.classList.toggle('is-disabled', next === 'total');
+      prevBtn.disabled = next === 'total';
+      nextBtn.disabled = next === 'total';
+      if (resetIndex) index = 0;
+      if (index > n - 1) index = n - 1;
+      renderTicks();
+      render();
+    }
+
+    /** Jump to the nearest position with recorded fire, forwards or back. */
+    function jump(dir: 1 | -1) {
+      const arr = fireIdx();
+      if (!arr.length) return;
+      stop();
+      let target: number | undefined;
+      if (dir === 1) target = arr.find((i) => i > index);
+      else {
+        for (let k = arr.length - 1; k >= 0; k--) {
+          if (arr[k] < index) { target = arr[k]; break; }
+        }
+      }
+      if (target === undefined) return; // already at the first or last one
+      index = target;
+      render();
+    }
+
+    let timer: number | null = null;
+    let raf: number | null = null;
+    const isPlaying = () => timer !== null || raf !== null;
+
+    function stop() {
+      if (timer !== null) {
+        window.clearInterval(timer);
+        timer = null;
+      }
+      if (raf !== null) {
+        cancelAnimationFrame(raf);
+        raf = null;
+      }
+      playIcon.innerHTML = '&#9654;';
+      playBtn.setAttribute('aria-label', 'Play');
+    }
+
+    function start() {
+      // Total has nothing to step through, so pressing play from the composite
+      // moves to the day run - the animation this map is really for - and
+      // starts from the beginning.
+      if (mode === 'total') setMode('day');
+      const last = groupCount() - 1;
+      if (index >= last) index = 0;
+      const speed = Number(speedSel.value) || 1;
+
+      if (mode === 'day') {
+        // One calendar day per frame at 1x, so every day in the record is
+        // drawn - including the many with nothing burning, which is what makes
+        // the winters read as genuinely empty rather than skipped over. The
+        // accumulator lets 0.5x hold each day for two frames, and the higher
+        // speeds advance several days per frame at the cost of skipping some.
+        let acc = 0;
+        const tick = () => {
+          acc += speed;
+          const whole = Math.floor(acc);
+          if (whole >= 1) {
+            acc -= whole;
+            index += whole;
+            if (index >= last) {
+              index = last;
+              render();
+              stop();
+              return;
+            }
+            render();
+          }
+          raf = requestAnimationFrame(tick);
+        };
+        raf = requestAnimationFrame(tick);
+      } else {
+        const fps = FPS[mode as 'month' | 'year'] * speed;
+        timer = window.setInterval(() => {
+          index += 1;
+          if (index >= last) {
+            index = last;
+            render();
+            stop();
+            return;
+          }
+          render();
+        }, 1000 / fps);
+      }
+
+      playIcon.innerHTML = '&#10073;&#10073;';
+      playBtn.setAttribute('aria-label', 'Pause');
+      render();
+    }
+
+    playBtn.addEventListener('click', () => (isPlaying() ? stop() : start()));
+    prevBtn.addEventListener('click', () => jump(-1));
+    nextBtn.addEventListener('click', () => jump(1));
+
+    slider.addEventListener('input', () => {
+      stop();
+      index = Number(slider.value);
+      render();
+    });
+
+    speedSel.addEventListener('change', () => {
+      // Restart the loop at the new rate without losing the position.
+      if (isPlaying()) {
+        stop();
+        start();
+      }
+    });
+
+    for (const btn of modeBtns) {
+      btn.addEventListener('click', () => {
+        stop();
+        setMode(btn.dataset.fireMode as Mode);
+      });
+    }
+
+    setMode('total');
+
+    // --- Legend -----------------------------------------------------------
+    const legend = new L.Control({ position: 'topright' });
+    legend.onAdd = () => {
+      const box = L.DomUtil.create('div', 'map-legend map-legend--fire');
+      L.DomEvent.disableClickPropagation(box);
+      // Highest class first, to read the same way round as the printed legend.
+      const rows = CLASSES.map(
+        (c) =>
+          `<div class="map-legend__class">` +
+          `<span class="map-legend__box" style="background:rgb(${c.rgb[0]},${c.rgb[1]},${c.rgb[2]})"></span>` +
+          `<span>${c.label}</span></div>`,
+      ).join('');
+      box.innerHTML =
+        `<div class="map-legend__title">Burned area per day (km²)</div>` +
+        rows +
+        `<div class="map-legend__note">Overlapping patches build up brighter, so ground that has burned more than once reads hotter.</div>`;
+      return box;
+    };
+    legend.addTo(map);
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-firemap]').forEach(initMap);
+</script>
+
+<style is:global>
+  .fire-map {
+    position: relative;
+  }
+
+  .fire-ui {
+    margin-top: 0.6rem;
+    padding: 0.55rem 0.75rem 0.5rem;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    background: var(--bg-surface);
+  }
+
+  .fire-ui__modes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-bottom: 0.55rem;
+  }
+  .fire-ui__mode {
+    font-size: 0.78rem;
+    padding: 0.2rem 0.6rem;
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    background: var(--bg);
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+  .fire-ui__mode:hover {
+    color: var(--text);
+    border-color: var(--text-muted);
+  }
+  .fire-ui__mode.is-active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--bg-surface);
+  }
+
+  .fire-ui__row {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+  }
+  .fire-ui__play {
+    flex: none;
+    width: 2.1rem;
+    height: 2.1rem;
+    border: 1px solid var(--rule);
+    border-radius: 50%;
+    background: var(--bg);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 0.7rem;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .fire-ui__play:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .fire-ui__readout {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.15rem 0.7rem;
+    min-width: 0;
+    flex: 1;
+  }
+  .fire-ui__readout strong {
+    font-family: var(--font-serif);
+    font-size: 1.02rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .fire-ui__readout span {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .fire-ui__speed {
+    flex: none;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+  .fire-ui__speed select {
+    font: inherit;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    padding: 0.1rem 0.2rem;
+  }
+
+
+  /* The step buttons flank the slider, and the tick labels sit inside the same
+     middle column so they stay aligned with the track rather than the panel. */
+  .fire-ui__track {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+  }
+  .fire-ui__trackmid {
+    flex: 1;
+    min-width: 0;
+  }
+  .fire-ui__step {
+    flex: none;
+    width: 1.7rem;
+    height: 1.7rem;
+    margin-top: 0.1rem;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .fire-ui__step:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .fire-ui__step:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+
+  .fire-ui__slider {
+    display: block;
+    width: 100%;
+    margin: 0.15rem 0 0;
+    accent-color: #f77622;
+  }
+  .fire-ui__slider.is-disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+  .fire-ui__ticks {
+    position: relative;
+    height: 1rem;
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .fire-ui__tick {
+    position: absolute;
+    transform: translateX(-50%);
+    white-space: nowrap;
+  }
+
+  @media (max-width: 30rem) {
+    .fire-ui__row {
+      flex-wrap: wrap;
+    }
+    .fire-ui__speed {
+      order: 3;
+      margin-left: auto;
+    }
+  }
+
+  .map-legend--fire {
+    width: 11rem;
+  }
+  .map-legend--fire .map-legend__class {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.06rem 0;
+    font-size: 0.76rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .map-legend--fire .map-legend__box {
+    flex: none;
+    width: 0.9rem;
+    height: 0.9rem;
+    border-radius: 2px;
+    /* A hairline keeps the palest class visible against the panel. */
+    border: 1px solid rgba(0, 0, 0, 0.25);
+  }
+</style>

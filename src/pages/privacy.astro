@@ -1,0 +1,56 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { site } from '../site';
+---
+
+<BaseLayout title="Privacy" description={`How ${site.name}'s portfolio site handles visitor data.`}>
+  <h1>Privacy</h1>
+  <p class="muted">Last updated 16 October 2026.</p>
+
+  <p>
+    This site sets no cookies and shows no ads. It is run by {site.name}; questions
+    about this page go to <a href={`mailto:${site.email}`}>{site.email}</a>.
+  </p>
+
+  <h2>Visitor statistics</h2>
+  <p>
+    The site uses <a href="https://umami.is">Umami</a>, self-hosted on my own server, to
+    count visits. It records:
+  </p>
+  <ul>
+    <li>which pages are viewed, and the site you arrived from;</li>
+    <li>browser, operating system, device type and screen size;</li>
+    <li>approximate location (country, region, city);</li>
+    <li>how long a visit lasts;</li>
+    <li>clicks on the CV and map download links.</li>
+  </ul>
+  <p>
+    Your IP address is used only to look up the approximate location at the moment of
+    the visit. It is not stored. Nothing is shared with anyone else. If your browser
+    sends a Do Not Track signal, no statistics are recorded at all.
+  </p>
+
+  <h2>Server logs</h2>
+  <p>
+    Like most web servers, this one keeps standard access logs: IP address, time, the
+    page requested and the browser. They are used for security and troubleshooting
+    only, and are deleted after a limited period.
+  </p>
+
+  <h2>Map backgrounds</h2>
+  <p>
+    The interactive maps load their background tiles from Esri (ArcGIS Online). Your
+    browser requests those tiles from Esri's servers directly, so Esri receives your IP
+    address, as any website you load would. See
+    <a href="https://www.esri.com/en-us/privacy/overview">Esri's privacy statement</a>.
+    Everything else on this site, including the map data and images, is served from my
+    own server.
+  </p>
+
+  <h2>Your rights</h2>
+  <p>
+    Under the GDPR you can ask what data about you is held and have it deleted. Because
+    the statistics above store nothing that identifies you, in practice this concerns
+    the server logs. Email <a href={`mailto:${site.email}`}>{site.email}</a>.
+  </p>
+</BaseLayout>

@@ -8,7 +8,7 @@
  * are clickable. A colour legend explains the scale.
  *
  * Written for the #30DayMapChallenge Day 1 refugee map, but the fields are
- * props, so it works for any "percentage-ish point layer" — hence its home in
+ * props, so it works for any "percentage-ish point layer" - hence its home in
  * components/ rather than being hard-coded to one dataset.
  *
  *   src        GeoJSON of Points under public/, e.g. /data/refugees.geojson
@@ -35,7 +35,7 @@ const {
   nameField = 'name',
   countField = 'refugees',
   pointZoom = 9,
-  radius = 20,
+  radius = 4,
 } = Astro.props;
 ---
 
@@ -61,34 +61,29 @@ const {
   import 'leaflet/dist/leaflet.css';
   import { hexbin as d3hexbin } from 'd3-hexbin';
 
-  const BASEMAP = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+  const BASEMAP = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
   const ATTRIBUTION =
-    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, ' +
-    '&copy; <a href="https://carto.com/attributions">CARTO</a>';
+    'Tiles &copy; <a href="https://www.esri.com/">Esri</a> - Esri, HERE, Garmin, ' +
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
-  // Sequential ColorBrewer YlOrRd, spanning the value range set below. The data
-  // is a fraction 0..1; the scale is pinned to [0.5, 1.0] because that is the
-  // meaningful range here (villages were filtered to >=50% refugee), which
-  // keeps the whole palette in play rather than squashing it into the top half.
-  const RAMP: [number, number, number][] = [
-    [255, 255, 178],
-    [254, 204, 92],
-    [253, 141, 60],
-    [240, 59, 32],
-    [189, 0, 38],
+  // Five classes, matching the printed ArcGIS Pro version of this map so the
+  // two read as one piece of work. ColorBrewer Oranges, and the same 10% bands
+  // the print legend uses. Villages were filtered to >=50% refugee, so 50% is
+  // the floor. Ordered high to low, which is also the legend's top-to-bottom
+  // order. `min` is inclusive; a value falls in the first class it is >=.
+  const CLASSES = [
+    { min: 0.9, label: '90–100%', color: 'rgb(127, 39, 4)' },
+    { min: 0.8, label: '80–90%', color: 'rgb(217, 72, 1)' },
+    { min: 0.7, label: '70–80%', color: 'rgb(253, 141, 60)' },
+    { min: 0.6, label: '60–70%', color: 'rgb(253, 208, 162)' },
+    { min: 0.5, label: '50–60%', color: 'rgb(255, 245, 235)' },
   ];
-  const VMIN = 0.5;
-  const VMAX = 1.0;
 
   function colorFor(value: number): string {
-    const t = Math.max(0, Math.min(1, (value - VMIN) / (VMAX - VMIN)));
-    const seg = t * (RAMP.length - 1);
-    const i = Math.min(RAMP.length - 2, Math.floor(seg));
-    const f = seg - i;
-    const [r1, g1, b1] = RAMP[i];
-    const [r2, g2, b2] = RAMP[i + 1];
-    const mix = (a: number, b: number) => Math.round(a + (b - a) * f);
-    return `rgb(${mix(r1, r2)}, ${mix(g1, g2)}, ${mix(b1, b2)})`;
+    for (const c of CLASSES) if (value >= c.min) return c.color;
+    // Below the 50% floor should not occur in this data; fall back to the
+    // palest class rather than leaving a feature uncoloured.
+    return CLASSES[CLASSES.length - 1].color;
   }
 
   const escapeHtml = (value: unknown) =>
@@ -100,7 +95,7 @@ const {
 
   const pct = (fraction: number) => `${(fraction * 100).toFixed(1)}%`;
   // Fixed locale, not the visitor's: the UI is English, and the default locale
-  // renders 1425 as "1.425" in much of Europe — misleading in an English popup.
+  // renders 1425 as "1.425" in much of Europe - misleading in an English popup.
   const num = (n: number) => n.toLocaleString('en-GB');
 
   interface Pt {
@@ -152,11 +147,13 @@ const {
     const pointZoom = Number(el.dataset.pointZoom || 9);
     const radius = Number(el.dataset.radius || 20);
 
-    const map = L.map(el, { scrollWheelZoom: false });
-    map.on('click', () => map.scrollWheelZoom.enable());
-    map.on('mouseout', () => map.scrollWheelZoom.disable());
+    const map = L.map(el, { scrollWheelZoom: true });
 
-    L.tileLayer(BASEMAP, { attribution: ATTRIBUTION, maxZoom: 19 }).addTo(map);
+    // Esri's canvas basemaps have real tiles only to z16 over Greece; past that
+    // they answer with a "Map data not yet available" placeholder. maxNativeZoom
+    // makes Leaflet stretch the z16 tiles instead, so the data can still be
+    // zoomed into.
+    L.tileLayer(BASEMAP, { attribution: ATTRIBUTION, maxZoom: 19, maxNativeZoom: 16 }).addTo(map);
     L.control.scale({ imperial: false }).addTo(map);
 
     let data: GeoJSON.FeatureCollection;
@@ -195,7 +192,7 @@ const {
     for (const p of points) {
       L.circleMarker([p.lat, p.lng], {
         radius: 5,
-        color: '#4d2600',
+        color: '#7f2704',
         weight: 0.6,
         fillColor: colorFor(p.value),
         fillOpacity: 0.85,
@@ -206,7 +203,7 @@ const {
 
     // Hexagons: rebuilt on every zoom, because binning happens in pixel space
     // and the pixel positions of the points change with zoom. Panning needs no
-    // rebuild — the hexagons are drawn as lat/lng polygons, which Leaflet moves
+    // rebuild - the hexagons are drawn as lat/lng polygons, which Leaflet moves
     // for us.
     function buildHexbins() {
       hexLayer.clearLayers();
@@ -228,10 +225,13 @@ const {
         L.polygon(
           corners.map((c) => [c.lat, c.lng] as [number, number]),
           {
-            color: '#ffffff',
-            weight: 1,
+            // A muted grey outline, not white: the low end of this ramp is
+            // near-white, and a white stroke on the pale basemap would make the
+            // faintest hexagons disappear entirely.
+            color: '#8c8c8c',
+            weight: 0.5,
             fillColor: colorFor(meanVal),
-            fillOpacity: 0.82,
+            fillOpacity: 0.85,
           },
         )
           .bindPopup(hexPopup(members, countField))
@@ -257,13 +257,17 @@ const {
     // --- Legend -----------------------------------------------------------
     const legend = new L.Control({ position: 'bottomright' });
     legend.onAdd = () => {
-      const box = L.DomUtil.create('div', 'map-legend map-legend--ramp');
+      const box = L.DomUtil.create('div', 'map-legend map-legend--classes');
       L.DomEvent.disableClickPropagation(box);
-      const stops = RAMP.map(([r, g, b]) => `rgb(${r},${g},${b})`).join(', ');
+      const rows = CLASSES.map(
+        (c) =>
+          `<div class="map-legend__class">` +
+          `<span class="map-legend__box" style="background:${c.color}"></span>` +
+          `<span>${c.label}</span></div>`,
+      ).join('');
       box.innerHTML =
         `<div class="map-legend__title">Refugee share</div>` +
-        `<div class="map-legend__bar" style="background:linear-gradient(to right, ${stops})"></div>` +
-        `<div class="map-legend__scale"><span>${VMIN * 100}%</span><span>${VMAX * 100}%</span></div>` +
+        rows +
         `<div class="map-legend__note">Hexagons show the mean of the villages they cover.</div>`;
       return box;
     };
@@ -307,29 +311,50 @@ const {
     font-size: 0.8rem;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
   }
-  .map-legend--ramp {
-    width: 12rem;
+  .map-legend--classes {
+    width: auto;
   }
   .map-legend__title {
     font-weight: 600;
     margin-bottom: 0.35rem;
   }
-  .map-legend__bar {
-    height: 0.7rem;
-    border-radius: 2px;
-    border: 1px solid rgba(0, 0, 0, 0.15);
-  }
-  .map-legend__scale {
+  .map-legend__class {
     display: flex;
-    justify-content: space-between;
-    color: var(--text-muted);
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.08rem 0;
     font-variant-numeric: tabular-nums;
-    margin-top: 0.2rem;
+  }
+  .map-legend__box {
+    flex: none;
+    width: 0.9rem;
+    height: 0.9rem;
+    border-radius: 2px;
+    /* Same grey outline the hexagons use, so the palest class (near-white) is
+       still visible against the legend background. */
+    border: 1px solid #8c8c8c;
   }
   .map-legend__note {
     margin-top: 0.4rem;
     color: var(--text-muted);
     font-size: 0.72rem;
     line-height: 1.35;
+  }
+
+  /* On a phone the map is short, and five classes plus a note take up too much
+     of it. Tighten the legend and drop the explanatory note - the caption under
+     the map already says the same thing. */
+  @media (max-width: 40rem) {
+    .map-legend--classes {
+      padding: 0.4rem 0.5rem;
+      font-size: 0.72rem;
+    }
+    .map-legend--classes .map-legend__box {
+      width: 0.75rem;
+      height: 0.75rem;
+    }
+    .map-legend--classes .map-legend__note {
+      display: none;
+    }
   }
 </style>

@@ -1,0 +1,379 @@
+---
+/**
+ * A map of overlapping polygons where clicking reports EVERY polygon under the
+ * cursor, not just the topmost one.
+ *
+ * Greece's protected areas nest and overlap constantly - a national park core
+ * inside a park inside a wider sustainable-use zone - so Leaflet's default
+ * behaviour of firing a popup on whichever layer happens to be on top hides
+ * most of the answer. This component does its own hit-testing instead: on click
+ * it point-in-polygon tests every feature and lists all the matches.
+ *
+ * Rendered on canvas rather than SVG. With 803 polygons and ~74k vertices the
+ * DOM cost of SVG is real, and since interaction goes through the custom
+ * hit-test rather than per-path events, canvas costs nothing in return.
+ *
+ * Fields read (all English, per the request):
+ *   designated_area_name_en   name
+ *   designation_type_code     code
+ *   designation_type_name_en  designation category
+ *   iucn_category_en          IUCN category - also drives the colour
+ *   major_ecosystem_type_en   ecosystem category
+ *   foundation_year
+ */
+interface Props {
+  src: string;
+  caption?: string;
+}
+
+const { src, caption } = Astro.props;
+---
+
+<figure class="map-figure">
+  <div
+    class="map map--tall"
+    data-areasmap
+    data-src={src}
+    role="application"
+    aria-label={caption ?? 'Interactive map of protected areas'}
+  >
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<script>
+  import * as L from 'leaflet';
+  import 'leaflet/dist/leaflet.css';
+
+  const BASEMAP = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+  const ATTRIBUTION =
+    'Tiles &copy; <a href="https://www.esri.com/">Esri</a> - Esri, HERE, Garmin, ' +
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
+  // Keyed by the exact `iucn_category_en` values in the data. Colours sampled
+  // from the printed ArcGIS Pro version of this map so the two match. The print
+  // legend distinguishes IV/V/VI with hatching, which canvas cannot do cheaply;
+  // here they are the same hues as solid fills, and the semi-transparency does
+  // the job hatching does there - letting you see the shapes underneath.
+  const CATEGORIES = [
+    { value: 'Ia: Strict nature reserve', label: 'Ia: Strict nature reserve', fill: '#f06666', stroke: '#a30000' },
+    { value: 'II: National park', label: 'II: National park', fill: '#88cb66', stroke: '#267300' },
+    { value: 'III: Natural monument or feature', label: 'III: Natural monument or feature', fill: '#cb66b5', stroke: '#7a0061' },
+    { value: 'IV: Habitat/species management area', label: 'IV: Habitat/species management area', fill: '#0084a8', stroke: '#005c7a' },
+    { value: 'V: Protected landscape or seascape', label: 'V: Protected landscape or seascape', fill: '#b8d000', stroke: '#8ca300' },
+    { value: 'VI: Protected areas with sustainable use of natural resources', label: 'VI: Sustainable use of natural resources', fill: '#d68a00', stroke: '#a36a00' },
+    { value: 'Others', label: 'Others', fill: '#cccccc', stroke: '#999999' },
+  ];
+  const BY_VALUE = new Map(CATEGORIES.map((c) => [c.value, c]));
+  const FALLBACK = CATEGORIES[CATEGORIES.length - 1];
+
+  const escapeHtml = (value: unknown) =>
+    String(value).replace(
+      /[&<>"']/g,
+      (c) =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string,
+    );
+
+  type Ring = number[][];
+  interface Indexed {
+    props: Record<string, unknown>;
+    /** Each polygon is [outerRing, ...holes]. */
+    polygons: Ring[][];
+    bbox: [number, number, number, number]; // minX, minY, maxX, maxY
+  }
+
+  /** Ray casting. `ring` is [lng, lat] pairs; point is [lng, lat]. */
+  function pointInRing(pt: number[], ring: Ring): boolean {
+    let inside = false;
+    const [x, y] = pt;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const xi = ring[i][0];
+      const yi = ring[i][1];
+      const xj = ring[j][0];
+      const yj = ring[j][1];
+      if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  }
+
+  /** Inside the outer ring and outside every hole. */
+  function pointInPolygon(pt: number[], rings: Ring[]): boolean {
+    if (!rings.length || !pointInRing(pt, rings[0])) return false;
+    for (let i = 1; i < rings.length; i++) if (pointInRing(pt, rings[i])) return false;
+    return true;
+  }
+
+  function featureCard(props: Record<string, unknown>): string {
+    const cat = BY_VALUE.get(String(props.iucn_category_en)) ?? FALLBACK;
+    let html = `<div class="area-card">`;
+    html += `<div class="area-card__head">`;
+    html += `<span class="area-card__swatch" style="background:${cat.fill};border-color:${cat.stroke}"></span>`;
+    html += `<strong>${escapeHtml(props.designated_area_name_en ?? 'Unnamed area')}</strong>`;
+    html += `</div>`;
+    html += `<dl class="popup-meta">`;
+    const rows: [string, unknown][] = [
+      ['Code', props.designation_type_code],
+      ['Designation', props.designation_type_name_en],
+      ['IUCN category', props.iucn_category_en],
+      ['Ecosystem', props.major_ecosystem_type_en],
+      ['Established', props.foundation_year],
+    ];
+    for (const [label, value] of rows) {
+      if (value === undefined || value === null || value === '') continue;
+      html += `<dt>${label}</dt><dd>${escapeHtml(value)}</dd>`;
+    }
+    html += `</dl></div>`;
+    return html;
+  }
+
+  async function initMap(el: HTMLElement) {
+    const src = el.dataset.src;
+    if (!src) return;
+
+    // preferCanvas: one canvas beats 803 SVG paths, and all interaction here
+    // goes through the custom hit-test below rather than per-path events.
+    const map = L.map(el, { scrollWheelZoom: true, preferCanvas: true });
+    // Esri's canvas basemaps have real tiles only to z16 over Greece; past that
+    // they answer with a "Map data not yet available" placeholder. maxNativeZoom
+    // makes Leaflet stretch the z16 tiles instead, so the data can still be
+    // zoomed into.
+    L.tileLayer(BASEMAP, { attribution: ATTRIBUTION, maxZoom: 19, maxNativeZoom: 16 }).addTo(map);
+    L.control.scale({ imperial: false }).addTo(map);
+
+    let data: GeoJSON.FeatureCollection;
+    try {
+      const res = await fetch(src);
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      data = await res.json();
+    } catch (err) {
+      console.error(`Could not load ${src}:`, err);
+      el.insertAdjacentHTML(
+        'beforeend',
+        '<p class="map-error">This map’s data could not be loaded.</p>',
+      );
+      return;
+    }
+
+    // Build the hit-test index once: geometry flattened to polygon rings, with
+    // a bounding box per feature so a click only runs point-in-polygon against
+    // the handful of candidates it could possibly be inside.
+    const index: Indexed[] = [];
+    for (const f of data.features) {
+      const g = f.geometry;
+      if (!g) continue;
+      const polygons: Ring[][] =
+        g.type === 'Polygon'
+          ? [(g as GeoJSON.Polygon).coordinates as Ring[]]
+          : g.type === 'MultiPolygon'
+            ? ((g as GeoJSON.MultiPolygon).coordinates as Ring[][])
+            : [];
+      if (!polygons.length) continue;
+
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (const poly of polygons) {
+        for (const [x, y] of poly[0]) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+      index.push({ props: f.properties ?? {}, polygons, bbox: [minX, minY, maxX, maxY] });
+    }
+
+    // Draw. Layers are grouped by category so the legend can switch them, and
+    // drawn largest-first within each group so a big sustainable-use zone never
+    // completely hides a small reserve.
+    const groups = new Map<string, L.LayerGroup>();
+    const layerFor = (cat: (typeof CATEGORIES)[number]) => {
+      let g = groups.get(cat.value);
+      if (!g) {
+        g = L.layerGroup().addTo(map);
+        groups.set(cat.value, g);
+      }
+      return g;
+    };
+
+    const bounds = L.latLngBounds([]);
+    for (const cat of CATEGORIES) {
+      const matching = data.features.filter((f) => f.properties?.iucn_category_en === cat.value);
+      if (!matching.length) continue;
+      const layer = L.geoJSON(
+        { type: 'FeatureCollection', features: matching } as GeoJSON.FeatureCollection,
+        {
+          // Non-interactive: clicks are handled once at the map level so that
+          // every overlapping polygon is reported, not just the top one.
+          interactive: false,
+          style: {
+            color: cat.stroke,
+            weight: 1,
+            fillColor: cat.fill,
+            fillOpacity: 0.45,
+          },
+        },
+      );
+      layer.addTo(layerFor(cat));
+      const b = layer.getBounds();
+      if (b.isValid()) bounds.extend(b);
+    }
+
+    // Anything with an unrecognised category still gets drawn.
+    const known = new Set(CATEGORIES.map((c) => c.value));
+    const other = data.features.filter((f) => !known.has(String(f.properties?.iucn_category_en)));
+    if (other.length) {
+      L.geoJSON({ type: 'FeatureCollection', features: other } as GeoJSON.FeatureCollection, {
+        interactive: false,
+        style: { color: FALLBACK.stroke, weight: 1, fillColor: FALLBACK.fill, fillOpacity: 0.45 },
+      }).addTo(layerFor(FALLBACK));
+    }
+
+    if (bounds.isValid()) map.fitBounds(bounds, { padding: [16, 16] });
+
+    // --- The point of the whole component: report every polygon under a click.
+    const popup = L.popup({ maxWidth: 340, minWidth: 260, autoPan: true });
+
+    map.on('click', (e: L.LeafletMouseEvent) => {
+      const pt = [e.latlng.lng, e.latlng.lat];
+      const hits: Record<string, unknown>[] = [];
+
+      for (const item of index) {
+        // Skip anything whose category is currently switched off, so the popup
+        // agrees with what is actually on screen.
+        const cat = BY_VALUE.get(String(item.props.iucn_category_en)) ?? FALLBACK;
+        const group = groups.get(cat.value);
+        if (group && !map.hasLayer(group)) continue;
+
+        const [minX, minY, maxX, maxY] = item.bbox;
+        if (pt[0] < minX || pt[0] > maxX || pt[1] < minY || pt[1] > maxY) continue;
+        if (item.polygons.some((rings) => pointInPolygon(pt, rings))) hits.push(item.props);
+      }
+
+      if (!hits.length) return;
+
+      // Most specific first: a strict reserve is more informative than the
+      // wide sustainable-use zone it sits inside.
+      const order = new Map(CATEGORIES.map((c, i) => [c.value, i]));
+      hits.sort(
+        (a, b) =>
+          (order.get(String(a.iucn_category_en)) ?? 99) -
+          (order.get(String(b.iucn_category_en)) ?? 99),
+      );
+
+      const heading =
+        hits.length === 1
+          ? '1 protected area here'
+          : `${hits.length} overlapping protected areas here`;
+      popup
+        .setLatLng(e.latlng)
+        .setContent(
+          `<div class="area-popup"><p class="area-popup__count">${heading}</p>` +
+            hits.map(featureCard).join('') +
+            `</div>`,
+        )
+        .openOn(map);
+    });
+
+    // --- Legend, doubling as a category switch -----------------------------
+    const control = new L.Control({ position: 'bottomleft' });
+    control.onAdd = () => {
+      // Seven fairly long labels would blanket a phone screen, so the legend is
+      // a <details>: open on a wide viewport, collapsed to its title on a
+      // narrow one, where the reader can open it when they want it.
+      const box = L.DomUtil.create('details', 'map-legend') as HTMLDetailsElement;
+      box.open = window.matchMedia('(min-width: 40rem)').matches;
+      L.DomEvent.disableClickPropagation(box);
+      L.DomEvent.disableScrollPropagation(box);
+      const title = L.DomUtil.create('summary', 'map-legend__title', box);
+      title.textContent = 'IUCN category';
+
+      for (const cat of CATEGORIES) {
+        const group = groups.get(cat.value);
+        if (!group) continue;
+        const row = L.DomUtil.create('label', 'map-legend__row', box);
+        const input = L.DomUtil.create('input', 'map-legend__toggle', row) as HTMLInputElement;
+        input.type = 'checkbox';
+        input.checked = true;
+        const swatch = L.DomUtil.create('span', 'map-legend__swatch', row);
+        swatch.style.background = cat.fill;
+        swatch.style.borderColor = cat.stroke;
+        const label = L.DomUtil.create('span', 'map-legend__name', row);
+        label.textContent = cat.label;
+        input.addEventListener('change', () => {
+          if (input.checked) map.addLayer(group);
+          else map.removeLayer(group);
+          map.closePopup();
+        });
+      }
+      const note = L.DomUtil.create('div', 'map-legend__note', box);
+      note.textContent = 'Areas overlap. Click anywhere to list every area at that point.';
+      return box;
+    };
+    control.addTo(map);
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-areasmap]').forEach(initMap);
+</script>
+
+<style is:global>
+  .area-popup {
+    max-height: 19rem;
+    overflow-y: auto;
+  }
+  .area-popup__count {
+    margin: 0 0 0.5rem;
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .area-card + .area-card {
+    margin-top: 0.7rem;
+    padding-top: 0.7rem;
+    border-top: 1px solid var(--rule);
+  }
+  .area-card__head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+  }
+  .area-card__swatch {
+    flex: none;
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 2px;
+    border: 1px solid;
+  }
+  /* The legend carries seven fairly long labels, so it needs to wrap rather
+     than push itself off the map. */
+  .map-legend__row {
+    align-items: flex-start;
+  }
+  .map-legend__name {
+    line-height: 1.3;
+  }
+  /* The legend is a <details>; its title is the summary. */
+  details.map-legend > summary.map-legend__title {
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+  }
+  details.map-legend > summary.map-legend__title::-webkit-details-marker {
+    display: none;
+  }
+  details.map-legend > summary.map-legend__title::after {
+    content: ' ▾';
+    color: var(--text-muted);
+  }
+  details.map-legend:not([open]) > summary.map-legend__title {
+    margin-bottom: 0;
+  }
+  details.map-legend:not([open]) > summary.map-legend__title::after {
+    content: ' ▸';
+  }
+  details.map-legend:not([open]) {
+    max-width: 12rem;
+  }
+</style>

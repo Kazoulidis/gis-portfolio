@@ -1,0 +1,325 @@
+---
+/**
+ * A categorical network map: lines coloured by a status field, plus point
+ * features that open a photograph when clicked.
+ *
+ * Built for the #30DayMapChallenge Day 2 railway map, and deliberately generic
+ * about which file holds what - it loads every layer it is given and sorts the
+ * features by geometry type, so lines become the network and points become the
+ * stations no matter what order the layers arrive in.
+ *
+ * Fields read (all the English variants, per the source data):
+ *   lines   name_en, status_en, gauge_en, network_en
+ *   points  title_en, image_url
+ *
+ * The legend doubles as a layer switch, one row per status plus one for the
+ * stations.
+ */
+interface Layer {
+  name: string;
+  src: string;
+}
+
+interface Props {
+  layers: Layer[];
+  caption?: string;
+}
+
+const { layers, caption } = Astro.props;
+---
+
+<figure class="map-figure">
+  <div
+    class="map map--tall"
+    data-railmap
+    data-layers={JSON.stringify(layers)}
+    role="application"
+    aria-label={caption ?? 'Interactive railway map'}
+  >
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<script>
+  import * as L from 'leaflet';
+  import 'leaflet/dist/leaflet.css';
+
+  const BASEMAP = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+  const ATTRIBUTION =
+    'Tiles &copy; <a href="https://www.esri.com/">Esri</a> - Esri, HERE, Garmin, ' +
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
+  // Keyed by the exact `status_en` values in the data, and matched to the
+  // colours of the printed version of this map so the two read as one piece.
+  // Order here is draw order: later entries sit on top, so the active network
+  // stays legible where lines overlap.
+  const STATUS: { value: string; color: string }[] = [
+    { value: 'Inactive network', color: '#e0301e' },
+    { value: 'Suspended operation', color: '#e8a020' },
+    { value: 'Tourist route', color: '#cc44ee' },
+    { value: 'Active network', color: '#1f6fd4' },
+  ];
+  const FALLBACK = '#8c8c8c';
+  const STATION_COLOR = '#33383d';
+
+  const escapeHtml = (value: unknown) =>
+    String(value).replace(
+      /[&<>"']/g,
+      (c) =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string,
+    );
+
+  function linePopup(p: Record<string, unknown>): string {
+    let html = p.name_en ? `<strong>${escapeHtml(p.name_en)}</strong>` : '';
+    html += '<dl class="popup-meta">';
+    for (const [label, key] of [
+      ['Status', 'status_en'],
+      ['Gauge', 'gauge_en'],
+      ['Network', 'network_en'],
+    ] as const) {
+      if (p[key]) html += `<dt>${label}</dt><dd>${escapeHtml(p[key])}</dd>`;
+    }
+    html += '</dl>';
+    return html;
+  }
+
+  function stationPopup(p: Record<string, unknown>): string {
+    let html = p.title_en ? `<strong>${escapeHtml(p.title_en)}</strong>` : '';
+    if (p.image_url) {
+      // Loaded straight from the operator's site. If it 404s or is blocked the
+      // popup drops the image rather than showing a broken-image icon - see the
+      // popupopen handler below.
+      //
+      // Eager, not lazy: Leaflet only builds a popup's DOM when it is opened,
+      // so this element never exists until it is already on screen. Lazy would
+      // add the loading heuristic's delay for no saving.
+      html += `<img class="station-photo" src="${escapeHtml(p.image_url)}" alt="" decoding="async" />`;
+    }
+    return html;
+  }
+
+  async function initMap(el: HTMLElement) {
+    let specs: { name: string; src: string }[];
+    try {
+      specs = JSON.parse(el.dataset.layers || '[]');
+    } catch {
+      specs = [];
+    }
+    if (!specs.length) return;
+
+    const map = L.map(el, { scrollWheelZoom: true });
+    // Esri's canvas basemaps have real tiles only to z16 over Greece; past that
+    // they answer with a "Map data not yet available" placeholder. maxNativeZoom
+    // makes Leaflet stretch the z16 tiles instead, so the data can still be
+    // zoomed into.
+    L.tileLayer(BASEMAP, { attribution: ATTRIBUTION, maxZoom: 19, maxNativeZoom: 16 }).addTo(map);
+    L.control.scale({ imperial: false }).addTo(map);
+
+    const results = await Promise.all(
+      specs.map(async (spec) => {
+        try {
+          const res = await fetch(spec.src);
+          if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+          return (await res.json()) as GeoJSON.FeatureCollection;
+        } catch (err) {
+          console.error(`Could not load ${spec.src}:`, err);
+          return null;
+        }
+      }),
+    );
+
+    if (results.every((r) => r === null)) {
+      el.insertAdjacentHTML(
+        'beforeend',
+        '<p class="map-error">This map’s data could not be loaded.</p>',
+      );
+      return;
+    }
+
+    // Sort every feature by geometry type rather than by which file it came
+    // from, so the component does not care about layer order.
+    const lineFeatures: GeoJSON.Feature[] = [];
+    const pointFeatures: GeoJSON.Feature[] = [];
+    for (const fc of results) {
+      if (!fc?.features) continue;
+      for (const f of fc.features) {
+        const t = f.geometry?.type;
+        if (t === 'LineString' || t === 'MultiLineString') lineFeatures.push(f);
+        else if (t === 'Point' || t === 'MultiPoint') pointFeatures.push(f);
+      }
+    }
+
+    const bounds = L.latLngBounds([]);
+    const legend: { label: string; color: string; layer: L.Layer; shape: 'line' | 'dot' }[] = [];
+
+    // One group per status, added in the order declared above.
+    for (const { value, color } of STATUS) {
+      const matching = lineFeatures.filter((f) => f.properties?.status_en === value);
+      if (!matching.length) continue;
+      const group = L.geoJSON(
+        { type: 'FeatureCollection', features: matching } as GeoJSON.FeatureCollection,
+        {
+          style: { color, weight: 3, opacity: 0.95 },
+          onEachFeature: (f, lyr) => lyr.bindPopup(linePopup(f.properties ?? {})),
+        },
+      ).addTo(map);
+      const b = group.getBounds();
+      if (b.isValid()) bounds.extend(b);
+      legend.push({ label: value, color, layer: group, shape: 'line' });
+    }
+
+    // Anything with an unexpected status still gets drawn, in grey, so a data
+    // change never silently hides features.
+    const known = new Set(STATUS.map((s) => s.value));
+    const other = lineFeatures.filter((f) => !known.has(f.properties?.status_en));
+    if (other.length) {
+      const group = L.geoJSON(
+        { type: 'FeatureCollection', features: other } as GeoJSON.FeatureCollection,
+        {
+          style: { color: FALLBACK, weight: 3 },
+          onEachFeature: (f, lyr) => lyr.bindPopup(linePopup(f.properties ?? {})),
+        },
+      ).addTo(map);
+      const b = group.getBounds();
+      if (b.isValid()) bounds.extend(b);
+      legend.push({ label: 'Other', color: FALLBACK, layer: group, shape: 'line' });
+    }
+
+    if (pointFeatures.length) {
+      const group = L.geoJSON(
+        { type: 'FeatureCollection', features: pointFeatures } as GeoJSON.FeatureCollection,
+        {
+          pointToLayer: (_f, latlng) =>
+            // Open circles, echoing the printed map's station symbol.
+            L.circleMarker(latlng, {
+              radius: 4,
+              color: STATION_COLOR,
+              weight: 1.5,
+              fillColor: '#ffffff',
+              fillOpacity: 1,
+            }),
+          onEachFeature: (f, lyr) =>
+            lyr.bindPopup(stationPopup(f.properties ?? {}), { maxWidth: 300, minWidth: 220 }),
+        },
+      ).addTo(map);
+      const b = group.getBounds();
+      if (b.isValid()) bounds.extend(b);
+      legend.push({
+        label: 'Main railway stations',
+        color: STATION_COLOR,
+        layer: group,
+        shape: 'dot',
+      });
+    }
+
+    // If a station photo will not load, say so and offer the direct link,
+    // rather than silently removing it - a popup that quietly loses its image
+    // is indistinguishable from one that never had it, which makes the failure
+    // impossible to diagnose from the page.
+    map.on('popupopen', (e) => {
+      const popupEl = (e as L.PopupEvent).popup.getElement();
+      const img = popupEl?.querySelector<HTMLImageElement>('img.station-photo');
+      if (!img) return;
+      img.addEventListener(
+        'error',
+        () => {
+          const src = img.getAttribute('src') ?? '';
+          const note = document.createElement('p');
+          note.className = 'station-photo-error';
+          note.innerHTML = `Photo unavailable. <a href="${escapeHtml(src)}" rel="noreferrer">Open it directly</a>`;
+          img.replaceWith(note);
+        },
+        { once: true },
+      );
+    });
+
+    if (bounds.isValid()) map.fitBounds(bounds, { padding: [20, 20] });
+
+    // Legend / layer switch.
+    const control = new L.Control({ position: 'bottomleft' });
+    control.onAdd = () => {
+      const box = L.DomUtil.create('div', 'map-legend');
+      L.DomEvent.disableClickPropagation(box);
+      L.DomEvent.disableScrollPropagation(box);
+      const title = L.DomUtil.create('div', 'map-legend__title', box);
+      title.textContent = 'Network status';
+
+      for (const entry of legend) {
+        const row = L.DomUtil.create('label', 'map-legend__row', box);
+        const input = L.DomUtil.create('input', 'map-legend__toggle', row) as HTMLInputElement;
+        input.type = 'checkbox';
+        input.checked = true;
+        const swatch = L.DomUtil.create(
+          'span',
+          `map-legend__swatch map-legend__swatch--${entry.shape}`,
+          row,
+        );
+        if (entry.shape === 'dot') {
+          swatch.style.borderColor = entry.color;
+        } else {
+          swatch.style.background = entry.color;
+        }
+        const label = L.DomUtil.create('span', 'map-legend__name', row);
+        label.textContent = entry.label;
+        input.addEventListener('change', () => {
+          if (input.checked) map.addLayer(entry.layer);
+          else map.removeLayer(entry.layer);
+        });
+      }
+      return box;
+    };
+    control.addTo(map);
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-railmap]').forEach(initMap);
+</script>
+
+<style is:global>
+  /* This map covers the whole country and benefits from extra height. */
+  .map--tall {
+    height: 620px;
+  }
+  @media (max-width: 40rem) {
+    .map--tall {
+      height: 420px;
+    }
+  }
+
+  .station-photo {
+    display: block;
+    width: 100%;
+    height: auto;
+    margin-top: 0.6rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--rule);
+    /* Reserve the space before the photo arrives, so the popup does not jump
+       as it loads. Matches the source images' 16:9-ish proportions. */
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    background: var(--bg-subtle);
+  }
+
+  .station-photo-error {
+    margin: 0.6rem 0 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+  }
+
+  /* Line swatches are bars, station swatches are rings. */
+  /* Two classes, not one: several maps declare a site-wide .map-legend__swatch
+     sized as a 1.1 x 0.75rem box, and at equal weight whichever loads later
+     wins - which stretched these dots into ovals. */
+  .map-legend__swatch.map-legend__swatch--line {
+    width: 1.1rem;
+    height: 0.25rem;
+    border-radius: 1px;
+    border: 0;
+  }
+  .map-legend__swatch.map-legend__swatch--dot {
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 50%;
+    background: #fff;
+    border: 1.5px solid currentColor;
+  }
+</style>

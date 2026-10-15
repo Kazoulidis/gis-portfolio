@@ -7,6 +7,7 @@
  * collections rather than one pool, and a challenge with 30 entries would
  * otherwise bury everything else.
  */
+import { getCollection } from 'astro:content';
 import { projectCategories } from '../site';
 
 interface Props {
@@ -14,14 +15,21 @@ interface Props {
 }
 
 const { current } = Astro.props;
+
+// Only categories with something published. [category].astro builds no page
+// for an empty one, so a tab for it would link to a 404.
+const published = await getCollection('projects', ({ data }) => !data.draft);
+const visible = projectCategories.filter((category) =>
+  published.some((project) => project.data.category === category.slug),
+);
 ---
 
 <nav class="subnav" aria-label="Project categories">
   {/* 'load' rather than the site-wide 'hover' default, matching the main nav:
-      there are only three of them and they are a few KB each, so fetching them
+      there are only a few of them and they are a few KB each, so fetching them
       up front makes every tab switch a cache hit. */}
   {
-    projectCategories.map((category) => (
+    visible.map((category) => (
       <a
         href={`/projects/${category.slug}`}
         data-astro-prefetch="load"

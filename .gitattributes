@@ -6,11 +6,9 @@
 * text=auto
 
 # These run on Linux and must be LF. A shell script committed with CRLF fails
-# on the server with "bad interpreter: /bin/bash^M" — an unusually confusing
+# on the server with "bad interpreter: /bin/bash^M" - an unusually confusing
 # way to lose an afternoon.
 *.sh       text eol=lf
-Dockerfile text eol=lf
-Caddyfile  text eol=lf
 *.conf     text eol=lf
 *.yml      text eol=lf
 *.yaml     text eol=lf

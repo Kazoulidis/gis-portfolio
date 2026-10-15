@@ -1,0 +1,328 @@
+---
+/**
+ * Greece's population as extruded H3 hexagons, in a camera you can fly around:
+ * drag to pan, right-click or ctrl-drag to swing the heading and tilt, scroll
+ * to zoom. Leaflet cannot do this - it has no third dimension - so this map is
+ * MapLibre GL, which extrudes polygons on the GPU and carries a real 3D camera.
+ *
+ * The data arrives as H3 cell indexes rather than polygons. Every cell is
+ * resolution 8, and h3-js rebuilds each boundary in the browser to within 0.7 m
+ * of the geometry stored in the geodatabase - which turns a 24.6 MB GeoJSON of
+ * endlessly repeated shared vertices into a 2.1 MB list of indexes.
+ *
+ * Colours are the printed map's five classes, with the top class opened out to
+ * 26,000 because this covers the whole country: Thessaloniki's densest hexagon
+ * holds 21,946 people, but Athens' holds 25,236.
+ */
+interface Props {
+  src: string;
+  caption?: string;
+}
+
+const { src, caption } = Astro.props;
+---
+
+<figure class="map-figure">
+  <div class="map map--tall map--3d" data-pop3d data-src={src} role="application" aria-label={caption ??
+    'Interactive 3D map of population density in Greece'}>
+    <p class="map-3d__status" data-status>
+      <span data-status-line>Loading 108,125 hexagons&hellip;</span>
+      <span class="map-3d__status-note" data-status-note>This might take a second.</span>
+    </p>
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<script>
+  import * as maplibregl from 'maplibre-gl';
+  import 'maplibre-gl/dist/maplibre-gl.css';
+  import { cellToBoundary } from 'h3-js';
+
+  /** Population is multiplied by this to get metres of height. */
+  const HEIGHT_SCALE = 0.5;
+
+  /** The lowest class (1 - 300) is drawn separately: see the layer setup. */
+  const LOW_MAX = 300;
+  const LOW_LAYER = 'hex-extrusion-low';
+  const MAIN_LAYER = 'hex-extrusion';
+  const HEX_LAYERS = [LOW_LAYER, MAIN_LAYER];
+
+  // The printed map's legend, sampled from its swatches. The top class runs to
+  // 26,000 rather than the print's 22,000: the print covers Thessaloniki, this
+  // covers Greece, and Athens' densest hexagon is larger than anything in it.
+  const CLASSES = [
+    { min: 10000, color: '#f73333', label: '10,000 - 26,000' },
+    { min: 3000, color: '#f76433', label: '3,000 - 10,000' },
+    { min: 1000, color: '#f79533', label: '1,000 - 3,000' },
+    { min: 300, color: '#f7c633', label: '300 - 1,000' },
+    { min: 1, color: '#f9f966', label: '1 - 300' },
+  ];
+
+  const ATTRIBUTION =
+    'Tiles &copy; <a href="https://www.esri.com/">Esri</a> - Esri, HERE, Garmin, ' +
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
+  const fmt = (n: number) => n.toLocaleString('en-GB');
+
+  interface Payload {
+    h: string[];
+    p: number[];
+  }
+
+  async function initMap(el: HTMLElement) {
+    const src = el.dataset.src;
+    if (!src) return;
+    const status = el.querySelector<HTMLElement>('[data-status]');
+    const statusLine = el.querySelector<HTMLElement>('[data-status-line]');
+    const statusNote = el.querySelector<HTMLElement>('[data-status-note]');
+    // Write to the line only, so the "this might take a second" note underneath
+    // survives. `failed` drops it - it is reassurance about a wait, and there
+    // is no longer a wait to reassure anyone about.
+    const say = (msg: string, failed = false) => {
+      if (statusLine) statusLine.textContent = msg;
+      if (failed && statusNote) statusNote.remove();
+    };
+
+    let data: Payload;
+    try {
+      const res = await fetch(src);
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      data = await res.json();
+    } catch (err) {
+      console.error(`Could not load ${src}:`, err);
+      say('This map’s data could not be loaded.', true);
+      return;
+    }
+
+    // Rebuild the hexagon boundaries from their indexes. h3-js returns an open
+    // ring in [lng, lat] order; GeoJSON wants it closed.
+    say('Building hexagons…');
+    const n = data.h.length;
+    const features = new Array(n);
+    for (let i = 0; i < n; i++) {
+      const ring = cellToBoundary(data.h[i], true) as [number, number][];
+      ring.push(ring[0]);
+      features[i] = {
+        type: 'Feature',
+        geometry: { type: 'Polygon', coordinates: [ring] },
+        properties: { p: data.p[i] },
+      };
+    }
+
+    const map = new maplibregl.Map({
+      container: el,
+      // A plain raster basemap, so the extrusions carry the map rather than
+      // competing with it.
+      style: {
+        version: 8,
+        sources: {
+          basemap: {
+            type: 'raster',
+            tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}'],
+            tileSize: 256,
+            // Real tiles stop at z16 over Greece (a placeholder past that);
+            // MapLibre overzooms the z16 tiles beyond the source's maxzoom.
+            maxzoom: 16,
+            attribution: ATTRIBUTION,
+          },
+        },
+        layers: [{ id: 'basemap', type: 'raster', source: 'basemap' }],
+      },
+      center: [24.5, 38.3],
+      zoom: 5.6,
+      pitch: 55,
+      bearing: 0,
+      maxPitch: 85, // the default 60 is too flat to read a column against
+      antialias: true,
+      attributionControl: { compact: true },
+    });
+
+    map.on('error', (e: unknown) => console.error('[maplibre]', e));
+    map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
+    map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
+    // Rotating and tilting by touch are off by default on some builds.
+    map.touchZoomRotate.enableRotation();
+    map.touchPitch.enable();
+
+    // `style.load` rather than `load`: the style here is inline, so it is ready
+    // immediately, and waiting on `load` would additionally wait for a first
+    // paint - which never arrives if the page is in a background tab.
+    map.once('style.load', () => {
+      map.addSource('hex', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features } as GeoJSON.FeatureCollection,
+        // Without this the map is blank. MapLibre simplifies GeoJSON with a
+        // 0.375px Douglas-Peucker tolerance before tiling it, and a 400 m
+        // hexagon is a fraction of a pixel at country zoom - every ring
+        // collapses below three points and nothing survives to be drawn. At z5
+        // that is 108,060 features in the tile and zero of them drawable.
+        // These hexagons are already six points; there is nothing to simplify.
+        tolerance: 0,
+      });
+
+      // A step expression, so the colour breaks are exactly the printed ones
+      // rather than a continuous ramp that would wash out the low classes.
+      const colour: unknown[] = ['step', ['get', 'p'], CLASSES[CLASSES.length - 1].color];
+      for (let i = CLASSES.length - 2; i >= 0; i--) {
+        colour.push(CLASSES[i].min, CLASSES[i].color);
+      }
+
+      // Two extrusion layers rather than one. `fill-extrusion-opacity` is
+      // data-constant in the style spec - it takes zoom but not a feature
+      // expression - so the only way to give the lowest class its own
+      // transparency is to give it its own layer.
+      const extrusion = (id: string, filter: unknown[], opacity: number) => {
+        map.addLayer({
+          id,
+          type: 'fill-extrusion',
+          source: 'hex',
+          filter: filter as maplibregl.FilterSpecification,
+          paint: {
+            'fill-extrusion-color': colour as maplibregl.ExpressionSpecification,
+            'fill-extrusion-height': ['*', ['get', 'p'], HEIGHT_SCALE],
+            'fill-extrusion-base': 0,
+            'fill-extrusion-opacity': opacity,
+          },
+        });
+      };
+      extrusion(LOW_LAYER, ['<', ['get', 'p'], LOW_MAX], 0.6); // 40% transparent
+      extrusion(MAIN_LAYER, ['>=', ['get', 'p'], LOW_MAX], 0.8); // 20% transparent
+
+      // A hairline around each hexagon of the lowest class, so the pale plate
+      // reads as a grid of cells rather than one flat wash. The width has to
+      // grow with zoom: at country scale a hexagon is about a sixth of a pixel,
+      // and any fixed outline would be wider than the shape it outlines and
+      // turn the whole country white.
+      map.addLayer({
+        id: 'hex-low-outline',
+        type: 'line',
+        source: 'hex',
+        filter: ['<', ['get', 'p'], LOW_MAX],
+        paint: {
+          'line-color': '#ffffff',
+          'line-opacity': 0.8,
+          'line-width': [
+            'interpolate', ['linear'], ['zoom'],
+            8, 0,      // hexagon is under a pixel; no outline to give
+            10, 0.25,  // about 3 px across
+            13, 0.5,
+            16, 0.8,
+          ],
+        },
+      });
+
+      say('');
+      status?.remove();
+      buildLegend();
+    });
+
+    // --- Click a hexagon for its figure -----------------------------------
+    const popup = new maplibregl.Popup({ closeButton: true, maxWidth: '240px' });
+    // Bound per layer: the hexagons live in two layers now, and a click on a
+    // quiet rural cell must answer the same way as one on Athens.
+    for (const id of HEX_LAYERS) {
+      map.on('click', id, (ev) => {
+        const f = ev.features?.[0];
+        if (!f) return;
+        const pop = Number(f.properties?.p ?? 0);
+        popup
+          .setLngLat(ev.lngLat)
+          .setHTML(
+            `<p class="hex-popup__value">${fmt(pop)}</p>` +
+              `<p class="hex-popup__label">people in this hexagon</p>` +
+              `<p class="hex-popup__meta">${(pop * HEIGHT_SCALE).toFixed(0)} m tall &middot; ` +
+              `about 0.83 km&sup2;</p>`,
+          )
+          .addTo(map);
+      });
+      map.on('mouseenter', id, () => { map.getCanvas().style.cursor = 'pointer'; });
+      map.on('mouseleave', id, () => { map.getCanvas().style.cursor = ''; });
+    }
+
+    // --- Legend ------------------------------------------------------------
+    function buildLegend() {
+      const box = document.createElement('div');
+      box.className = 'map-legend map-legend--3d';
+      box.innerHTML =
+        `<div class="map-legend__title">Population of each hexagon</div>` +
+        CLASSES.map(
+          (c) =>
+            `<div class="map-legend__class">` +
+            `<span class="map-legend__swatch" style="background:${c.color}"></span>` +
+            `<span class="map-legend__name">${c.label}</span></div>`,
+        ).join('') +
+        `<p class="map-legend__status">Height is population &times; ${HEIGHT_SCALE}. ` +
+        `Drag to pan, right-click or ctrl-drag to turn and tilt, scroll to zoom.</p>`;
+      // Keep map gestures from firing when the reader interacts with the legend.
+      box.addEventListener('mousedown', (e) => e.stopPropagation());
+      box.addEventListener('dblclick', (e) => e.stopPropagation());
+      box.addEventListener('wheel', (e) => e.stopPropagation());
+      el.appendChild(box);
+    }
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-pop3d]').forEach(initMap);
+</script>
+
+<style is:global>
+  .map--3d {
+    position: relative;
+    background: var(--bg-subtle);
+  }
+  .map-3d__status {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    /* It sits over the canvas until the layer is ready; it must never swallow
+       a drag meant for the map. */
+    pointer-events: none;
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    gap: 0.3rem;
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+  .map-3d__status-note {
+    font-size: 0.75rem;
+    opacity: 0.75;
+  }
+
+  /* The legend is a plain child of the map container here rather than a
+     MapLibre control, so it needs its own placement. */
+  .map-legend--3d {
+    position: absolute;
+    left: 0.65rem;
+    bottom: 0.65rem;
+    z-index: 2;
+    max-width: 15rem;
+  }
+
+  .map-legend__swatch {
+    flex: none;
+    width: 1.1rem;
+    height: 0.75rem;
+    border: 1px solid rgba(0, 0, 0, 0.25);
+  }
+
+  .hex-popup__value {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .hex-popup__label {
+    margin: 0.1rem 0 0;
+    font-size: 0.8rem;
+  }
+  .hex-popup__meta {
+    margin: 0.35rem 0 0;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+  }
+  .maplibregl-popup-content {
+    border-radius: var(--radius);
+    padding: 0.6rem 0.8rem;
+  }
+</style>

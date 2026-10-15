@@ -1,21 +1,35 @@
 /**
  * Everything about you that appears in more than one place.
- * Edit this file first — the header, footer, contact page and metadata all
+ * Edit this file first - the header, footer, contact page and metadata all
  * read from it.
  */
 export const site = {
-  name: 'Antonis Kazou',
-  role: 'GIS Specialist',
+  name: 'Antonios Kazoulidis',
+  role: 'GIS Specialist | Spatial Planning and Development Engineer',
   // One or two sentences. This is the meta description and the line under your
   // name on the About page. Recruiters read this and nothing else, sometimes.
   tagline:
-    'GIS specialist working in spatial analysis, remote sensing and cartography.',
-  email: 'antoniskazou@yahoo.gr',
-  location: 'Greece',
-  linkedin: 'https://www.linkedin.com/in/your-handle',
-  github: 'https://github.com/your-handle',
+    'GIS and cartographic work backed by Python and containerised Linux environments, applied to emissions modelling, remote sensing and EU regional-policy research.',
+  email: 'antonis@kazoulidis.com',
+  // Shown on the Contact page only. `null` hides it.
+  phone: '+30 697 385 7887',
+  location: 'Thessaloniki, Greece',
+  linkedin: 'https://www.linkedin.com/in/kazoulidis',
+  // No GitHub on the CV; the link hides itself while this is null.
+  github: null,
   // Drop the file at public/cv.pdf, or set to null to hide the CV links.
   cv: '/cv.pdf',
+  // Self-hosted Umami (the stack in E:\Claude\umami). The tracker is only
+  // added once `websiteId` is filled in - copy it from Umami after adding the
+  // site there. `script` must match TRACKER_SCRIPT_NAME in that compose file,
+  // and `endpoint` its COLLECT_API_ENDPOINT.
+  analytics: {
+    script: 'https://analytics.kazoulidis.com/site.js',
+    endpoint: 'https://analytics.kazoulidis.com/api/k',
+    websiteId: '',
+    // Only count visits on the live site, never local previews.
+    domains: 'portfolio.kazoulidis.com',
+  },
 };
 
 /**
@@ -29,17 +43,17 @@ export const site = {
  *
  *   blurb     the line under the heading on that category's page
  *   link      optional, renders beside the blurb; null for none
- *   order     'desc' newest first — the right default for a portfolio
- *             'asc'  oldest first — right for a sequence, where Day 1 leads
+ *   order     'desc' newest first - the right default for a portfolio
+ *             'asc'  oldest first - right for a sequence, where Day 1 leads
  *   homepage  whether these projects can appear in "Recent projects" on the
- *             About page. Off for the challenge: those are daily exercises, and
- *             30 of them would otherwise crowd out your actual work on the one
- *             page a recruiter is guaranteed to see.
+ *             About page, which lists the newest few across every category with
+ *             this flag set. Turn a category off once it has more entries than
+ *             it deserves on the one page a recruiter is guaranteed to see.
  *
  * The first category is where the Projects nav item lands, so put the work you
  * most want seen at the top.
  *
- * Changing a `slug` changes that category's URL — fine now, worth avoiding once
+ * Changing a `slug` changes that category's URL - fine now, worth avoiding once
  * the site is public and links to it exist.
  */
 export const projectCategories = [
@@ -47,11 +61,11 @@ export const projectCategories = [
     slug: '30-day-map-challenge',
     label: '30 Day Map Challenge',
     blurb:
-      'Maps made for the #30DayMapChallenge — a daily mapping prompt running through November each year.',
+      'Maps made for the #30DayMapChallenge - a daily mapping prompt running through November each year.',
     link: { href: 'https://30daymapchallenge.com', label: '30daymapchallenge.com' },
     // A challenge reads as a sequence: Day 1 first, not Day 30.
     order: 'asc',
-    homepage: false,
+    homepage: true,
   },
   {
     slug: 'school',
@@ -64,7 +78,7 @@ export const projectCategories = [
   {
     slug: 'misc',
     label: 'Miscellaneous',
-    blurb: 'Everything else — client work, experiments, and one-off maps.',
+    blurb: 'Everything else - client work, experiments, and one-off maps.',
     link: null,
     order: 'desc',
     homepage: true,
@@ -79,7 +93,7 @@ export const projectCategorySlugs = projectCategories.map((c) => c.slug) as unkn
   ...string[],
 ];
 
-/** Where "Projects" goes. There is no combined index — the first tab is home. */
+/** Where "Projects" goes. There is no combined index - the first tab is home. */
 export const projectsHref = `/projects/${projectCategories[0].slug}`;
 
 export const nav = [

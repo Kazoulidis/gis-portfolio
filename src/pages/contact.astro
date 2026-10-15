@@ -18,6 +18,18 @@ import { site } from '../site';
     <dd><a href={`mailto:${site.email}`}>{site.email}</a></dd>
 
     {
+      site.phone && (
+        <>
+          <dt>Phone</dt>
+          <dd>
+            {/* tel: wants the bare number; spaces are only for reading. */}
+            <a href={`tel:${site.phone.replace(/\s+/g, '')}`}>{site.phone}</a>
+          </dd>
+        </>
+      )
+    }
+
+    {
       site.linkedin && (
         <>
           <dt>LinkedIn</dt>
@@ -47,7 +59,7 @@ import { site } from '../site';
         <>
           <dt>CV</dt>
           <dd>
-            <a href={site.cv}>Download as PDF</a>
+            <a href={site.cv} data-umami-event="cv-download" data-umami-event-from="contact">Download as PDF</a>
           </dd>
         </>
       )

@@ -5,7 +5,7 @@
  * One layer, no legend:
  *   <ProjectMap layers={[{ name: 'Sites', src: '/data/sites.geojson' }]} />
  *
- * Several layers — each toggleable, together forming the legend:
+ * Several layers - each toggleable, together forming the legend:
  *   <ProjectMap layers={[
  *     { name: 'Burn severity',   src: '/data/severity.geojson', color: '#a8452f' },
  *     { name: 'Field validation', src: '/data/points.geojson',  color: '#1c5d5d', visible: false },
@@ -28,7 +28,7 @@ interface Layer {
 
 interface Props {
   layers: Layer[];
-  /** [lat, lng] — only used when fit is false, or every layer is empty. */
+  /** [lat, lng] - only used when fit is false, or every layer is empty. */
   center?: [number, number];
   zoom?: number;
   caption?: string;
@@ -71,10 +71,10 @@ const { layers, center = [37.98, 23.73], zoom = 6, caption, fit = true } = Astro
   // map. Free for low volume; both attributions below are required by their
   // terms. To go fully self-hosted later, swap the URL for your own tile server
   // and keep the OpenStreetMap attribution.
-  const BASEMAP = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+  const BASEMAP = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
   const ATTRIBUTION =
-    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, ' +
-    '&copy; <a href="https://carto.com/attributions">CARTO</a>';
+    'Tiles &copy; <a href="https://www.esri.com/">Esri</a> - Esri, HERE, Garmin, ' +
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
   const accent = () =>
     getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#1c5d5d';
@@ -187,11 +187,15 @@ const { layers, center = [37.98, 23.73], zoom = 6, caption, fit = true } = Astro
     map.on('click', () => map.scrollWheelZoom.enable());
     map.on('mouseout', () => map.scrollWheelZoom.disable());
 
-    L.tileLayer(BASEMAP, { attribution: ATTRIBUTION, maxZoom: 19 }).addTo(map);
+    // Esri's canvas basemaps have real tiles only to z16 over Greece; past that
+    // they answer with a "Map data not yet available" placeholder. maxNativeZoom
+    // makes Leaflet stretch the z16 tiles instead, so the data can still be
+    // zoomed into.
+    L.tileLayer(BASEMAP, { attribution: ATTRIBUTION, maxZoom: 19, maxNativeZoom: 16 }).addTo(map);
     L.control.scale({ imperial: false }).addTo(map);
 
     // Load every layer in parallel. A layer that fails to load does not sink
-    // the others — it just shows as unavailable in the legend.
+    // the others - it just shows as unavailable in the legend.
     const results = await Promise.all(
       specs.map(async (spec) => {
         try {

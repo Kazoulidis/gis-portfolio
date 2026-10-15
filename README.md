@@ -13,22 +13,20 @@ npm run dev      # http://localhost:4321
 
 `npm run build` writes the finished site to `dist/`. Verified on Node 24.
 
-Docker is not needed for local work — see [Running it](#running-it).
+Docker is not needed for local work - see [Running it](#running-it).
 
 ## Making it yours
 
 Work through these in order:
 
-1. **`src/site.ts`** — your name, role, tagline, email, LinkedIn/GitHub URLs.
+1. **`src/site.ts`** - your name, role, tagline, email, LinkedIn/GitHub URLs.
    Everything else reads from here.
-2. **`astro.config.mjs`** — set `site` to your real domain.
-3. **`src/pages/index.astro`** — the About text and the skills sidebar.
-4. **`src/pages/experience.astro`** and **`src/pages/education.astro`** — the
+2. **`astro.config.mjs`** - set `site` to your real domain.
+3. **`src/pages/index.astro`** - the About text and the skills sidebar.
+4. **`src/pages/experience.astro`** and **`src/pages/education.astro`** - the
    `roles`, `degrees` and `certifications` arrays near the top of each file.
-5. **`public/cv.pdf`** — drop your CV here, or set `cv: null` in `src/site.ts`
+5. **`public/cv.pdf`** - drop your CV here, or set `cv: null` in `src/site.ts`
    to hide the download links.
-6. **Delete the examples** — `src/content/projects/example-*.md` and
-   `public/data/EXAMPLE-*.geojson`. They're placeholders, not real work.
 
 ## Adding a project
 
@@ -57,7 +55,7 @@ links:
 Markdown from here down.
 ```
 
-Every field except `title`, `summary` and `date` is optional — a project with no
+Every field except `title`, `summary` and `date` is optional - a project with no
 map or no thumbnail renders fine. Set `draft: true` to keep one out of the index
 while you write it.
 
@@ -90,7 +88,7 @@ what the About page highlights all derive from it. Adding one is the whole job:
 ```
 
 **There is no combined "All" tab.** The categories are separate collections, not
-one pool — a 30-entry challenge in a shared list buries everything else. The
+one pool - a 30-entry challenge in a shared list buries everything else. The
 Projects nav item lands on the *first* category in the array, so put the work
 you most want seen at the top. A bare `/projects` redirects there for anyone who
 types it; nothing links to it, so the redirect is never on a real navigation
@@ -109,12 +107,15 @@ regardless of category, so re-categorising one never breaks a link to it.
 
 ### The 30 Day Map Challenge entries
 
-`src/content/projects/30dmc-2025-day-NN-*.md` are 30 placeholders, one per day,
-carrying the official 2025 prompts from the
-[challenge archive](https://github.com/tjukanovt/30DayMapChallenge/blob/main/archive/2025/README.md).
-Each has commented-out `thumbnail` and `map` lines to uncomment once you have
-the map. Delete any day you skipped, or set `draft: true` to hide it while you
-work on it.
+`src/content/projects/30dmc-2025-day-NN-*.md` holds one file per completed day.
+Only finished entries are kept; to add a day, copy an existing one and change
+the prompt (the official 2025 prompts are in the
+[challenge archive](https://github.com/tjukanovt/30DayMapChallenge/blob/main/archive/2025/README.md)).
+Set `draft: true` to hide an entry while you work on it.
+
+A category with no published projects drops out of the Projects tabs entirely
+and gets no page, so an empty School or Miscellaneous tab never shows. It
+reappears as soon as one project in it is published.
 
 The category is set to `order: 'asc'` so the page reads Day 1 → Day 30 rather
 than newest-first.
@@ -137,7 +138,7 @@ Put the file in `public/data/` and reference it as `/data/name.geojson`.
 
 Two attributes get special treatment in popups: `name` (or `title`) becomes the
 heading, and `description` becomes the body. A `color` attribute overrides the
-feature's colour — useful for categorical layers.
+feature's colour - useful for categorical layers.
 
 Rules of thumb for size: under ~1 MB loads instantly; up to ~5 MB is tolerable
 gzipped; past that, switch to vector tiles (`tippecanoe` → PMTiles) rather than
@@ -145,17 +146,17 @@ making people wait.
 
 ## Maps with toggleable layers and a legend
 
-A project's map takes one of two frontmatter fields — use one, never both (the
+A project's map takes one of two frontmatter fields - use one, never both (the
 build stops you if you do):
 
-`map:` — a single GeoJSON file, drawn plain, no legend. The simple case.
+`map:` - a single GeoJSON file, drawn plain, no legend. The simple case.
 
 ```yaml
 map: '/data/flood-extent.geojson'
 mapCaption: 'Modelled extent at a 100-year return period.'
 ```
 
-`layers:` — several named files, each its own colour, each switchable. Together
+`layers:` - several named files, each its own colour, each switchable. Together
 they form the legend in the bottom-right of the map; each row is a colour
 swatch, the layer name, and a checkbox that shows or hides that layer.
 
@@ -174,10 +175,10 @@ mapCaption: 'Toggle the gauging stations over the modelled extent.'
 Notes:
 
 - **One file per layer.** A layer is a whole GeoJSON file. Keep each theme in
-  its own file rather than one file with a type column — that is what makes them
+  its own file rather than one file with a type column - that is what makes them
   switch independently. Prepare each exactly as above.
 - **`color` sets the swatch and the features**, but a feature's own `color`
-  property still wins for that feature — so a single layer can carry a graduated
+  property still wins for that feature - so a single layer can carry a graduated
   scheme (e.g. severity bands) while the legend shows the layer's headline
   colour. For a true classified legend (one swatch per class), split the classes
   into separate layers.
@@ -187,9 +188,32 @@ Notes:
   checkbox disabled; the other layers still work. If *every* layer fails, the
   map shows a short error instead.
 
-The burn-severity example (`src/content/projects/example-burn-severity.md`) is
-set up this way — two layers, one starting hidden — if you want a worked case to
-copy.
+
+## Bespoke maps (a custom component per project)
+
+`map:` and `layers:` cover the common cases. When a project needs a map they
+can't express - a different aggregation, a custom interaction - it can point at
+a purpose-built component instead:
+
+```yaml
+map: '/data/my-data.geojson'          # the data source, as usual
+mapComponent: 'refugee-hexbin'        # the component to render it with
+```
+
+`mapComponent` is a key in the `CUSTOM_MAPS` registry near the top of
+`src/pages/projects/[...slug].astro`. Register a component there, reference its
+key, and that project uses it; every other project is untouched, and the
+component's JavaScript ships only on the pages that use it.
+
+The one shipped is **`refugee-hexbin`** (`src/components/HexbinPointMap.astro`),
+built for the Day 1 map. It bins dense points into hexagons coloured by the mean
+of a chosen field, and swaps them for individual points once you zoom in past a
+threshold - both clickable, with a graduated legend. Its fields are props
+(`valueField`, `nameField`, `countField`, `pointZoom`, `radius`), so it suits
+any "too many points to show at once, colour by a 0–1 value" layer, not just the
+refugee data. It depends on `d3-hexbin` (~2 KB) for the binning maths; the
+hexagons are recomputed in the browser on each zoom, so the binning always
+matches the current scale.
 
 ## Running it
 
@@ -203,7 +227,7 @@ npm run dev       # http://localhost:4321, hot reload
 npm run preview   # http://localhost:4321, serves the real build output
 ```
 
-Use `dev` while writing. Use `preview` before you publish — it serves `dist/`,
+Use `dev` while writing. Use `preview` before you publish - it serves `dist/`,
 which is what actually ships, and it is the honest check that a new project page
 and its map work.
 
@@ -211,62 +235,52 @@ and its map work.
 request and serves ~13 unbundled modules per page; the built site serves one or
 two files and loads in roughly a third of the time. If navigation ever feels
 sluggish, check `npm run preview` before believing it. (`devToolbar` is disabled
-in `astro.config.mjs` for the same reason — it was the single heaviest thing on
+in `astro.config.mjs` for the same reason - it was the single heaviest thing on
 a dev page load, and it only helps when debugging client islands, which this
 site does not use.)
 
 If your terminal can't find `node`, open a new one: the installer adds it to
 PATH, but shells started beforehand keep the old value.
 
-### Docker Compose, ARM64 (production)
+### Production (Oracle ARM64 VPS, behind Nginx Proxy Manager)
 
-On the ARM64 VPS:
+The site is built on this machine and copied to the VPS as plain files. The
+server runs stock `nginx:1.29-alpine` with the built site bind-mounted, so there
+is no image to build and no Node on the server. Nginx Proxy Manager, a separate
+stack on the same box, terminates TLS and proxies to it.
 
-```sh
-git clone <your-repo> portfolio && cd portfolio
-cp .env.example .env      # set SITE_ADDRESS to your domain, ACME_EMAIL to you
-docker compose up -d --build
-```
+| Piece | Where |
+| --- | --- |
+| Compose file | `docker-compose.yml` → `/home/debian/docker/portfolio/` |
+| Nginx config | `docker/nginx.conf` → `/home/debian/docker/appdata/portfolio/nginx.conf` |
+| Built site | `dist/` → `/home/debian/docker/appdata/portfolio/site/` |
+| Host port | `8082`; NPM forwards `portfolio.kazoulidis.com` to `172.17.0.1:8082` |
 
-That is the whole deployment. Caddy obtains a TLS certificate on first start and
-renews it by itself — no certbot, no cron. Point your domain's A/AAAA record at
-the server *before* the first `up`, and leave ports 80 and 443 open, or issuance
-fails.
-
-Publishing a change afterwards:
-
-```sh
-git pull && docker compose up -d --build
-```
-
-With `SITE_ADDRESS` unset the container serves plain HTTP on `:80`, which is how
-you'd smoke-test the image locally.
-
-**Cross-building from your x64 PC** (optional — building on the VPS is simpler):
+Publishing a change:
 
 ```sh
-docker buildx build --platform linux/arm64 -f docker/Dockerfile -t gis-portfolio:latest .
+./deploy/deploy.sh            # build + copy the site; nothing to restart
+./deploy/deploy.sh --config   # also copy nginx.conf and reload nginx
 ```
 
-The build stage is pinned to `$BUILDPLATFORM` rather than the target, because
-`astro build` emits plain HTML/CSS/JS with no native code — the output is the
-same whatever CPU produced it. So the Node build runs natively on your x64 box
-and only the tiny Caddy runtime layer is ARM64. Without that pin, Docker would
-run the whole Node toolchain under QEMU emulation, which is slow enough to hurt.
+The script uses rsync where available and falls back to tar over ssh (Git Bash
+on Windows has no rsync). A key file can be passed with
+`SSH_OPTS="-i path/to/key"`.
 
-Don't delete the `caddy_data` volume. Your TLS certificates live there, and
-Let's Encrypt rate-limits you to 5 re-issues per domain per week.
+Two settings in `docker/nginx.conf` are load-bearing:
 
-### Bare-metal nginx (alternative)
+- `gzip_proxied any`: NPM adds a `Via` header, and the default would then serve
+  every response uncompressed.
+- Cache lifetimes are set with `expires`, not `add_header`. A location that
+  declares any `add_header` drops the server-level security headers.
 
-If you'd rather not run Docker at all, `deploy/nginx.conf` and
-`deploy/deploy.sh` do the same job with rsync and certbot. See the comments in
-those files. You need one or the other, not both.
+Analytics: self-hosted Umami, a separate stack (see `analytics` in
+`src/site.ts`). The tracker is only added once a website ID is set there.
 
 ## Design notes
 
 If you change the look, start with the custom properties at the top of
-`src/styles/global.css` — colours, fonts and measure all come from there.
+`src/styles/global.css` - colours, fonts and measure all come from there.
 
 The deliberate choices, so you don't undo them by accident:
 
@@ -278,15 +292,15 @@ The deliberate choices, so you don't undo them by accident:
 - **Navigation is prefetched, not single-page.** Links are fetched before they
   are clicked (`prefetch` in `astro.config.mjs`), and the nav opts up to the
   `load` strategy so all five tabs are in cache from the moment a page opens.
-  A click is then a zero-transfer cache hit — measured at 0 ms time-to-first-byte
-  and ~25 ms to fully loaded — while still being an ordinary browser navigation
+  A click is then a zero-transfer cache hit - measured at 0 ms time-to-first-byte
+  and ~25 ms to fully loaded - while still being an ordinary browser navigation
   to a real URL. No view transitions, no client-side router, nothing to break
   the back button.
 
   This depends on the `Cache-Control: max-age=300` the server sets on pages. If
   you drop that header, the browser revalidates on every click and you are back
   to a round trip per navigation.
-- **Light only, warm paper** (`#f7f5f1`) rather than pure white — less glare.
+- **Light only, warm paper** (`#f7f5f1`) rather than pure white - less glare.
   There is deliberately no dark mode; `color-scheme: light` tells the browser
   not to dark-style scrollbars and controls even when the OS is set to dark.
   For pure white, set `--bg: #fff` (and probably `--bg-subtle: #f4f4f4`).
@@ -302,12 +316,15 @@ The deliberate choices, so you don't undo them by accident:
 - **Scroll-wheel zoom is off** until you click a map, so maps don't trap the
   page scroll.
 - **The only animation** is a link colour transition.
-- **Print styles** are included — the CV pages print cleanly, because some
+- **Print styles** are included - the CV pages print cleanly, because some
   recruiters really do print them.
 
 ## Basemap
 
-Maps use CARTO's Positron/Dark Matter tiles, which are free at portfolio traffic
-levels; the required attribution is already wired in. If you'd rather serve
-tiles yourself, change `BASEMAPS` in `src/components/ProjectMap.astro` and keep
-the OpenStreetMap attribution.
+Maps use Esri's World Light Gray (and, for the fire timeline, World Dark Gray)
+canvas basemaps: free, no API key, attribution already wired in. Over Greece
+these services have real tiles only up to zoom 16; above that they answer with a
+"Map data not yet available" placeholder. Every map therefore sets
+`maxNativeZoom: 16` (MapLibre: the source's `maxzoom: 16`), so Leaflet stretches
+the zoom-16 tiles instead and the data stays zoomable past it. Keep that if you
+change the basemap URL.

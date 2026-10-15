@@ -1,0 +1,599 @@
+---
+/**
+ * Greece's UNESCO World Heritage sites, at two levels of detail.
+ *
+ * Zoomed out the map shows the 21 inscribed sites. A site is an administrative
+ * unit, though, not always a single place: "Minoan Palatial Centres" is six
+ * palaces scattered across Crete, and the Thessalonika inscription is fifteen
+ * separate churches. So past the zoom where a site icon stops meaning one
+ * building, the sites hand off to the 46 individual components.
+ *
+ * Clicking a site opens its description and its photograph gallery. Components
+ * get the description but no photographs - the images belong to the
+ * inscription as a whole, not to any one monument within it.
+ *
+ * Fields read, sites:
+ *   name, cat (Cultural | Mixed), year, desc, nc (component count),
+ *   imgs (urls, main image first), cap, cr (main image credit)
+ * Fields read, components:
+ *   name, ref, site (parent name - everything else is joined from the parent)
+ */
+interface Props {
+  layers: { name: string; src: string }[];
+  caption?: string;
+}
+
+const { layers, caption } = Astro.props;
+const sites = layers.find((l) => /site/i.test(l.name))?.src ?? layers[0]?.src;
+const components = layers.find((l) => /component/i.test(l.name))?.src ?? layers[1]?.src;
+---
+
+<figure class="map-figure">
+  <div
+    class="map map--tall"
+    data-unesco
+    data-sites={sites}
+    data-components={components}
+    role="application"
+    aria-label={caption ?? 'Interactive map of UNESCO World Heritage sites in Greece'}
+  >
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<script>
+  import * as L from 'leaflet';
+  import 'leaflet/dist/leaflet.css';
+
+  const BASEMAP = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+  const ATTRIBUTION =
+    'Tiles &copy; <a href="https://www.esri.com/">Esri</a> - Esri, HERE, Garmin, ' +
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
+  /**
+   * Below this zoom the map shows sites; at it and above, components.
+   * Chosen so the switch happens once a site icon covers a single town rather
+   * than a region - the point at which "one icon, one place" stops being true.
+   */
+  const COMPONENT_ZOOM = 12;
+
+  // Sampled from the printed map's legend swatches.
+  const CATEGORIES = [
+    { value: 'Cultural', color: '#734c00' },
+    { value: 'Mixed', color: '#4c7300' },
+  ];
+  const COLOR = new Map(CATEGORIES.map((c) => [c.value, c.color]));
+  const FALLBACK_COLOR = '#8c8c8c';
+
+  /**
+   * The printed map's temple glyph, traced from the legend: a pediment over an
+   * architrave, four columns with a doorway step between the middle pair, and a
+   * stepped base. One evenodd path so the white halo stroke follows the
+   * silhouette instead of drawing lines across the joins between parts.
+   */
+  const TEMPLE_BODY =
+    'M12 68H153V84H141V119L153 131V147H12V131L24 119V84H12Z' +
+    'M38 84H51V119H38Z' +
+    'M63 84H102V119H90V108H75V119H63Z' +
+    'M116 84H129V119H116Z';
+  const TEMPLE_PEDIMENT = 'M84 17L157 57H11Z';
+
+  /** The site symbol. `w` is the rendered width; height follows the viewBox. */
+  function templeSvg(color: string, w = 30): string {
+    const h = Math.round(w * (140 / 153));
+    return (
+      `<svg width="${w}" height="${h}" viewBox="6 12 153 140" xmlns="http://www.w3.org/2000/svg">` +
+      `<g fill="${color}" stroke="#fff" stroke-width="9" stroke-linejoin="round" paint-order="stroke fill">` +
+      `<path d="${TEMPLE_PEDIMENT}"/>` +
+      `<path d="${TEMPLE_BODY}" fill-rule="evenodd"/>` +
+      `</g></svg>`
+    );
+  }
+
+  /** The component symbol: deliberately subordinate to the temple. */
+  function dotSvg(color: string, w = 16): string {
+    return (
+      `<svg width="${w}" height="${w}" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">` +
+      `<circle cx="8" cy="8" r="5" fill="${color}" stroke="#fff" stroke-width="2.5"/>` +
+      `</svg>`
+    );
+  }
+
+  const escapeHtml = (value: unknown) =>
+    String(value).replace(
+      /[&<>"']/g,
+      (c) =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string,
+    );
+
+  interface SiteProps {
+    name: string;
+    cat: string;
+    year: string;
+    desc: string;
+    nc: number;
+    cap: string;
+    cr: string;
+    imgs: string[];
+    dims: ([number, number] | null)[];
+  }
+
+  /**
+   * The World Heritage Centre page each self-hosted copy came from. The local
+   * file is named after its source document id, so the link back is derivable
+   * and does not need storing twice.
+   */
+  const sourceUrl = (localPath: string) =>
+    'https://whc.unesco.org/document/' + localPath.split('/').pop()!.replace(/\.webp$/, '');
+  interface CompProps {
+    name: string;
+    ref: string;
+    site: string;
+  }
+
+  async function loadJson(src: string) {
+    const res = await fetch(src);
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    return (await res.json()) as GeoJSON.FeatureCollection;
+  }
+
+  async function initMap(el: HTMLElement) {
+    const sitesSrc = el.dataset.sites;
+    const compsSrc = el.dataset.components;
+    if (!sitesSrc || !compsSrc) return;
+
+    const map = L.map(el, { scrollWheelZoom: true });
+    // Esri's canvas basemaps have real tiles only to z16 over Greece; past that
+    // they answer with a "Map data not yet available" placeholder. maxNativeZoom
+    // makes Leaflet stretch the z16 tiles instead, so the data can still be
+    // zoomed into.
+    L.tileLayer(BASEMAP, { attribution: ATTRIBUTION, maxZoom: 19, maxNativeZoom: 16 }).addTo(map);
+    L.control.scale({ imperial: false }).addTo(map);
+
+    let siteData: GeoJSON.FeatureCollection;
+    let compData: GeoJSON.FeatureCollection;
+    try {
+      [siteData, compData] = await Promise.all([loadJson(sitesSrc), loadJson(compsSrc)]);
+    } catch (err) {
+      console.error('Could not load the UNESCO data:', err);
+      el.insertAdjacentHTML(
+        'beforeend',
+        '<p class="map-error">This map’s data could not be loaded.</p>',
+      );
+      return;
+    }
+
+    const siteByName = new Map<string, SiteProps>();
+    for (const f of siteData.features) {
+      const p = f.properties as unknown as SiteProps;
+      if (p?.name) siteByName.set(p.name, p);
+    }
+
+    // Sized against the map, not a fixed number: at 340px a popup spills off a
+    // 375px phone screen.
+    const popupWidth = Math.max(220, Math.min(360, el.clientWidth - 56));
+    const popup = L.popup({
+      maxWidth: popupWidth,
+      minWidth: Math.min(280, popupWidth),
+      autoPan: true,
+      keepInView: true,
+      className: 'unesco-popup-wrap',
+    });
+
+    // --- Site popup, with its photograph gallery ---------------------------
+    const showSite = (p: SiteProps, at: L.LatLng) => {
+      const imgs = Array.isArray(p.imgs) ? p.imgs : [];
+      let current = 0;
+
+      const header = () => {
+        const color = COLOR.get(p.cat) ?? FALLBACK_COLOR;
+        let h = `<p class="unesco-popup__meta">`;
+        h += `<span class="unesco-popup__tag" style="background:${color}">${escapeHtml(p.cat)}</span>`;
+        if (p.year) h += `<span>Inscribed ${escapeHtml(p.year)}</span>`;
+        h += `</p>`;
+        h += `<h3 class="unesco-popup__title">${escapeHtml(p.name)}</h3>`;
+        return h;
+      };
+
+      const footer = () => {
+        let h = '';
+        if (p.desc) h += `<div class="unesco-popup__desc"><p>${escapeHtml(p.desc)}</p></div>`;
+        if (Number(p.nc) > 0) {
+          const n = Number(p.nc);
+          h +=
+            `<p class="unesco-popup__note">${n} component${n === 1 ? '' : 's'} - ` +
+            `zoom in to see ${n === 1 ? 'it' : 'them'} individually</p>`;
+        }
+        return h;
+      };
+
+      // Only the visible frame is fetched - a site can hold 74 photographs, and
+      // pulling all of them to show one would be absurd.
+      const gallery = () => {
+        if (!imgs.length) return '';
+        const url = imgs[current];
+        const src = sourceUrl(url);
+        // The data carries one credit per site, for its main image only, so
+        // that is the only image it can honestly be attached to.
+        const credit =
+          current === 0 && p.cr
+            ? `${p.cap ? escapeHtml(p.cap) + ' - ' : ''}&copy; ${escapeHtml(p.cr)}`
+            : 'UNESCO World Heritage Centre';
+        // Each image's own ratio, so the frame is the right shape from the
+        // moment it opens rather than settling once the file arrives.
+        const d = p.dims?.[current];
+        const ratio = d ? `${d[0]} / ${d[1]}` : '4 / 3';
+
+        let h = `<div class="unesco-popup__gallery">`;
+        h += `<a class="unesco-popup__frame is-loading" style="aspect-ratio:${ratio}" `;
+        h += `href="${escapeHtml(src)}" target="_blank" rel="noopener noreferrer" `;
+        h += `title="Open the original on whc.unesco.org">`;
+        h += `<img src="${escapeHtml(url)}" alt="${escapeHtml(p.name)}" decoding="async" />`;
+        h += `</a>`;
+        if (imgs.length > 1) {
+          h +=
+            `<button type="button" class="unesco-popup__arrow unesco-popup__arrow--prev" ` +
+            `data-step="-1" aria-label="Previous photograph">&#8249;</button>` +
+            `<button type="button" class="unesco-popup__arrow unesco-popup__arrow--next" ` +
+            `data-step="1" aria-label="Next photograph">&#8250;</button>`;
+        }
+        h += `</div>`;
+        h += `<p class="unesco-popup__credit">`;
+        if (imgs.length > 1) {
+          h += `<span class="unesco-popup__counter">${current + 1} / ${imgs.length}</span>`;
+        }
+        h +=
+          `<a class="unesco-popup__creditlink" href="${escapeHtml(src)}" ` +
+          `target="_blank" rel="noopener noreferrer">${credit}</a></p>`;
+        return h;
+      };
+
+      const wire = () => {
+        const root = popup.getElement();
+        if (!root) return;
+        const frame = root.querySelector<HTMLElement>('.unesco-popup__frame');
+        const img = frame?.querySelector('img');
+        if (frame && img) {
+          const done = () => frame.classList.remove('is-loading');
+          if (img.complete) {
+            done();
+            // A cached-but-broken image never fires either event again.
+            if (!img.naturalWidth) frame.classList.add('is-error');
+          } else {
+            img.addEventListener('load', done, { once: true });
+            // Say so rather than hiding it - a silently dropped image once let
+            // a batch of broken URLs go unnoticed on another map here.
+            img.addEventListener(
+              'error',
+              () => {
+                done();
+                frame.classList.add('is-error');
+              },
+              { once: true },
+            );
+          }
+        }
+      };
+
+      const renderGallery = () => {
+        const root = popup.getElement();
+        const slot = root?.querySelector<HTMLElement>('.unesco-popup__media');
+        if (!slot) return;
+        slot.innerHTML = gallery();
+        wire();
+      };
+
+      popup.setContent(
+        `<div class="unesco-popup">${header()}<div class="unesco-popup__media">${gallery()}</div>${footer()}</div>`,
+      );
+      popup.setLatLng(at).openOn(map);
+      wire();
+
+      // One delegated listener rather than re-binding per render. Propagation
+      // must stop here: a click that reaches the map closes the popup, so the
+      // arrows would otherwise dismiss the gallery they are paging through.
+      const root = popup.getElement();
+      if (root && imgs.length > 1) {
+        L.DomEvent.on(root, 'click', (ev: Event) => {
+          const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>('.unesco-popup__arrow');
+          if (!btn) return;
+          L.DomEvent.stop(ev);
+          current = (current + Number(btn.dataset.step) + imgs.length) % imgs.length;
+          renderGallery();
+        });
+      }
+    };
+
+    // --- Component popup ---------------------------------------------------
+    // Neither the photographs nor the description appear here: both belong to
+    // the inscription as a whole rather than to any one monument within it, and
+    // repeating the parent's text under all fifteen Thessalonika churches would
+    // say nothing about the church you actually clicked.
+    const showComponent = (c: CompProps, at: L.LatLng) => {
+      const parent = siteByName.get(c.site);
+      const cat = parent?.cat ?? '';
+      const color = COLOR.get(cat) ?? FALLBACK_COLOR;
+
+      let h = `<div class="unesco-popup">`;
+      h += `<p class="unesco-popup__meta">`;
+      if (cat) h += `<span class="unesco-popup__tag" style="background:${color}">${escapeHtml(cat)}</span>`;
+      if (parent?.year) h += `<span>Inscribed ${escapeHtml(parent.year)}</span>`;
+      h += `</p>`;
+      h += `<h3 class="unesco-popup__title">${escapeHtml(c.name)}</h3>`;
+      if (c.site && c.site !== c.name) {
+        h += `<p class="unesco-popup__parent">Part of <strong>${escapeHtml(c.site)}</strong></p>`;
+      }
+      if (c.ref) h += `<p class="unesco-popup__note">Reference ${escapeHtml(c.ref)}</p>`;
+      h += `</div>`;
+
+      popup.setContent(h);
+      popup.setLatLng(at).openOn(map);
+    };
+
+    // --- Markers -----------------------------------------------------------
+    const siteLayer = L.layerGroup();
+    const compLayer = L.layerGroup();
+    const bounds = L.latLngBounds([]);
+
+    for (const f of siteData.features) {
+      if (f.geometry?.type !== 'Point') continue;
+      const p = f.properties as unknown as SiteProps;
+      const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates;
+      const color = COLOR.get(p.cat) ?? FALLBACK_COLOR;
+      L.marker([lat, lng], {
+        icon: L.divIcon({
+          className: 'unesco-pin',
+          html: templeSvg(color, 30),
+          iconSize: [30, 27],
+          iconAnchor: [15, 26], // base of the temple sits on the location
+          popupAnchor: [0, -24],
+        }),
+        riseOnHover: true,
+        title: p.name,
+      })
+        .on('click', () => showSite(p, L.latLng(lat, lng)))
+        .addTo(siteLayer);
+      bounds.extend([lat, lng]);
+    }
+
+    for (const f of compData.features) {
+      if (f.geometry?.type !== 'Point') continue;
+      const c = f.properties as unknown as CompProps;
+      const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates;
+      // Components carry no category of their own; it belongs to the inscription.
+      const color = COLOR.get(siteByName.get(c.site)?.cat ?? '') ?? FALLBACK_COLOR;
+      L.marker([lat, lng], {
+        icon: L.divIcon({
+          className: 'unesco-pin',
+          html: dotSvg(color, 16),
+          iconSize: [16, 16],
+          iconAnchor: [8, 8],
+          popupAnchor: [0, -8],
+        }),
+        riseOnHover: true,
+        title: c.name,
+      })
+        .on('click', () => showComponent(c, L.latLng(lat, lng)))
+        .addTo(compLayer);
+    }
+
+    if (bounds.isValid()) map.fitBounds(bounds, { padding: [40, 40] });
+
+    // --- Zoom-driven handover ----------------------------------------------
+    let showingComponents: boolean | null = null;
+    let setStatus: (componentsShown: boolean) => void = () => {};
+
+    const sync = () => {
+      const next = map.getZoom() >= COMPONENT_ZOOM;
+      if (next === showingComponents) return;
+      showingComponents = next;
+      map.closePopup(); // the feature it described may have just left the map
+      if (next) {
+        map.removeLayer(siteLayer);
+        map.addLayer(compLayer);
+      } else {
+        map.removeLayer(compLayer);
+        map.addLayer(siteLayer);
+      }
+      setStatus(next);
+    };
+    map.on('zoomend', sync);
+    sync();
+
+    // --- Legend ------------------------------------------------------------
+    const control = new L.Control({ position: 'bottomleft' });
+    control.onAdd = () => {
+      const box = L.DomUtil.create('div', 'map-legend');
+      L.DomEvent.disableClickPropagation(box);
+      L.DomEvent.disableScrollPropagation(box);
+
+      const title = L.DomUtil.create('div', 'map-legend__title', box);
+      title.textContent = 'UNESCO sites by category';
+
+      for (const cat of CATEGORIES) {
+        const count = siteData.features.filter(
+          (f) => (f.properties as { cat?: string })?.cat === cat.value,
+        ).length;
+        if (!count) continue;
+        const row = L.DomUtil.create('div', 'map-legend__row', box);
+        const swatch = L.DomUtil.create('span', 'map-legend__pin', row);
+        swatch.innerHTML = templeSvg(cat.color, 20);
+        const label = L.DomUtil.create('span', 'map-legend__name', row);
+        label.textContent = `${cat.value} (${count})`;
+      }
+
+      const status = L.DomUtil.create('p', 'map-legend__status', box);
+      setStatus = (componentsShown) => {
+        status.textContent = componentsShown
+          ? `Showing the ${compData.features.length} individual components. Zoom out for whole sites.`
+          : `Showing all ${siteData.features.length} sites. Zoom right in for the individual monuments within each one.`;
+      };
+      setStatus(showingComponents ?? false);
+      return box;
+    };
+    control.addTo(map);
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-unesco]').forEach(initMap);
+</script>
+
+<style is:global>
+  /* divIcon wrapper: no chrome of its own. */
+  .unesco-pin {
+    background: none;
+    border: 0;
+    line-height: 0;
+    filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.35));
+  }
+
+  .unesco-popup__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 0.6rem;
+    margin: 0 0 0.35rem;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+  }
+  .unesco-popup__tag {
+    color: #fff;
+    border-radius: 2px;
+    padding: 0.05rem 0.4rem;
+    font-size: 0.72rem;
+  }
+  .unesco-popup__title {
+    margin: 0 0 0.5rem;
+    font-size: 0.98rem;
+    line-height: 1.3;
+  }
+
+  .unesco-popup__gallery {
+    position: relative;
+  }
+  /* The frame carries each photograph's own ratio inline, so it opens at the
+     right shape instead of resizing under the cursor when the file lands. It is
+     a link to the original on whc.unesco.org. */
+  .unesco-popup__frame {
+    display: block;
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    background: var(--bg-subtle);
+    border-radius: var(--radius);
+    overflow: hidden;
+    cursor: zoom-in;
+  }
+  .unesco-popup__frame img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+  .unesco-popup__frame.is-loading::after {
+    content: 'Loading photograph…';
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+  }
+  .unesco-popup__frame.is-error img {
+    display: none;
+  }
+  .unesco-popup__frame.is-error::after {
+    content: 'Photograph unavailable';
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+  }
+
+  .unesco-popup__arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 1.9rem;
+    height: 1.9rem;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    color: #222;
+    font-size: 1.2rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .unesco-popup__arrow:hover {
+    background: #fff;
+  }
+  .unesco-popup__arrow--prev {
+    left: 0.35rem;
+  }
+  .unesco-popup__arrow--next {
+    right: 0.35rem;
+  }
+
+  .unesco-popup__credit {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem 0.6rem;
+    margin: 0.35rem 0 0;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+  }
+  .unesco-popup__counter {
+    font-variant-numeric: tabular-nums;
+  }
+  .unesco-popup__creditlink {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: var(--rule);
+    text-underline-offset: 2px;
+  }
+  .unesco-popup__creditlink:hover {
+    text-decoration-color: currentColor;
+  }
+
+  .unesco-popup__parent {
+    margin: 0 0 0.35rem;
+    font-size: 0.82rem;
+  }
+  .unesco-popup__note {
+    margin: 0.35rem 0 0;
+    font-size: 0.74rem;
+    color: var(--text-muted);
+  }
+  /* The descriptions run to a thousand characters, which is more than a popup
+     should ever be as tall as. */
+  .unesco-popup__desc {
+    max-height: 9.5rem;
+    overflow-y: auto;
+    margin-top: 0.5rem;
+    padding-right: 0.3rem;
+  }
+  .unesco-popup__desc p {
+    margin: 0;
+    font-size: 0.82rem;
+    line-height: 1.5;
+  }
+
+  .map-legend__status {
+    margin: 0.45rem 0 0;
+    max-width: 17rem;
+    font-size: 0.72rem;
+    line-height: 1.4;
+    color: var(--text-muted);
+  }
+  .map-legend__pin {
+    flex: none;
+    width: 1.25rem;
+    line-height: 0;
+    display: inline-block;
+  }
+</style>

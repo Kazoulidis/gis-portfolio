@@ -1,0 +1,413 @@
+---
+/**
+ * A photo map: points symbolised as coloured pins by category, where clicking
+ * one shows the photograph taken there.
+ *
+ * Several photographs were often taken from the same spot - one location here
+ * has five - so a click gathers every point within a few pixels of the one hit
+ * and shows them all, with a thumbnail strip to move between them. Without
+ * that, the photos underneath the top pin would be unreachable.
+ *
+ * The pins reproduce the printed map's symbology: a teardrop in the category
+ * colour with a white glyph inside.
+ *
+ * Fields read:
+ *   photo_type  category - drives colour and glyph
+ *   photo       web-sized image path
+ *   thumb       thumbnail path, used when a location holds several photos
+ *   photo_w/h   rendered dimensions, so the popup reserves space before load
+ *   datetime, altitude_m, filename
+ */
+interface Props {
+  src: string;
+  caption?: string;
+}
+
+const { src, caption } = Astro.props;
+---
+
+<figure class="map-figure">
+  <div
+    class="map map--tall"
+    data-phototrip
+    data-src={src}
+    role="application"
+    aria-label={caption ?? 'Interactive photo map'}
+  >
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<script>
+  import * as L from 'leaflet';
+  import 'leaflet/dist/leaflet.css';
+
+  const BASEMAP = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+  const ATTRIBUTION =
+    'Tiles &copy; <a href="https://www.esri.com/">Esri</a> - Esri, HERE, Garmin, ' +
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
+  // Colours sampled from the printed map's legend so the two match exactly.
+  // Each glyph is drawn inside a 24-wide pin, in white.
+  const GLYPHS: Record<string, string> = {
+    // Droplet
+    water:
+      '<path d="M12 5.5c0 0-5.2 6.2-5.2 9.6a5.2 5.2 0 0 0 10.4 0C17.2 11.7 12 5.5 12 5.5z" fill="#fff"/>',
+    // Pedimented building: roof, columns, base
+    building:
+      '<path d="M12 5.2 5.4 9.1v1.3h13.2V9.1L12 5.2z" fill="#fff"/>' +
+      '<rect x="6.6" y="11.2" width="1.7" height="5.2" fill="#fff"/>' +
+      '<rect x="10.2" y="11.2" width="1.7" height="5.2" fill="#fff"/>' +
+      '<rect x="13.8" y="11.2" width="1.7" height="5.2" fill="#fff"/>' +
+      '<rect x="5.4" y="17.1" width="13.2" height="1.5" fill="#fff"/>',
+    // Hiker: leaning forward, rectangular backpack slung behind, and a walking
+    // pole with a handle planted in front - the symbol used on the printed map.
+    // Drawn full-size in its own 24x24 space, then scaled to sit inside the
+    // pin's head, which keeps the proportions of the printed glyph intact.
+    hiker:
+      '<g transform="translate(12 11.6) scale(0.66) translate(-12 -12)">' +
+      '<circle cx="11.6" cy="2.9" r="2.6" fill="#fff"/>' +
+      '<rect x="1.2" y="3.4" width="4.6" height="9.8" rx="2.3" fill="#fff" transform="rotate(-20 3.5 8.3)"/>' +
+      '<g fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round">' +
+      '<path d="M10.4 6.6 8.0 16.0" stroke-width="3"/>' +
+      '<path d="M10.2 8.0 13.9 10.6" stroke-width="2.5"/>' +
+      '<path d="M8.0 16.0 11.2 18.7 11.4 22.2" stroke-width="3"/>' +
+      '<path d="M8.0 16.0 2.2 20.4" stroke-width="3"/>' +
+      '<path d="M14.6 9.6h2.3" stroke-width="2"/>' +
+      '<path d="M16.2 10.2V22.2" stroke-width="2"/>' +
+      '</g></g>',
+    // Two peaks
+    mountains:
+      '<path d="M5 17.6 9.6 9.8l2.6 4.4 1.9-3 4.9 6.4H5z" fill="#fff"/>',
+    // Camera
+    camera:
+      '<path d="M9.8 7.4 8.9 9H6.4a1.4 1.4 0 0 0-1.4 1.4v6.2A1.4 1.4 0 0 0 6.4 18h11.2a1.4 1.4 0 0 0 1.4-1.4v-6.2A1.4 1.4 0 0 0 17.6 9h-2.5l-.9-1.6H9.8z" fill="#fff"/>' +
+      '<circle cx="12" cy="13.4" r="2.6" fill="#007ac2" fill-opacity="0"/>' +
+      '<circle cx="12" cy="13.4" r="2.4" fill="none" stroke="currentColor" stroke-width="1.5"/>',
+  };
+
+  const CATEGORIES = [
+    { value: 'Water feature', color: '#007ac2', glyph: 'water' },
+    { value: 'Old building', color: '#f57a7a', glyph: 'building' },
+    { value: 'Scenic path', color: '#ff73df', glyph: 'hiker' },
+    { value: 'Landscape', color: '#71c96e', glyph: 'mountains' },
+    { value: 'Landmark', color: '#e89d00', glyph: 'camera' },
+  ];
+  const BY_VALUE = new Map(CATEGORIES.map((c) => [c.value, c]));
+  const FALLBACK = { value: 'Other', color: '#8c8c8c', glyph: 'camera' };
+
+  /** The teardrop pin, as an inline SVG. 24 wide, 34 tall, tip at the bottom. */
+  function pinSvg(color: string, glyph: string, scale = 1): string {
+    const w = 24 * scale;
+    const h = 34 * scale;
+    return (
+      `<svg width="${w}" height="${h}" viewBox="0 0 24 34" xmlns="http://www.w3.org/2000/svg" style="color:${color}">` +
+      `<path d="M12 33.2S23 19.6 23 12A11 11 0 1 0 1 12c0 7.6 11 21.2 11 21.2z" fill="${color}" stroke="#ffffff" stroke-width="1.4" stroke-linejoin="round"/>` +
+      (GLYPHS[glyph] ?? '') +
+      `</svg>`
+    );
+  }
+
+  const escapeHtml = (value: unknown) =>
+    String(value).replace(
+      /[&<>"']/g,
+      (c) =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string,
+    );
+
+  /** "2023:03:28 13:25:53" -> "28 March 2023, 13:25" */
+  function formatWhen(raw: unknown): string | null {
+    const s = String(raw ?? '');
+    const m = s.match(/^(\d{4})[:-](\d{2})[:-](\d{2})[ T](\d{2}):(\d{2})/);
+    if (!m) return s || null;
+    const [, y, mo, d, hh, mm] = m;
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December',
+    ];
+    return `${Number(d)} ${months[Number(mo) - 1]} ${y}, ${hh}:${mm}`;
+  }
+
+  async function initMap(el: HTMLElement) {
+    const src = el.dataset.src;
+    if (!src) return;
+
+    const map = L.map(el, { scrollWheelZoom: true });
+    // Esri's canvas basemaps have real tiles only to z16 over Greece; past that
+    // they answer with a "Map data not yet available" placeholder. maxNativeZoom
+    // makes Leaflet stretch the z16 tiles instead, so the data can still be
+    // zoomed into.
+    L.tileLayer(BASEMAP, { attribution: ATTRIBUTION, maxZoom: 20, maxNativeZoom: 16 }).addTo(map);
+    L.control.scale({ imperial: false }).addTo(map);
+
+    let data: GeoJSON.FeatureCollection;
+    try {
+      const res = await fetch(src);
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      data = await res.json();
+    } catch (err) {
+      console.error(`Could not load ${src}:`, err);
+      el.insertAdjacentHTML(
+        'beforeend',
+        '<p class="map-error">This map’s data could not be loaded.</p>',
+      );
+      return;
+    }
+
+    interface Pt {
+      lat: number;
+      lng: number;
+      props: Record<string, unknown>;
+    }
+    const points: Pt[] = [];
+    for (const f of data.features) {
+      if (f.geometry?.type !== 'Point') continue;
+      const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates;
+      points.push({ lat, lng, props: f.properties ?? {} });
+    }
+    if (!points.length) {
+      el.insertAdjacentHTML('beforeend', '<p class="map-error">No photographs to show.</p>');
+      return;
+    }
+
+    // One marker per photograph. Markers at an identical location stack, which
+    // is why the click handler below gathers neighbours rather than trusting
+    // whichever one Leaflet happened to put on top.
+    const groups = new Map<string, L.LayerGroup>();
+    const markerFor = (cat: { value: string }) => {
+      let g = groups.get(cat.value);
+      if (!g) {
+        g = L.layerGroup().addTo(map);
+        groups.set(cat.value, g);
+      }
+      return g;
+    };
+
+    // Sized against the map, not a fixed number: at 340px wide a popup spills
+    // off a 375px phone screen. Leave room for Leaflet's own padding and the
+    // close button.
+    const popupWidth = Math.max(200, Math.min(340, el.clientWidth - 56));
+    const popup = L.popup({
+      maxWidth: popupWidth,
+      minWidth: Math.min(260, popupWidth),
+      autoPan: true,
+      keepInView: true,
+    });
+
+    const showPhotos = (items: Pt[], at: L.LatLng) => {
+      let current = 0;
+      const render = () => {
+        const p = items[current].props;
+        const cat = BY_VALUE.get(String(p.photo_type)) ?? FALLBACK;
+        const when = formatWhen(p.datetime);
+
+        let html = `<div class="photo-popup">`;
+        if (items.length > 1) {
+          // Say only what is true: "this spot" if every gathered photograph
+          // really does share one coordinate, otherwise they merely overlap on
+          // screen at this zoom.
+          const first = `${items[0].lat},${items[0].lng}`;
+          const sameSpot = items.every((i) => `${i.lat},${i.lng}` === first);
+          html +=
+            `<p class="photo-popup__count">${items.length} photographs ` +
+            `${sameSpot ? 'from this spot' : 'overlapping here'}</p>`;
+        }
+        html +=
+          `<div class="photo-popup__frame" style="aspect-ratio:${Number(p.photo_w) || 3}/${Number(p.photo_h) || 4}">` +
+          `<img src="${escapeHtml(p.photo)}" alt="${escapeHtml(p.photo_type)} photographed in Edessa" decoding="async" />` +
+          `</div>`;
+        html += `<p class="photo-popup__meta">`;
+        html += `<span class="photo-popup__tag" style="background:${cat.color}">${escapeHtml(p.photo_type)}</span>`;
+        if (when) html += `<span>${escapeHtml(when)}</span>`;
+        if (p.altitude_m != null) html += `<span>${Math.round(Number(p.altitude_m))} m</span>`;
+        html += `</p>`;
+
+        if (items.length > 1) {
+          html += `<div class="photo-popup__strip">`;
+          items.forEach((it, i) => {
+            const t = it.props.thumb ?? it.props.photo;
+            html +=
+              `<button type="button" class="photo-popup__thumb${i === current ? ' is-current' : ''}" data-i="${i}" aria-label="Photograph ${i + 1} of ${items.length}">` +
+              `<img src="${escapeHtml(t)}" alt="" loading="lazy" /></button>`;
+          });
+          html += `</div>`;
+        }
+        html += `</div>`;
+
+        popup.setContent(html);
+      };
+
+      render();
+      popup.setLatLng(at).openOn(map);
+
+      // One delegated listener on the popup, rather than re-binding a listener
+      // per thumbnail on every render. Propagation has to stop here: a click
+      // that reaches the map closes the popup, so without this the strip would
+      // dismiss the very popup it is meant to page through.
+      const root = popup.getElement();
+      if (root) {
+        L.DomEvent.on(root, 'click', (ev: Event) => {
+          const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>('.photo-popup__thumb');
+          if (!btn) return;
+          L.DomEvent.stop(ev);
+          current = Number(btn.dataset.i);
+          render();
+        });
+      }
+    };
+
+    // Gather every point drawn within a few pixels of the clicked one, so
+    // stacked and near-coincident photographs all surface together.
+    // Half the pin's width: two pins closer than this genuinely overlap on
+    // screen, so the one underneath would otherwise be unreachable. Zoom in and
+    // the same points separate and click individually, which is the behaviour
+    // you want - the grouping follows what the reader can actually see.
+    const OVERLAP_PX = 12;
+    const gather = (target: Pt): Pt[] => {
+      const tp = map.latLngToContainerPoint([target.lat, target.lng]);
+      const hits = points.filter((p) => {
+        const cat = BY_VALUE.get(String(p.props.photo_type)) ?? FALLBACK;
+        const group = groups.get(cat.value);
+        if (group && !map.hasLayer(group)) return false;
+        const cp = map.latLngToContainerPoint([p.lat, p.lng]);
+        return cp.distanceTo(tp) <= OVERLAP_PX;
+      });
+      // Chronological, so a burst from one spot reads in the order it was shot.
+      hits.sort((a, b) => String(a.props.datetime).localeCompare(String(b.props.datetime)));
+      return hits.length ? hits : [target];
+    };
+
+    const bounds = L.latLngBounds([]);
+    for (const pt of points) {
+      const cat = BY_VALUE.get(String(pt.props.photo_type)) ?? FALLBACK;
+      const marker = L.marker([pt.lat, pt.lng], {
+        icon: L.divIcon({
+          className: 'photo-pin',
+          html: pinSvg(cat.color, cat.glyph),
+          iconSize: [24, 34],
+          iconAnchor: [12, 33], // tip of the teardrop
+          popupAnchor: [0, -30],
+        }),
+        riseOnHover: true,
+      });
+      marker.on('click', () => showPhotos(gather(pt), L.latLng(pt.lat, pt.lng)));
+      marker.addTo(markerFor(cat));
+      bounds.extend([pt.lat, pt.lng]);
+    }
+
+    if (bounds.isValid()) map.fitBounds(bounds, { padding: [50, 50] });
+
+    // --- Legend, doubling as a category switch -----------------------------
+    const control = new L.Control({ position: 'bottomleft' });
+    control.onAdd = () => {
+      const box = L.DomUtil.create('div', 'map-legend');
+      L.DomEvent.disableClickPropagation(box);
+      L.DomEvent.disableScrollPropagation(box);
+      const title = L.DomUtil.create('div', 'map-legend__title', box);
+      title.textContent = 'Photograph type';
+
+      for (const cat of CATEGORIES) {
+        const group = groups.get(cat.value);
+        if (!group) continue;
+        const count = points.filter((p) => p.props.photo_type === cat.value).length;
+        const row = L.DomUtil.create('label', 'map-legend__row', box);
+        const input = L.DomUtil.create('input', 'map-legend__toggle', row) as HTMLInputElement;
+        input.type = 'checkbox';
+        input.checked = true;
+        const swatch = L.DomUtil.create('span', 'map-legend__pin', row);
+        swatch.innerHTML = pinSvg(cat.color, cat.glyph, 0.62);
+        const label = L.DomUtil.create('span', 'map-legend__name', row);
+        label.textContent = `${cat.value} (${count})`;
+        input.addEventListener('change', () => {
+          if (input.checked) map.addLayer(group);
+          else map.removeLayer(group);
+          map.closePopup();
+        });
+      }
+      return box;
+    };
+    control.addTo(map);
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-phototrip]').forEach(initMap);
+</script>
+
+<style is:global>
+  /* divIcon wrapper: no background of its own, and the pin should not swallow
+     clicks meant for the map around it. */
+  .photo-pin {
+    background: none;
+    border: 0;
+    line-height: 0;
+    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.3));
+  }
+
+  .photo-popup__count {
+    margin: 0 0 0.45rem;
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  /* The frame holds the photo's aspect ratio from the moment the popup opens,
+     so it does not resize and re-anchor as the image arrives. */
+  .photo-popup__frame {
+    width: 100%;
+    background: var(--bg-subtle);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .photo-popup__frame img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .photo-popup__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 0.6rem;
+    margin: 0.5rem 0 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+  }
+  .photo-popup__tag {
+    color: #fff;
+    border-radius: 2px;
+    padding: 0.05rem 0.4rem;
+    font-size: 0.72rem;
+  }
+  .photo-popup__strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin-top: 0.5rem;
+  }
+  .photo-popup__thumb {
+    width: 2.6rem;
+    height: 2.6rem;
+    padding: 0;
+    border: 2px solid transparent;
+    border-radius: var(--radius);
+    background: none;
+    cursor: pointer;
+    overflow: hidden;
+    line-height: 0;
+  }
+  .photo-popup__thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .photo-popup__thumb.is-current {
+    border-color: var(--accent);
+  }
+
+  .map-legend__pin {
+    flex: none;
+    width: 1rem;
+    line-height: 0;
+    display: inline-block;
+  }
+</style>

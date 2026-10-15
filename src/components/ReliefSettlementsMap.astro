@@ -1,0 +1,308 @@
+---
+/**
+ * Two datasets on one map: mountainous terrain zones as polygons, and
+ * settlements as points classified by their official designation.
+ *
+ * The point of the map is the comparison between the two - terrain measured
+ * from a DEM against how settlements are actually designated in the census -
+ * so the legend switches each of the six classes independently.
+ *
+ * Rendered on canvas. 5,585 polygon parts and 13,584 points would be a
+ * pathological amount of SVG.
+ *
+ * Fields read:
+ *   relief      Zone_ID, Zone_Desc
+ *   settlements settlement_name_en, mountainousness
+ */
+interface Layer {
+  name: string;
+  src: string;
+}
+
+interface Props {
+  layers: Layer[];
+  caption?: string;
+}
+
+const { layers, caption } = Astro.props;
+---
+
+<figure class="map-figure">
+  <div
+    class="map map--tall"
+    data-reliefmap
+    data-layers={JSON.stringify(layers)}
+    role="application"
+    aria-label={caption ?? 'Interactive map of mountainous designations'}
+  >
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<script>
+  import * as L from 'leaflet';
+  import 'leaflet/dist/leaflet.css';
+
+  const BASEMAP = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+  const ATTRIBUTION =
+    'Tiles &copy; <a href="https://www.esri.com/">Esri</a> - Esri, HERE, Garmin, ' +
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
+  // Colours sampled from the printed version of this map so the two match.
+  const ZONES = [
+    { id: 1, label: 'Elevation of 800 m or greater', color: '#4c7300' },
+    { id: 2, label: 'Elevation 600-800 m with slope 16% or greater', color: '#1ea12b' },
+    { id: 3, label: 'Elevation under 600 m with slope 20% or greater', color: '#aaff00' },
+  ];
+  const DESIGNATIONS = [
+    { value: 'Mountainous', color: '#a80000' },
+    { value: 'Semi-mountainous', color: '#e69800' },
+    { value: 'Lowlands', color: '#828282' },
+  ];
+
+  const escapeHtml = (value: unknown) =>
+    String(value).replace(
+      /[&<>"']/g,
+      (c) =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string,
+    );
+
+  async function initMap(el: HTMLElement) {
+    let specs: { name: string; src: string }[];
+    try {
+      specs = JSON.parse(el.dataset.layers || '[]');
+    } catch {
+      specs = [];
+    }
+    if (!specs.length) return;
+
+    const map = L.map(el, { scrollWheelZoom: true, preferCanvas: true });
+    // Esri's canvas basemaps have real tiles only to z16 over Greece; past that
+    // they answer with a "Map data not yet available" placeholder. maxNativeZoom
+    // makes Leaflet stretch the z16 tiles instead, so the data can still be
+    // zoomed into.
+    L.tileLayer(BASEMAP, { attribution: ATTRIBUTION, maxZoom: 19, maxNativeZoom: 16 }).addTo(map);
+    L.control.scale({ imperial: false }).addTo(map);
+
+    const loaded = await Promise.all(
+      specs.map(async (spec) => {
+        try {
+          const res = await fetch(spec.src);
+          if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+          return (await res.json()) as GeoJSON.FeatureCollection;
+        } catch (err) {
+          console.error(`Could not load ${spec.src}:`, err);
+          return null;
+        }
+      }),
+    );
+
+    if (loaded.every((f) => f === null)) {
+      el.insertAdjacentHTML(
+        'beforeend',
+        '<p class="map-error">This map’s data could not be loaded.</p>',
+      );
+      return;
+    }
+
+    // Sort features by geometry type rather than by which file they arrived in,
+    // so layer order in the frontmatter does not matter.
+    const polygons: GeoJSON.Feature[] = [];
+    const points: GeoJSON.Feature[] = [];
+    for (const fc of loaded) {
+      if (!fc?.features) continue;
+      for (const f of fc.features) {
+        const t = f.geometry?.type;
+        if (t === 'Polygon' || t === 'MultiPolygon') polygons.push(f);
+        else if (t === 'Point') points.push(f);
+      }
+    }
+
+    const bounds = L.latLngBounds([]);
+    const zoneGroups = new Map<number, L.LayerGroup>();
+    const desGroups = new Map<string, L.LayerGroup>();
+
+    // --- Terrain zones. Drawn largest class first so the smaller, steeper
+    // classes sit on top rather than being buried under the 800 m mass.
+    for (const zone of ZONES) {
+      const match = polygons.filter((f) => Number(f.properties?.Zone_ID) === zone.id);
+      if (!match.length) continue;
+      const group = L.layerGroup().addTo(map);
+      L.geoJSON({ type: 'FeatureCollection', features: match } as GeoJSON.FeatureCollection, {
+        style: { color: zone.color, weight: 0, fillColor: zone.color, fillOpacity: 0.75 },
+        // Non-interactive: the terrain is context, and letting clicks fall
+        // through means a settlement sitting on a zone is still clickable.
+        interactive: false,
+      }).addTo(group);
+      zoneGroups.set(zone.id, group);
+      const b = L.geoJSON({ type: 'FeatureCollection', features: match } as GeoJSON.FeatureCollection).getBounds();
+      if (b.isValid()) bounds.extend(b);
+    }
+
+    // Settlement dots are deliberately tiny at country scale: 13,584 of them
+    // will smother the terrain underneath if they are any bigger, and the
+    // printed map draws them as specks for the same reason. They then step up
+    // as you zoom in, because a 1 px target is unclickable. Bucketed rather
+    // than continuous - recomputing 13,584 radii on every zoom level would be
+    // wasted work, and this only fires when the bucket actually changes.
+    //
+    // Below about half a pixel, shrinking the radius stops helping: canvas
+    // antialiasing still spreads the fill over roughly one pixel, so the dot
+    // keeps its footprint and only gets denser. Past that floor the lever that
+    // actually reduces visual weight is opacity, so the smallest bucket carries
+    // a lighter fill as well as a smaller radius.
+    const styleForZoom = (z: number) =>
+      z >= 12
+        ? { radius: 5, fillOpacity: 0.9 }
+        : z >= 10
+          ? { radius: 3.2, fillOpacity: 0.9 }
+          : z >= 8
+            ? { radius: 1.4, fillOpacity: 0.85 }
+            : { radius: 0.35, fillOpacity: 0.6 };
+    let currentStyle = styleForZoom(0);
+    const markerLayers: L.CircleMarker[] = [];
+
+    // --- Settlements.
+    for (const des of DESIGNATIONS) {
+      const match = points.filter((f) => f.properties?.mountainousness === des.value);
+      if (!match.length) continue;
+      const group = L.layerGroup().addTo(map);
+      L.geoJSON({ type: 'FeatureCollection', features: match } as GeoJSON.FeatureCollection, {
+        pointToLayer: (_f, latlng) => {
+          const m = L.circleMarker(latlng, {
+            radius: currentStyle.radius,
+            color: des.color,
+            weight: 0,
+            fillColor: des.color,
+            fillOpacity: currentStyle.fillOpacity,
+          });
+          markerLayers.push(m);
+          return m;
+        },
+        onEachFeature: (f, lyr) => {
+          const p = f.properties ?? {};
+          lyr.bindPopup(
+            `<strong>${escapeHtml(p.settlement_name_en ?? 'Unnamed settlement')}</strong>` +
+              `<dl class="popup-meta"><dt>Designation</dt><dd>${escapeHtml(p.mountainousness)}</dd></dl>`,
+          );
+        },
+      }).addTo(group);
+      desGroups.set(des.value, group);
+      const b = L.geoJSON({ type: 'FeatureCollection', features: match } as GeoJSON.FeatureCollection).getBounds();
+      if (b.isValid()) bounds.extend(b);
+    }
+
+    if (bounds.isValid()) map.fitBounds(bounds, { padding: [12, 12] });
+
+    // Apply the starting style, then only revisit it when the bucket changes.
+    const applyStyle = () => {
+      const s = styleForZoom(map.getZoom());
+      if (s.radius === currentStyle.radius && s.fillOpacity === currentStyle.fillOpacity) return;
+      currentStyle = s;
+      for (const m of markerLayers) {
+        m.setRadius(s.radius);
+        m.setStyle({ fillOpacity: s.fillOpacity });
+      }
+    };
+    applyStyle();
+    map.on('zoomend', applyStyle);
+
+    // --- Legend, in the same two groups as the printed map ----------------
+    const control = new L.Control({ position: 'bottomleft' });
+    control.onAdd = () => {
+      // Seven rows of long labels would blanket a phone, so the legend
+      // collapses on a narrow viewport and opens on a wide one.
+      const box = L.DomUtil.create('details', 'map-legend') as HTMLDetailsElement;
+      box.open = window.matchMedia('(min-width: 40rem)').matches;
+      L.DomEvent.disableClickPropagation(box);
+      L.DomEvent.disableScrollPropagation(box);
+      const summary = L.DomUtil.create('summary', 'map-legend__title', box);
+      summary.textContent = 'Legend';
+
+      const addRow = (
+        parent: HTMLElement,
+        label: string,
+        color: string,
+        shape: 'box' | 'dot',
+        group: L.LayerGroup,
+      ) => {
+        const row = L.DomUtil.create('label', 'map-legend__row', parent);
+        const input = L.DomUtil.create('input', 'map-legend__toggle', row) as HTMLInputElement;
+        input.type = 'checkbox';
+        input.checked = true;
+        const swatch = L.DomUtil.create('span', `map-legend__swatch map-legend__swatch--${shape}`, row);
+        swatch.style.background = color;
+        const name = L.DomUtil.create('span', 'map-legend__name', row);
+        name.textContent = label;
+        input.addEventListener('change', () => {
+          if (input.checked) map.addLayer(group);
+          else map.removeLayer(group);
+          map.closePopup();
+        });
+      };
+
+      const h1 = L.DomUtil.create('div', 'map-legend__group', box);
+      h1.textContent = 'Mountainous areas by category';
+      for (const zone of ZONES) {
+        const g = zoneGroups.get(zone.id);
+        if (g) addRow(box, zone.label, zone.color, 'box', g);
+      }
+
+      const h2 = L.DomUtil.create('div', 'map-legend__group', box);
+      h2.textContent = 'Mountainous designation of settlements';
+      for (const des of DESIGNATIONS) {
+        const g = desGroups.get(des.value);
+        if (!g) continue;
+        const count = points.filter((f) => f.properties?.mountainousness === des.value).length;
+        addRow(box, `${des.value} (${count.toLocaleString('en-GB')})`, des.color, 'dot', g);
+      }
+      return box;
+    };
+    control.addTo(map);
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-reliefmap]').forEach(initMap);
+</script>
+
+<style is:global>
+  .map-legend__group {
+    font-size: 0.72rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 0.5rem 0 0.25rem;
+  }
+  .map-legend__group:first-of-type {
+    margin-top: 0.35rem;
+  }
+  /* Two classes, not one: several maps declare a site-wide .map-legend__swatch
+     sized as a 1.1 x 0.75rem box, and at equal weight whichever loads later
+     wins - which stretched these dots into ovals. */
+  .map-legend__swatch.map-legend__swatch--box {
+    width: 0.9rem;
+    height: 0.9rem;
+    border-radius: 2px;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+  }
+  .map-legend__swatch.map-legend__swatch--dot {
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 50%;
+    border: 0;
+  }
+  details.map-legend > summary.map-legend__title {
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+  }
+  details.map-legend > summary.map-legend__title::-webkit-details-marker {
+    display: none;
+  }
+  details.map-legend > summary.map-legend__title::after {
+    content: ' \25BE';
+    color: var(--text-muted);
+  }
+  details.map-legend:not([open]) > summary.map-legend__title::after {
+    content: ' \25B8';
+  }
+</style>

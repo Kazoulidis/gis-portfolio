@@ -1,0 +1,449 @@
+---
+/**
+ * Recorded Hellenic Armed Forces fatalities by birthplace.
+ *
+ * Two halves, each stepping through the same seventeen maps: the printed sheets
+ * as a gallery, and an interactive choropleth of the same 75 regional units.
+ * They scroll independently on purpose - it is useful to hold one war on the
+ * printed sheet while reading another on the live map.
+ *
+ * Every war is classified on its own breaks. A scale that suits the Asia Minor
+ * Campaign (max 1,260) would render Korea (max 11) as one flat colour, so each
+ * map carries the classes used on its printed counterpart.
+ */
+interface Props {
+  src: string;
+  caption?: string;
+}
+
+const { src, caption } = Astro.props;
+---
+
+<figure class="map-figure">
+  <div class="fatal" data-fatal data-src={src}>
+    <div class="fatal-gallery">
+      <p class="fatal-gallery__title" data-gallery-title>Total</p>
+      <div class="fatal-gallery__frame">
+        <img data-gallery-img src="/images/fatalities/map-02.webp" alt="" decoding="async" />
+        <button
+          type="button"
+          class="fatal-arrow fatal-arrow--prev"
+          data-step="-1"
+          aria-label="Previous map">&#8249;</button>
+        <button
+          type="button"
+          class="fatal-arrow fatal-arrow--next"
+          data-step="1"
+          aria-label="Next map">&#8250;</button>
+      </div>
+      <p class="fatal-gallery__meta">
+        <span data-gallery-counter>1 / 17</span>
+      </p>
+    </div>
+
+    <div class="fatal-map">
+      <p class="fatal-gallery__title" data-map-title>Total</p>
+      <div
+        class="map map--tall"
+        data-fatal-map
+        role="application"
+        aria-label={caption ?? 'Interactive map of recorded fatalities by regional unit'}
+      >
+      </div>
+      <p class="fatal-gallery__meta">
+        <button type="button" class="fatal-step" data-map-step="-1">&#8249; Previous</button>
+        <span data-map-counter>1 / 17</span>
+        <button type="button" class="fatal-step" data-map-step="1">Next &#8250;</button>
+      </p>
+    </div>
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<script>
+  import * as L from 'leaflet';
+  import 'leaflet/dist/leaflet.css';
+
+  const BASEMAP = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+  const ATTRIBUTION =
+    'Tiles &copy; <a href="https://www.esri.com/">Esri</a> - Esri, HERE, Garmin, ' +
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
+  // ColorBrewer YlOrBr, sampled from the printed legends. Four-class maps use a
+  // four-step subset of the same ramp, exactly as the print does.
+  const RAMP6 = ['#fee391', '#fec44f', '#fe9929', '#ec7014', '#cc4c02', '#8c2d04'];
+  const RAMP4 = ['#fec44f', '#fe9929', '#ec7014', '#8c2d04'];
+  const RAMP1 = ['#8c2d04'];
+  const NONE = '#b2b2b2';
+
+  /** [lower bound, the label printed beside it] */
+  type Klass = [number, string];
+
+  interface War {
+    i: number; // index into a feature's value array
+    img: string; // the printed sheet's file number
+    title: string;
+    classes: Klass[];
+  }
+
+  // Order and breaks follow the printed sheets one for one.
+  const WARS: War[] = [
+    { i: 0, img: '02', title: 'Total', classes: [[1, '1 - 500'], [500, '500 - 1,000'], [1000, '1,000 - 2,000'], [2000, '2,000 - 3,000'], [3000, '3,000 - 4,000'], [4000, '4,000 - 5,000']] },
+    { i: 1, img: '03', title: 'Years 1830-1898, excluding the War of 1897', classes: [[1, '1'], [2, '2'], [3, '3'], [4, '4']] },
+    { i: 2, img: '04', title: 'Cretan Revolts 1841-1898', classes: [[1, '1'], [2, '2 - 15'], [15, '15 - 75'], [75, '75 - 125'], [125, '125 - 375'], [375, '375 - 560']] },
+    { i: 3, img: '05', title: 'Greco-Turkish War 1897', classes: [[1, '1 - 5'], [5, '5 - 15'], [15, '15 - 25'], [25, '25 - 50'], [50, '50 - 75'], [75, '75 - 100']] },
+    { i: 4, img: '06', title: 'Macedonian Struggle 1904-1908', classes: [[1, '1 - 5'], [6, '6 - 10'], [11, '11 - 15'], [16, '16 - 20']] },
+    { i: 5, img: '07', title: 'Balkan Wars 1912-1913', classes: [[1, '1 - 25'], [25, '25 - 50'], [50, '50 - 125'], [125, '125 - 200'], [200, '200 - 350'], [350, '350 - 500']] },
+    { i: 6, img: '08', title: 'First World War 1914-1919', classes: [[1, '1 - 50'], [50, '50 - 125'], [125, '125 - 250'], [250, '250 - 500'], [500, '500 - 750'], [750, '750 - 1,000']] },
+    { i: 7, img: '09', title: 'Campaign in Southern Russia 1919', classes: [[1, '1 - 5'], [6, '6 - 10'], [11, '11 - 25'], [26, '26 - 50']] },
+    { i: 8, img: '10', title: 'Asia Minor Campaign 1919-1922', classes: [[1, '1 - 125'], [125, '125 - 250'], [250, '250 - 500'], [500, '500 - 700'], [700, '700 - 1,000'], [1000, '1,000 - 1,300']] },
+    { i: 9, img: '11', title: 'Second World War 1940-1945', classes: [[1, '1 - 50'], [50, '50 - 125'], [125, '125 - 250'], [250, '250 - 500'], [500, '500 - 750'], [750, '750 - 1,050']] },
+    { i: 10, img: '12', title: 'National Resistance 1941-1944', classes: [[1, '1 - 10'], [10, '10 - 25'], [25, '25 - 50'], [50, '50 - 75'], [75, '75 - 125'], [125, '125 - 250']] },
+    { i: 11, img: '13', title: 'Civil Conflicts 1941-1944', classes: [[1, '1 - 25'], [25, '25 - 50'], [50, '50 - 100'], [100, '100 - 150'], [150, '150 - 200'], [200, '200 - 1,150']] },
+    { i: 12, img: '14', title: 'December Events, Dec. 1944 - Feb. 1945', classes: [[1, '1 - 10'], [11, '11 - 20'], [21, '21 - 40'], [41, '41 - 75']] },
+    { i: 13, img: '15', title: 'Greek Civil War 1946-1949', classes: [[1, '1 - 75'], [75, '75 - 150'], [150, '150 - 250'], [250, '250 - 400'], [400, '400 - 550'], [550, '550 - 725']] },
+    { i: 14, img: '16', title: 'Hellenic Force in Cyprus 1964, 1967, 1974', classes: [[1, '1 - 5'], [6, '6 - 10'], [11, '11 - 15'], [16, '16 - 20']] },
+    { i: 15, img: '17', title: 'Greek Expeditionary Force in Korea 1950-1955', classes: [[1, '1 - 3'], [4, '4 - 6'], [7, '7 - 9'], [10, '10 - 12']] },
+    { i: 16, img: '18', title: 'Peacekeeping Mission to Somalia, Mar. 1993 - May 1994', classes: [[1, '1']] },
+  ];
+
+  const rampFor = (n: number) => (n >= 6 ? RAMP6 : n >= 4 ? RAMP4 : RAMP1);
+
+  /** Colour for a value under one war's classes. Zero is a category, not a low number. */
+  function colourFor(value: number, war: War): string {
+    if (!value) return NONE;
+    const ramp = rampFor(war.classes.length);
+    let idx = 0;
+    for (let c = 0; c < war.classes.length; c++) if (value >= war.classes[c][0]) idx = c;
+    return ramp[Math.min(idx, ramp.length - 1)];
+  }
+
+  const fmt = (n: number) => n.toLocaleString('en-GB');
+  const escapeHtml = (v: unknown) =>
+    String(v).replace(
+      /[&<>"']/g,
+      (c) =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string,
+    );
+
+  interface UnitProps {
+    c: string;
+    n: string;
+    v: number[];
+  }
+
+  const styleFor = (war: War) => (feature?: GeoJSON.Feature) => {
+    const p = feature!.properties as unknown as UnitProps;
+    return {
+      fillColor: colourFor(p.v[war.i] || 0, war),
+      fillOpacity: 0.85,
+      color: '#4d4d4d',
+      weight: 0.6,
+    };
+  };
+
+  async function init(root: HTMLElement) {
+    const src = root.dataset.src;
+    if (!src) return;
+
+    // --- the printed sheets ------------------------------------------------
+    const gTitle = root.querySelector<HTMLElement>('[data-gallery-title]');
+    const gImg = root.querySelector<HTMLImageElement>('[data-gallery-img]');
+    const gCount = root.querySelector<HTMLElement>('[data-gallery-counter]');
+    let gi = 0;
+
+    const showSheet = (n: number) => {
+      if (!gTitle || !gImg || !gCount) return;
+      gi = (n + WARS.length) % WARS.length;
+      const war = WARS[gi];
+      gTitle.textContent = war.title;
+      gImg.src = `/images/fatalities/map-${war.img}.webp`;
+      gImg.alt =
+        `Printed map of recorded Hellenic Armed Forces fatalities by birthplace: ${war.title}`;
+      gCount.textContent = `${gi + 1} / ${WARS.length}`;
+      // Each sheet is about 190 KB, so pulling the neighbours makes paging
+      // instant without fetching all seventeen up front.
+      for (const step of [1, -1]) {
+        const next = WARS[(gi + step + WARS.length) % WARS.length];
+        new Image().src = `/images/fatalities/map-${next.img}.webp`;
+      }
+    };
+    root
+      .querySelectorAll<HTMLButtonElement>('[data-step]')
+      .forEach((b) => b.addEventListener('click', () => showSheet(gi + Number(b.dataset.step))));
+    showSheet(0);
+
+    // --- the interactive choropleth ---------------------------------------
+    const el = root.querySelector<HTMLElement>('[data-fatal-map]');
+    const mTitle = root.querySelector<HTMLElement>('[data-map-title]');
+    const mCount = root.querySelector<HTMLElement>('[data-map-counter]');
+    if (!el) return;
+
+    // Canvas rather than SVG: 75 units carry 1,166 rings between them, most of
+    // which are islands, and that many SVG paths is a visible drag on panning.
+    const map = L.map(el, { scrollWheelZoom: true, preferCanvas: true });
+    // Esri's canvas basemaps have real tiles only to z16 over Greece; past that
+    // they answer with a "Map data not yet available" placeholder. maxNativeZoom
+    // makes Leaflet stretch the z16 tiles instead, so the data can still be
+    // zoomed into.
+    L.tileLayer(BASEMAP, { attribution: ATTRIBUTION, maxZoom: 19, maxNativeZoom: 16 }).addTo(map);
+    L.control.scale({ imperial: false }).addTo(map);
+
+    let data: GeoJSON.FeatureCollection;
+    try {
+      const res = await fetch(src);
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      data = await res.json();
+    } catch (err) {
+      console.error(`Could not load ${src}:`, err);
+      el.insertAdjacentHTML(
+        'beforeend',
+        '<p class="map-error">This map’s data could not be loaded.</p>',
+      );
+      return;
+    }
+
+    // National totals per war, so a unit's share can be stated rather than guessed.
+    const totals = WARS.map((war) =>
+      data.features.reduce(
+        (a, f) => a + ((f.properties as unknown as UnitProps).v[war.i] || 0),
+        0,
+      ),
+    );
+
+    let mi = 0;
+    const popup = L.popup({
+      maxWidth: Math.max(220, Math.min(340, el.clientWidth - 56)),
+      autoPan: true,
+    });
+
+    const layer = L.geoJSON(data, {
+      style: styleFor(WARS[0]) as L.StyleFunction,
+      onEachFeature: (feature, lyr) => {
+        lyr.on('click', () => {
+          const p = feature.properties as unknown as UnitProps;
+          const war = WARS[mi];
+          const value = p.v[war.i] || 0;
+          const share = totals[mi] ? (value / totals[mi]) * 100 : 0;
+
+          let html = `<div class="fatal-popup">`;
+          html += `<h3 class="fatal-popup__name">${escapeHtml(p.n)}</h3>`;
+          html += `<p class="fatal-popup__war">${escapeHtml(war.title)}</p>`;
+          html += `<p class="fatal-popup__value">${fmt(value)}</p>`;
+          html += `<p class="fatal-popup__share">`;
+          html += value
+            ? `${share.toFixed(2)}% of the ${fmt(totals[mi])} recorded on this map`
+            : 'No recorded fatalities';
+          html += `</p>`;
+
+          // On the total sheet, break the figure down by war.
+          if (war.i === 0 && value) {
+            const rows = WARS.filter((w) => w.i !== 0)
+              .map((w) => ({ title: w.title, n: p.v[w.i] || 0 }))
+              .filter((r) => r.n > 0)
+              .sort((a, b) => b.n - a.n);
+            if (rows.length) {
+              html += `<div class="fatal-popup__scroll">`;
+              html += `<table class="fatal-popup__table"><tbody>`;
+              for (const r of rows) {
+                html += `<tr><th>${escapeHtml(r.title)}</th><td>${fmt(r.n)}</td></tr>`;
+              }
+              html += `</tbody></table></div>`;
+            }
+          }
+          html += `</div>`;
+
+          popup
+            .setLatLng((lyr as L.Polygon).getBounds().getCenter())
+            .setContent(html)
+            .openOn(map);
+        });
+      },
+    }).addTo(map);
+
+    map.fitBounds(layer.getBounds(), { padding: [20, 20] });
+
+    // --- legend, redrawn per war ------------------------------------------
+    const control = new L.Control({ position: 'bottomleft' });
+    let legendBox: HTMLElement | null = null;
+    control.onAdd = () => {
+      const box = L.DomUtil.create('div', 'map-legend');
+      L.DomEvent.disableClickPropagation(box);
+      L.DomEvent.disableScrollPropagation(box);
+      legendBox = box;
+      return box;
+    };
+    control.addTo(map);
+
+    const drawLegend = () => {
+      if (!legendBox) return;
+      const war = WARS[mi];
+      const ramp = rampFor(war.classes.length);
+      let h = `<div class="map-legend__title">Fatalities by Regional Unit</div>`;
+      // Printed legends read high to low.
+      for (let c = war.classes.length - 1; c >= 0; c--) {
+        h +=
+          `<div class="map-legend__class">` +
+          `<span class="map-legend__swatch" style="background:${ramp[Math.min(c, ramp.length - 1)]}"></span>` +
+          `<span class="map-legend__name">${war.classes[c][1]}</span></div>`;
+      }
+      h +=
+        `<div class="map-legend__class">` +
+        `<span class="map-legend__swatch" style="background:${NONE}"></span>` +
+        `<span class="map-legend__name">No Fatalities</span></div>`;
+      legendBox.innerHTML = h;
+    };
+
+    const showMap = (n: number) => {
+      mi = (n + WARS.length) % WARS.length;
+      if (mTitle) mTitle.textContent = WARS[mi].title;
+      if (mCount) mCount.textContent = `${mi + 1} / ${WARS.length}`;
+      layer.setStyle(styleFor(WARS[mi]) as L.StyleFunction);
+      map.closePopup(); // it described a war that is no longer on screen
+      drawLegend();
+    };
+    root
+      .querySelectorAll<HTMLButtonElement>('[data-map-step]')
+      .forEach((b) =>
+        b.addEventListener('click', () => showMap(mi + Number(b.dataset.mapStep))),
+      );
+    showMap(0);
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-fatal]').forEach(init);
+</script>
+
+<style is:global>
+  .fatal-gallery {
+    margin-bottom: 2.5rem;
+  }
+  .fatal-gallery__title {
+    /* These are <p> elements, and the global rule caps a paragraph at the
+       72ch text measure. The figure is full-width, so without this they
+       centre inside that narrower box and sit left of the image. */
+    max-width: none;
+    margin: 0 0 0.5rem;
+    font-family: var(--font-sans);
+    font-size: 0.95rem;
+    font-weight: 600;
+    text-align: center;
+  }
+  .fatal-gallery__frame {
+    position: relative;
+  }
+  .fatal-gallery__frame img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    background: var(--bg-subtle);
+  }
+  .fatal-arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 2.4rem;
+    height: 2.4rem;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+    color: #222;
+    font-size: 1.5rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .fatal-arrow:hover {
+    background: #fff;
+  }
+  .fatal-arrow--prev {
+    left: 0.5rem;
+  }
+  .fatal-arrow--next {
+    right: 0.5rem;
+  }
+  .fatal-gallery__meta {
+    /* These are <p> elements, and the global rule caps a paragraph at the
+       72ch text measure. The figure is full-width, so without this they
+       centre inside that narrower box and sit left of the image. */
+    max-width: none;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    margin: 0.5rem 0 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .fatal-step {
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    background: none;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    padding: 0.15rem 0.6rem;
+  }
+  .fatal-step:hover {
+    border-color: var(--text-muted);
+  }
+
+  .fatal-popup__name {
+    margin: 0;
+    font-size: 1rem;
+  }
+  .fatal-popup__war {
+    margin: 0.1rem 0 0.4rem;
+    font-size: 0.74rem;
+    color: var(--text-muted);
+  }
+  .fatal-popup__value {
+    margin: 0;
+    font-size: 1.35rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .fatal-popup__share {
+    margin: 0.1rem 0 0;
+    font-size: 0.74rem;
+    color: var(--text-muted);
+  }
+  /* Sixteen conflicts is more than a popup should ever be tall, so the
+     breakdown scrolls. The scroll sits on a wrapper rather than on the table:
+     scrolling the table itself means taking it out of table layout, and its
+     scrollbar then sits on top of the right-aligned figures. */
+  .fatal-popup__scroll {
+    max-height: 11rem;
+    overflow-y: auto;
+    margin-top: 0.6rem;
+  }
+  .fatal-popup__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.74rem;
+  }
+  .fatal-popup__table th {
+    text-align: left;
+    font-weight: 400;
+    padding: 0.12rem 0.5rem 0.12rem 0;
+    border-top: 1px solid var(--rule);
+  }
+  .fatal-popup__table td {
+    text-align: right;
+    padding: 0.12rem 0.35rem 0.12rem 0.5rem;
+    border-top: 1px solid var(--rule);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .map-legend__swatch {
+    flex: none;
+    width: 1.1rem;
+    height: 0.75rem;
+    border: 1px solid rgba(0, 0, 0, 0.35);
+  }
+</style>

@@ -7,7 +7,7 @@ import type { CollectionEntry } from 'astro:content';
 
 interface Props {
   projects: CollectionEntry<'projects'>[];
-  /** Shown when the list is empty — e.g. a category with nothing in it yet. */
+  /** Shown when the list is empty - e.g. a category with nothing in it yet. */
   emptyMessage?: string;
 }
 
@@ -30,7 +30,7 @@ const { projects, emptyMessage = 'No projects published yet.' } = Astro.props;
                   alt={project.data.thumbnailAlt ?? ''}
                   loading="lazy"
                   width="416"
-                  height="312"
+                  height="416"
                 />
               </a>
             ) : (
@@ -42,7 +42,9 @@ const { projects, emptyMessage = 'No projects published yet.' } = Astro.props;
               <a href={`/projects/${project.id}`}>{project.data.title}</a>
             </h2>
             <p class="project-item__meta">
-              {project.data.date.getFullYear()}
+              {/* UTC: frontmatter dates parse as UTC midnight, so the local year is
+                  wrong for a 1 January date on any machine west of Greenwich. */}
+              {project.data.date.getUTCFullYear()}
               {project.data.context && <> &middot; {project.data.context}</>}
             </p>
             <p>{project.data.summary}</p>

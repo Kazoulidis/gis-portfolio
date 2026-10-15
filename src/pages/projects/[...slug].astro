@@ -3,13 +3,33 @@ import { getCollection, render, type CollectionEntry } from 'astro:content';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import ProjectMap from '../../components/ProjectMap.astro';
 import HexbinPointMap from '../../components/HexbinPointMap.astro';
+import RailwayMap from '../../components/RailwayMap.astro';
+import ProtectedAreasMap from '../../components/ProtectedAreasMap.astro';
+import PhotoTripMap from '../../components/PhotoTripMap.astro';
+import ReliefSettlementsMap from '../../components/ReliefSettlementsMap.astro';
+import FireTimelineMap from '../../components/FireTimelineMap.astro';
+import UnescoMap from '../../components/UnescoMap.astro';
+import PopulationHex3DMap from '../../components/PopulationHex3DMap.astro';
+import FatalitiesMaps from '../../components/FatalitiesMaps.astro';
+import WindResourceMap from '../../components/WindResourceMap.astro';
 import { projectCategories } from '../../site';
+import { plainTitle } from '../../cv';
 
 // Bespoke map components a project can select via `mapComponent:` in
-// frontmatter. Add a component here and reference its key; the data path comes
-// from the project's `map:` field.
+// frontmatter. Add a component here and reference its key. Both `map:` (one
+// file) and `layers:` (several) are handed to the component, which takes
+// whichever it needs - a hexbin map wants one file, a network map wants two.
 const CUSTOM_MAPS: Record<string, typeof ProjectMap> = {
   'refugee-hexbin': HexbinPointMap,
+  'railway-network': RailwayMap,
+  'protected-areas': ProtectedAreasMap,
+  'photo-trip': PhotoTripMap,
+  'relief-settlements': ReliefSettlementsMap,
+  'fire-timeline': FireTimelineMap,
+  'unesco-sites': UnescoMap,
+  'population-hex-3d': PopulationHex3DMap,
+  'hellenic-fatalities': FatalitiesMaps,
+  'wind-resource': WindResourceMap,
 };
 
 export async function getStaticPaths() {
@@ -26,8 +46,22 @@ interface Props {
 
 const { project } = Astro.props;
 const { Content } = await render(project);
-const { title, summary, date, context, tags, map, mapComponent, layers, mapCaption, links } =
-  project.data;
+const {
+  title,
+  summary,
+  date,
+  context,
+  tags,
+  map,
+  mapComponent,
+  layers,
+  mapCaption,
+  image,
+  imageAlt,
+  downloads,
+  dataSource,
+  links,
+} = project.data;
 
 // A bespoke map wins when the project asks for one and it exists; it reads its
 // data from `map:`. Otherwise fall through to the generic layer map.
@@ -35,22 +69,32 @@ const CustomMap = mapComponent ? CUSTOM_MAPS[mapComponent] : undefined;
 
 // The generic component always takes a list of layers. `map` (one file) is just
 // the one-layer case, so fold it in here. The schema guarantees at most one of
-// map/layers is set, so this is unambiguous. Its lone layer is unnamed — with a
+// map/layers is set, so this is unambiguous. Its lone layer is unnamed - with a
 // single layer the legend is suppressed anyway, so the name is never shown.
 const mapLayers = layers ?? (map ? [{ name: '', src: map }] : undefined);
 
 // Send the reader back to the tab this project lives under, not to a generic
-// index — landing on "School" after reading a school project is what they
+// index - landing on "School" after reading a school project is what they
 // expect. The category is schema-validated, so this always resolves.
 const category = projectCategories.find((c) => c.slug === project.data.category)!;
 
+// UTC for the same reason as fullDate on the About page: the frontmatter date
+// is UTC midnight, and a 1 November date would read as October when built west
+// of Greenwich.
 const formattedDate = date.toLocaleDateString('en-GB', {
   year: 'numeric',
   month: 'long',
+  timeZone: 'UTC',
 });
 ---
 
-<BaseLayout title={title} description={summary}>
+<BaseLayout
+  title={plainTitle(title)}
+  description={summary}
+  image={image || project.data.thumbnail ? `/og/${project.id}.jpg` : undefined}
+  imageAlt={imageAlt ?? project.data.thumbnailAlt}
+  type="article"
+>
   <article>
     <p class="eyebrow">
       {formattedDate}
@@ -70,10 +114,60 @@ const formattedDate = date.toLocaleDateString('en-GB', {
     }
 
     {
-      CustomMap && map ? (
-        <CustomMap src={map} caption={mapCaption} />
+      image && (
+        <figure class="project-image">
+          <img src={image} alt={imageAlt ?? ''} loading="eager" decoding="async" />
+        </figure>
+      )
+    }
+
+    {
+      CustomMap && (map || layers) ? (
+        <CustomMap src={map} layers={layers} caption={mapCaption} />
       ) : (
         mapLayers && <ProjectMap layers={mapLayers} caption={mapCaption} />
+      )
+    }
+
+    {
+      downloads.length > 0 && (
+        <section class="downloads">
+          <h2 class="downloads__heading">Downloads</h2>
+          <ul class="downloads__list">
+            {downloads.map((file) => (
+              <li>
+                {/* `download` so a click saves the file rather than navigating
+                    to it - otherwise a browser just renders the PNG or the
+                    GeoJSON in a tab, which is not what a download button
+                    promises. Same-origin only, which these are. */}
+                <a
+                  class="button button--ghost"
+                  href={file.href}
+                  download
+                  data-umami-event="download"
+                  data-umami-event-project={project.id}
+                  data-umami-event-file={file.label}
+                >
+                  {file.label}
+                </a>
+                {file.note && <span class="downloads__note">{file.note}</span>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )
+    }
+
+    {
+      dataSource && (
+        <p class="data-source">
+          <span class="data-source__label">Data source</span>
+          {dataSource.href ? (
+            <a href={dataSource.href}>{dataSource.label}</a>
+          ) : (
+            <span>{dataSource.label}</span>
+          )}
+        </p>
       )
     }
 
@@ -126,5 +220,74 @@ const formattedDate = date.toLocaleDateString('en-GB', {
 
   .links li {
     margin-bottom: 0.3rem;
+  }
+
+  /* The finished map leads the page, so it gets the full frame width rather
+     than the text measure. */
+  .project-image {
+    margin: 2rem 0;
+    max-width: none;
+  }
+
+  .project-image img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+  }
+
+  .project-image figcaption {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-top: 0.6rem;
+  }
+
+  .downloads {
+    margin: 2rem 0;
+  }
+
+  .downloads__heading {
+    margin-top: 0;
+    font-size: 0.75rem;
+    font-family: var(--font-sans);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .downloads__list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    max-width: none;
+  }
+
+  .downloads__list li {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+    margin-bottom: 0.6rem;
+  }
+
+  .downloads__note {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .data-source {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin: 1.5rem 0 0;
+  }
+
+  .data-source__label {
+    display: block;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 0.15rem;
   }
 </style>

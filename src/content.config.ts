@@ -12,11 +12,18 @@ const projects = defineCollection({
   loader: glob({ pattern: '**/*.md', base: './src/content/projects' }),
   schema: z.object({
     title: z.string(),
-    // One or two sentences, shown on the projects index. Keep it short —
+    // One or two sentences, shown on the projects index. Keep it short -
     // this is the bit a recruiter actually reads.
     summary: z.string(),
-    // Used for ordering. Newest first.
+    // Used for ordering within a category. For the challenge this is the
+    // prompt's day, which is what makes Day 1 - Day 30 read in sequence, not
+    // when the map was actually made.
     date: z.coerce.date(),
+    // When the map was really produced. The challenge dates all fall in one
+    // month, so "Recent projects" on the About page would otherwise show the
+    // same label against every entry and order them by prompt number rather
+    // than by what was made most recently. Falls back to `date` when absent.
+    created: z.coerce.date().optional(),
     // Which sub-tab this project appears under. The allowed values come from
     // `projectCategories` in src/site.ts; an unrecognised one fails the build
     // rather than quietly hiding the project. Defaults to 'misc'.
@@ -29,6 +36,28 @@ const projects = defineCollection({
     thumbnail: z.string().optional(),
     thumbnailAlt: z.string().optional(),
 
+    // A finished, static map image shown at the top of the project - above the
+    // interactive map if there is one. This is where a print layout goes (the
+    // A4 export from ArcGIS Pro, say), so the considered version leads and the
+    // interactive one supports it.
+    image: z.string().optional(),
+    imageAlt: z.string().optional(),
+
+    // Files a reader can take away: the full-resolution map, the source data,
+    // a PDF. Rendered as buttons after the maps. Paths are under public/, so
+    // /downloads/foo.png lives at public/downloads/foo.png.
+    // Put the format and size in `note` - people deserve to know before they
+    // click a 5 MB file.
+    downloads: z
+      .array(
+        z.object({
+          label: z.string(),
+          href: z.string(),
+          note: z.string().optional(),
+        }),
+      )
+      .default([]),
+
     // --- Map -------------------------------------------------------------
     // A project can show a map two ways. Use ONE of these, not both:
     //
@@ -37,7 +66,7 @@ const projects = defineCollection({
     //
     //   layers  several named GeoJSON files, each with its own colour, each
     //           toggleable, together forming the legend. Use this when the
-    //           story needs more than one layer — a result over a basemap of
+    //           story needs more than one layer - a result over a basemap of
     //           context, points you can switch on and off, and so on.
     //
     // Both draw the same way; `layers` just adds the legend and the toggles.
@@ -65,6 +94,17 @@ const projects = defineCollection({
       .min(1)
       .optional(),
     mapCaption: z.string().optional(),
+
+    // Who produced the underlying data. Kept separate from `links` because
+    // provenance is a credit, not a "see also" - in GIS work it is often the
+    // first thing a knowledgeable reader looks for. `href` is optional; some
+    // sources have no public URL.
+    dataSource: z
+      .object({
+        label: z.string(),
+        href: z.string().optional(),
+      })
+      .optional(),
 
     // Optional outbound links (StoryMap, repo, PDF, publication).
     links: z

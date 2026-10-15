@@ -6,7 +6,7 @@
  * Both are dynamic routes over the same segment, and they coexist because each
  * only generates the paths its getStaticPaths returns, and those sets are
  * disjoint. If a project slug ever collides with a category slug, the build
- * fails on a duplicate route — noisily, which is what you want.
+ * fails on a duplicate route - noisily, which is what you want.
  */
 import { getCollection } from 'astro:content';
 import BaseLayout from '../../layouts/BaseLayout.astro';
@@ -17,7 +17,14 @@ import { projectCategories, type ProjectCategory } from '../../site';
 export async function getStaticPaths() {
   const all = await getCollection('projects', ({ data }) => !data.draft);
 
-  return projectCategories.map((category) => ({
+  // A category with nothing published gets no page, and CategoryTabs drops its
+  // tab to match - an empty "Nothing here yet" page is a placeholder by another
+  // name. It comes back on its own once a project lands in it.
+  const populated = projectCategories.filter((category) =>
+    all.some((project) => project.data.category === category.slug),
+  );
+
+  return populated.map((category) => ({
     params: { category: category.slug },
     props: {
       category,
@@ -40,7 +47,7 @@ interface Props {
 const { category, projects } = Astro.props;
 ---
 
-<BaseLayout title={`${category.label} — Projects`} description={category.blurb}>
+<BaseLayout title={`${category.label} - Projects`} description={category.blurb}>
   <h1>Projects</h1>
   <p class="muted">
     Selected work in spatial analysis, remote sensing and cartography. Each entry

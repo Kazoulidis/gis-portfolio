@@ -1,100 +1,222 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { site, projectCategories, projectsHref } from '../site';
+import {
+  summary,
+  roles,
+  degrees,
+  conferences,
+  certifications,
+  languages,
+  interests,
+  skills,
+  plainTitle,
+} from '../cv';
 import { getCollection } from 'astro:content';
 
-// Only categories flagged `homepage: true` in src/site.ts are eligible here.
-// This is the one page a recruiter is guaranteed to see, so the 30 daily
-// challenge entries stay out of it and let the real work show.
+// The newest work, whatever it happens to be - not a hand-picked list, so this
+// stays current on its own as projects are added. Categories opt in via the
+// `homepage` flag in src/site.ts.
+//
+// A thumbnail is the test for "finished". Unfilled challenge days are dated
+// later than the days already done, so without this the newest entries here
+// would all be empty placeholders - which is exactly what happened.
 const homepageCategories = projectCategories
   .filter((category) => category.homepage)
   .map((category) => category.slug);
 
+// `date` is the challenge day, so every entry would read "Nov 2025" and the
+// order would follow the prompt number rather than what was made most recently.
+// `created` is when the map was actually produced; fall back where it is absent.
+const madeOn = (entry: { data: { created?: Date; date: Date } }) =>
+  entry.data.created ?? entry.data.date;
+
 const recent = (
   await getCollection(
     'projects',
-    ({ data }) => !data.draft && homepageCategories.includes(data.category),
+    ({ data }) =>
+      !data.draft && Boolean(data.thumbnail) && homepageCategories.includes(data.category),
   )
 )
-  .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf())
-  .slice(0, 3);
+  .sort((a, b) => madeOn(b).valueOf() - madeOn(a).valueOf())
+  .slice(0, 5);
 
-// The sidebar. Group your skills the way you'd want them scanned — the first
-// group is the one people read.
-const skills = [
-  {
-    heading: 'GIS & Remote Sensing',
-    items: ['ArcGIS Pro', 'ArcGIS Online', 'QGIS', 'GDAL/OGR', 'ERDAS Imagine', 'SNAP'],
+// Day included: several of these fall in the same month, and "Aug 2026" four
+// times over says nothing.
+//
+// timeZone UTC because frontmatter dates parse as UTC midnight. Formatted in the
+// build machine's own zone, a build anywhere west of Greenwich would show every
+// date a day early.
+// schema.org Person, so search engines can tie searches for the name to this
+// site. alternateName links "Antonis", the name the printed maps are credited
+// to; it is metadata only and shows nowhere on the page.
+const person = {
+  '@context': 'https://schema.org',
+  '@type': 'Person',
+  name: site.name,
+  alternateName: 'Antonis Kazoulidis',
+  jobTitle: site.role.split(' | ')[0],
+  description: summary,
+  url: new URL('/', Astro.site).href,
+  image: new URL('/images/portrait.webp', Astro.site).href,
+  email: `mailto:${site.email}`,
+  address: {
+    '@type': 'PostalAddress',
+    addressLocality: 'Thessaloniki',
+    addressCountry: 'GR',
   },
-  {
-    heading: 'Programming',
-    items: ['Python (ArcPy, GeoPandas)', 'SQL / PostGIS', 'JavaScript (Leaflet)', 'R'],
+  alumniOf: {
+    '@type': 'CollegeOrUniversity',
+    name: 'Aristotle University of Thessaloniki',
   },
-  {
-    heading: 'Data & Web',
-    items: ['PostgreSQL', 'GeoServer', 'Google Earth Engine', 'FME'],
-  },
-  {
-    heading: 'Languages',
-    items: ['Greek — native', 'English — fluent'],
-  },
-];
+  knowsAbout: ['GIS', 'Cartography', 'Remote sensing', 'Photogrammetry', 'Geodesy', 'Python', 'PostGIS'],
+  sameAs: [site.linkedin].filter(Boolean),
+};
+
+const fullDate = (d: Date) =>
+  d.toLocaleDateString('en-GB', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
 ---
 
-<BaseLayout description={site.tagline}>
+<BaseLayout description={site.tagline} imageAlt={`Portrait of ${site.name}`}>
+  <script is:inline type="application/ld+json" slot="head" set:html={JSON.stringify(person)} />
   <div class="split">
     <div>
-      <p class="eyebrow">About</p>
-      <h1>{site.name}</h1>
-      <p class="lede">{site.tagline}</p>
+      <div class="masthead">
+        {/* Fixed intrinsic size so the name beside it never reflows while the
+            portrait loads, and eager because it sits above the fold. */}
+        <img
+          class="portrait"
+          src="/images/portrait.webp"
+          width="512"
+          height="512"
+          alt={`Portrait of ${site.name}`}
+          loading="eager"
+          decoding="async"
+        />
+        <div class="masthead__text">
+          <h1>{site.name}</h1>
+          <p class="role">{site.role}</p>
+        </div>
+      </div>
 
-      <!--
-        Two or three short paragraphs. Say what you do, what you have worked on,
-        and what you are looking for. Resist writing more — the projects page is
-        where the depth belongs.
-      -->
-      <p>
-        I am a GIS specialist based in {site.location}, working across spatial
-        analysis, remote sensing and cartographic design. My work has covered
-        environmental monitoring, land-use change and field data collection, and
-        I am equally comfortable in a desktop GIS, in Python, or in a spatial
-        database.
-      </p>
-      <p>
-        I care about the parts of this job that do not make it into screenshots:
-        clean data models, reproducible processing, and maps that answer the
-        question they were made for.
-      </p>
-      <p>
-        I am currently open to roles in spatial analysis and geospatial data
-        engineering. The best way to reach me is <a href={`mailto:${site.email}`}>
-          by email</a>.
-      </p>
+      <p class="lede">{summary}</p>
 
       {
         site.cv && (
           <p>
-            <a class="button" href={site.cv}>
+            <a class="button" href={site.cv} data-umami-event="cv-download" data-umami-event-from="about">
               Download CV (PDF)
             </a>
           </p>
         )
       }
 
-      <hr />
+      <h2 class="section">Experience</h2>
+      {
+        roles.map((role) => (
+          <article class="entry">
+            <div class="entry__date">{role.date}</div>
+            <div class="entry__body">
+              <h3 class="entry__title">{role.title}</h3>
+              <p class="entry__org">{role.org}</p>
+              <ul>
+                {role.points.map((point) => (
+                  <li>{point}</li>
+                ))}
+              </ul>
+            </div>
+          </article>
+        ))
+      }
 
-      <h2>Recent projects</h2>
-      <ul class="recent">
-        {
-          recent.map((project) => (
-            <li>
-              <a href={`/projects/${project.id}`}>{project.data.title}</a>
-              <span class="muted"> — {project.data.summary}</span>
-            </li>
-          ))
-        }
-      </ul>
+      <h2 class="section">Recent projects</h2>
+      {
+        recent.map((project) => (
+          <article class="entry">
+            <div class="entry__date">{fullDate(madeOn(project))}</div>
+            <div class="entry__body">
+              <h3 class="entry__title">
+                <a href={`/projects/${project.id}`}>{plainTitle(project.data.title)}</a>
+              </h3>
+              <p>{project.data.summary}</p>
+            </div>
+          </article>
+        ))
+      }
       <p><a href={projectsHref}>Browse all projects &rarr;</a></p>
+
+      <h2 class="section">Conferences &amp; presentations</h2>
+      {
+        conferences.map((talk) => (
+          <article class="entry">
+            <div class="entry__date">{talk.date}</div>
+            <div class="entry__body">
+              <h3 class="entry__title">{talk.org}</h3>
+              <p class="entry__org">{talk.title}</p>
+              <p>{talk.body}</p>
+            </div>
+          </article>
+        ))
+      }
+
+      <h2 class="section">Education</h2>
+      {
+        degrees.map((degree) => (
+          <article class="entry">
+            <div class="entry__date">{degree.date}</div>
+            <div class="entry__body">
+              <h3 class="entry__title">{degree.title}</h3>
+              <p class="entry__org">{degree.org}</p>
+              <ul>
+                {degree.points.map((point) => (
+                  <li>{point}</li>
+                ))}
+              </ul>
+            </div>
+          </article>
+        ))
+      }
+      {
+        certifications.map((cert) => (
+          <article class="entry">
+            {cert.date ? <div class="entry__date">{cert.date}</div> : <div class="entry__date" />}
+            <div class="entry__body">
+              <h3 class="entry__title">{cert.title}</h3>
+              <p class="entry__org">{cert.org}</p>
+            </div>
+          </article>
+        ))
+      }
+
+      <h2 class="section">Languages</h2>
+      {
+        languages.map((language) => (
+          <article class="entry">
+            <div class="entry__date">{language.name}</div>
+            <div class="entry__body">
+              <p class="language__level">{language.level}</p>
+            </div>
+          </article>
+        ))
+      }
+
+      <h2 class="section">Interests</h2>
+      {
+        interests.map((item) => (
+          <article class="entry">
+            <div class="entry__date" />
+            <div class="entry__body">
+              <h3 class="entry__title">{item.title}</h3>
+              <p>{item.body}</p>
+            </div>
+          </article>
+        ))
+      }
     </div>
 
     <aside class="sidebar">
@@ -103,6 +225,7 @@ const skills = [
         <li><a href={`mailto:${site.email}`}>Email</a></li>
         {site.linkedin && <li><a href={site.linkedin}>LinkedIn</a></li>}
         {site.github && <li><a href={site.github}>GitHub</a></li>}
+        <li>{site.location}</li>
       </ul>
 
       {
@@ -122,22 +245,75 @@ const skills = [
 </BaseLayout>
 
 <style>
+  /* Portrait beside the name rather than in the sidebar: the sidebar drops to
+     the very bottom of the page on narrow screens, which is no place for a
+     headshot. */
+  .masthead {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .masthead__text {
+    min-width: 0;
+  }
+
+  .portrait {
+    flex: none;
+    width: 6.5rem;
+    height: 6.5rem;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1px solid var(--rule);
+  }
+
+  @media (max-width: 30rem) {
+    .portrait {
+      width: 5rem;
+      height: 5rem;
+    }
+  }
+
+  .role {
+    font-size: 1rem;
+    color: var(--text-muted);
+    margin: -0.4rem 0 0;
+  }
+
   .lede {
     font-family: var(--font-serif);
-    font-size: 1.25rem;
-    line-height: 1.5;
+    font-size: 1.15rem;
+    line-height: 1.55;
     color: var(--text-muted);
     margin-bottom: 1.5rem;
   }
 
-  .recent {
-    list-style: none;
-    padding: 0;
+  .section {
+    margin-top: 2.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--rule);
+    font-size: 0.75rem;
+    font-family: var(--font-sans);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
   }
 
-  .recent li {
-    margin-bottom: 0.5rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 1px solid var(--rule);
+  .entry__title {
+    margin-top: 0;
+    font-size: 1rem;
+  }
+
+  /* A language row is just a name and a level, so it carries no heading and
+     needs its own top margin reset to sit level with its label. */
+  .language__level {
+    margin: 0;
+  }
+
+  /* Projects and interests carry no date, but still need the gutter so their
+     text lines up with the dated entries above. */
+  .entry__date:empty::before {
+    content: '';
   }
 </style>

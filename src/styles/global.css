@@ -15,7 +15,7 @@
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
 
-  /* Warm paper rather than pure white — markedly less glare over long reads. */
+  /* Warm paper rather than pure white - markedly less glare over long reads. */
   --bg: #f7f5f1;
   --bg-surface: #fdfcfa;
   --bg-subtle: #efece6;
@@ -25,13 +25,13 @@
   --accent: #1c5d5d;
   --accent-hover: #0f3d3d;
 
-  /* No background texture — a solid fill, by preference. If you ever want to
+  /* No background texture - a solid fill, by preference. If you ever want to
      try one again, this takes any CSS background-image (it was previously a
      tiling SVG noise data URI) and body applies it over --bg. */
   --texture: none;
 
   /* Line length, not page width. Around 72ch lands at ~75 characters per line,
-     which is the top of the comfortable range — going wider makes the eye lose
+     which is the top of the comfortable range - going wider makes the eye lose
      its place on the return sweep. Widen --page-width instead if you want less
      empty margin; the two are deliberately independent. */
   --measure: 72ch;
@@ -98,7 +98,7 @@ a {
 
 a:hover { color: var(--accent-hover); }
 
-/* Visible focus for keyboard users — recruiters tab through things. */
+/* Visible focus for keyboard users - recruiters tab through things. */
 a:focus-visible,
 button:focus-visible {
   outline: 2px solid var(--accent);
@@ -126,7 +126,12 @@ small,
 .page {
   max-width: var(--page-width);
   margin: 0 auto;
-  padding: 0 1.5rem;
+  /* Longhand on purpose: `.page` is a width-and-gutter utility and has no
+     business setting vertical padding. As a shorthand it beat the `main` rule
+     below on specificity and silently zeroed its top and bottom padding, so
+     every page sat flush against the header rule. */
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
 }
 
 main {
@@ -184,6 +189,9 @@ hr {
   display: flex;
   flex-wrap: wrap;
   gap: 1.5rem;
+  /* The About page drops the site title, leaving the nav as the only child of
+     a space-between row - which would pull it to the left. */
+  margin-left: auto;
 }
 
 .nav a {
@@ -387,10 +395,16 @@ hr {
   .project-item { grid-template-columns: 1fr; gap: 1rem; }
 }
 
+/* Square, because map exports are usually square or near it, and a square box
+   crops them least. `height: auto` is load-bearing: an <img> carries its height
+   attribute as a presentational hint, which beats `aspect-ratio` unless one
+   dimension is auto - without it, thumbnails render at the attribute's height
+   instead of the ratio set here. */
 .project-item__thumb {
   display: block;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 1 / 1;
   width: 100%;
+  height: auto;
   object-fit: cover;
   border: 1px solid var(--rule);
   border-radius: var(--radius);

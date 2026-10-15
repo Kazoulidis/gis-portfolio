@@ -5,14 +5,34 @@ import '../styles/global.css';
 interface Props {
   title?: string;
   description?: string;
+  /** Link-preview image, a path on this site. Defaults to the site card. */
+  image?: string;
+  imageAlt?: string;
+  /** 'article' for a project page, 'website' otherwise. */
+  type?: 'website' | 'article';
 }
 
-const { title, description = site.tagline } = Astro.props;
-const pageTitle = title ? `${title} — ${site.name}` : `${site.name} — ${site.role}`;
+const {
+  title,
+  description = site.tagline,
+  image = '/og/default.jpg',
+  imageAlt = `${site.name}, ${site.role}`,
+  type = 'website',
+} = Astro.props;
+
+// Search results cut titles at about 60 characters, so the home page uses the
+// first half of the role only ("GIS Specialist"); the full role is on the page.
+const pageTitle = title
+  ? `${title} - ${site.name}`
+  : `${site.name} - ${site.role.split(' | ')[0]}`;
 
 // Normalise so "/projects/foo" marks the "Projects" tab, and trailing
-// slashes or .html suffixes don't break the match.
-const path = Astro.url.pathname.replace(/\.html$/, '').replace(/\/$/, '') || '/';
+// slashes or .html suffixes don't break the match. `build.format: 'file'`
+// makes the home page "/index.html" at build time while dev serves it as "/",
+// so fold the bare "index" back to the root or the two disagree.
+const path =
+  Astro.url.pathname.replace(/\.html$/, '').replace(/\/index$/, '/').replace(/(.)\/$/, '$1') ||
+  '/';
 // A nav item may set `match` to a path prefix it owns, so Projects stays
 // highlighted across every /projects/* page rather than only the one it links
 // to. Falls back to the href.
@@ -20,6 +40,11 @@ const isCurrent = (item: { href: string; match?: string }) => {
   const base = item.match ?? item.href;
   return base === '/' ? path === '/' : path === base || path.startsWith(base + '/');
 };
+
+// The About page opens with the name and role in full, beside the portrait, so
+// the header would repeat both of them two lines above. Every other page needs
+// them, since nothing else on the page says whose site this is.
+const isHome = path === '/';
 ---
 
 <!doctype html>
@@ -30,10 +55,42 @@ const isCurrent = (item: { href: string; match?: string }) => {
     <title>{pageTitle}</title>
     <meta name="description" content={description} />
     <meta name="author" content={site.name} />
+    <!-- Declared explicitly: without it every browser falls back to requesting
+         /favicon.ico, which 404s on each page load. -->
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    {
+      /* Umami, self-hosted: no cookies and no stored IP addresses; the country
+         is looked up at collection time and only that is kept. is:inline so
+         Astro leaves the tag exactly as written. Clicks on elements carrying
+         data-umami-event are recorded as events (CV and map downloads). */
+      site.analytics.websiteId && (
+        <script
+          is:inline
+          defer
+          src={site.analytics.script}
+          data-website-id={site.analytics.websiteId}
+          data-host-url={site.analytics.endpoint.replace(/\/api\/.*$/, '')}
+          data-domains={site.analytics.domains}
+          data-do-not-track="true"
+        />
+      )
+    }
     <link rel="canonical" href={new URL(path, Astro.site)} />
+    <link rel="sitemap" href="/sitemap.xml" />
+    {/* Link previews (LinkedIn, X, chat apps). Absolute URLs: crawlers don't
+        resolve relative ones. The images are rendered at build time by
+        src/pages/og/, at 1200 x 630. */}
+    <meta property="og:site_name" content={site.name} />
     <meta property="og:title" content={pageTitle} />
     <meta property="og:description" content={description} />
-    <meta property="og:type" content="website" />
+    <meta property="og:type" content={type} />
+    <meta property="og:url" content={new URL(path, Astro.site)} />
+    <meta property="og:image" content={new URL(image, Astro.site)} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={imageAlt} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <slot name="head" />
   </head>
 
   <body>
@@ -41,16 +98,20 @@ const isCurrent = (item: { href: string; match?: string }) => {
 
     <header class="site-header">
       <div class="page site-header__inner">
-        <a class="site-title" href="/">
-          {site.name}
-          <span>{site.role}</span>
-        </a>
+        {
+          !isHome && (
+            <a class="site-title" href="/">
+              {site.name}
+              <span>{site.role}</span>
+            </a>
+          )
+        }
         <nav class="nav" aria-label="Main">
           {
             nav.map((item) => (
               // 'load' rather than the site-wide 'hover' default: the nav is
               // always on screen, there are only five of them, and they are a
-              // few KB each — so fetch them up front and every tab switch is a
+              // few KB each - so fetch them up front and every tab switch is a
               // cache hit, even for a keyboard user who never hovers.
               // ('viewport' would do the same via IntersectionObserver; 'load'
               // fires unconditionally, which for an always-visible nav is the
@@ -77,6 +138,7 @@ const isCurrent = (item: { href: string; match?: string }) => {
         <span>&copy; {new Date().getFullYear()} {site.name}</span>
         <span>
           <a href={`mailto:${site.email}`}>{site.email}</a>
+          &middot; <a href="/privacy">Privacy</a>
         </span>
       </div>
     </footer>

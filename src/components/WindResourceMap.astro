@@ -1,0 +1,556 @@
+---
+/**
+ * Greece's wind resource, with the licensed turbine fleet on top.
+ *
+ * The wind grid is 5,865,840 cells of 150 m at each of three hub heights - far
+ * too many polygons to hand a browser as GeoJSON. So each height ships as a
+ * lossless PNG in which the mean annual speed is encoded into the red and green
+ * channels (value x 100, plus one; zero means no data). The page draws that
+ * image once to an off-screen canvas, colours a scaled-down copy for display,
+ * and reads a single pixel back for the exact value when a cell is clicked.
+ * Lossless in, lossless out: the figure in the popup is the modelled cell
+ * value, not a sample of a picture of it.
+ *
+ * Turbines are ordinary GeoJSON - 9,088 points across the three licence types -
+ * and stay hidden until the map is zoomed in far enough for individual machines
+ * to mean anything.
+ */
+interface Props {
+  /** Path to the grid's metadata JSON; the images sit beside it. */
+  src: string;
+  caption?: string;
+}
+
+const { src, caption } = Astro.props;
+---
+
+<figure class="map-figure">
+  <div class="wind" data-wind data-src={src}>
+    <div class="wind__bar">
+      <div class="wind__group" role="group" aria-label="Hub height">
+        <span class="wind__label">Hub height</span>
+        <button type="button" class="wind__btn" data-height="80">80 m</button>
+        <button type="button" class="wind__btn is-on" data-height="100">100 m</button>
+        <button type="button" class="wind__btn" data-height="120">120 m</button>
+      </div>
+      <div class="wind__group" role="group" aria-label="Turbines">
+        <span class="wind__label">Turbines</span>
+        <label class="wind__check"
+          ><input type="checkbox" data-turbine="operation" checked /><span
+            class="wind__dot"
+            style="background:#14532d"></span>Operating</label
+        >
+        <label class="wind__check"
+          ><input type="checkbox" data-turbine="installation" checked /><span
+            class="wind__dot"
+            style="background:#22c55e"></span>Installation</label
+        >
+        <label class="wind__check"
+          ><input type="checkbox" data-turbine="production" checked /><span
+            class="wind__dot"
+            style="background:#e08214"></span>Production</label
+        >
+      </div>
+    </div>
+
+    <div
+      class="map map--tall"
+      data-wind-map
+      role="application"
+      aria-label={caption ?? 'Interactive map of Greece’s wind resource'}
+    >
+      <p class="wind__status" data-wind-status>Loading the wind grid&hellip;</p>
+    </div>
+
+    <p class="wind__note" data-wind-note>
+      Turbines appear once you zoom in. The 80 m and 120 m grids are capped at
+      20 m/s; the 100 m grid is uncapped and reaches 32.1 m/s.
+    </p>
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<script>
+  import * as L from 'leaflet';
+  import 'leaflet/dist/leaflet.css';
+
+  const BASEMAP = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+  const ATTRIBUTION =
+    'Tiles &copy; <a href="https://www.esri.com/">Esri</a> - Esri, HERE, Garmin, ' +
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
+  /** The printed map's eight classes, sampled from its legend. */
+  const CLASSES: { min: number; label: string; colour: string }[] = [
+    { min: 10, label: '> 10', colour: '#ff0000' },
+    { min: 9, label: '9 - 10', colour: '#fe5200' },
+    { min: 8, label: '8 - 9', colour: '#fe7f3f' },
+    { min: 7, label: '7 - 8', colour: '#fefe2a' },
+    { min: 6, label: '6 - 7', colour: '#fefe9a' },
+    { min: 5, label: '5 - 6', colour: '#0883fe' },
+    { min: 4, label: '4 - 5', colour: '#00ebeb' },
+    { min: 0, label: '< 4', colour: '#affefe' },
+  ];
+
+  const LICENCES = [
+    { key: 'operation', label: 'Operating', colour: '#14532d' },
+    { key: 'installation', label: 'Installation', colour: '#22c55e' },
+    { key: 'production', label: 'Production', colour: '#e08214' },
+  ] as const;
+
+  /** Below this the fleet is a smear of dots that says nothing. */
+  const TURBINE_ZOOM = 11;
+  /** How much the display copy is shrunk. The grid is 5,466 x 5,262. */
+  const DISPLAY_DIVISOR = 3;
+
+  const rgbFor = (v: number) => {
+    for (const c of CLASSES) if (v >= c.min) return c.colour;
+    return CLASSES[CLASSES.length - 1].colour;
+  };
+  const hexToRgb = (hex: string): [number, number, number] => [
+    parseInt(hex.slice(1, 3), 16),
+    parseInt(hex.slice(3, 5), 16),
+    parseInt(hex.slice(5, 7), 16),
+  ];
+  const CLASS_RGB = CLASSES.map((c) => hexToRgb(c.colour));
+
+  const escapeHtml = (v: unknown) =>
+    String(v).replace(
+      /[&<>"']/g,
+      (c) =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string,
+    );
+  const num = (n: number, d = 0) =>
+    n.toLocaleString('en-GB', { minimumFractionDigits: d, maximumFractionDigits: d });
+
+  interface Meta {
+    w: number;
+    h: number;
+    /** Web Mercator bounds of the encoded image, in metres. */
+    x0: number;
+    y0: number;
+    res: number;
+    heights: Record<string, { min: number; max: number; capped: boolean }>;
+  }
+
+  interface Grid {
+    ctx: CanvasRenderingContext2D;
+    overlay: L.ImageOverlay;
+  }
+
+  async function init(root: HTMLElement) {
+    const el = root.querySelector<HTMLElement>('[data-wind-map]');
+    const statusEl = root.querySelector<HTMLElement>('[data-wind-status]');
+    if (!el) return;
+    const say = (msg: string) => {
+      if (statusEl) statusEl.textContent = msg;
+    };
+
+    let meta: Meta;
+    try {
+      const res = await fetch(root.dataset.src || '/data/wind/wind-meta.json');
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      meta = await res.json();
+    } catch (err) {
+      console.error('Could not load the wind metadata:', err);
+      say('This map’s data could not be loaded.');
+      return;
+    }
+
+    const map = L.map(el, { scrollWheelZoom: true, preferCanvas: true });
+    // Esri's canvas basemaps have real tiles only to z16 over Greece; past that
+    // they answer with a "Map data not yet available" placeholder. maxNativeZoom
+    // makes Leaflet stretch the z16 tiles instead, so the data can still be
+    // zoomed into.
+    L.tileLayer(BASEMAP, { attribution: ATTRIBUTION, maxZoom: 19, maxNativeZoom: 16 }).addTo(map);
+    L.control.scale({ imperial: false }).addTo(map);
+
+    // The encoded image is in Web Mercator, so its corners unproject straight
+    // onto the map and Leaflet can place it without distortion.
+    const merc = L.Projection.SphericalMercator;
+    const nw = merc.unproject(L.point(meta.x0, meta.y0));
+    const se = merc.unproject(
+      L.point(meta.x0 + meta.w * meta.res, meta.y0 - meta.h * meta.res),
+    );
+    const bounds = L.latLngBounds(se, nw);
+    map.fitBounds(bounds, { padding: [10, 10] });
+
+    // --- the wind grid -----------------------------------------------------
+    const grids = new Map<string, Grid>();
+    let height = '100';
+
+    /** Decode one height's PNG: a full-size canvas for lookups, a small one to show. */
+    async function loadGrid(h: string): Promise<Grid> {
+      const cached = grids.get(h);
+      if (cached) return cached;
+
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const i = new Image();
+        i.onload = () => resolve(i);
+        i.onerror = () => reject(new Error(`could not load the ${h} m grid`));
+        i.src = `/data/wind/wind-h${h}.png`;
+      });
+
+      // Full resolution, kept only so a click can read one pixel back. It is
+      // never read in bulk - that would mean a 115 MB array.
+      const full = document.createElement('canvas');
+      full.width = meta.w;
+      full.height = meta.h;
+      const fctx = full.getContext('2d', { willReadFrequently: true })!;
+      fctx.imageSmoothingEnabled = false;
+      fctx.drawImage(img, 0, 0);
+
+      // A shrunken copy is what actually gets coloured and displayed. Nearest
+      // neighbour, because interpolating an encoded value is meaningless.
+      const dw = Math.round(meta.w / DISPLAY_DIVISOR);
+      const dh = Math.round(meta.h / DISPLAY_DIVISOR);
+      const small = document.createElement('canvas');
+      small.width = dw;
+      small.height = dh;
+      const sctx = small.getContext('2d', { willReadFrequently: true })!;
+      sctx.imageSmoothingEnabled = false;
+      sctx.drawImage(img, 0, 0, dw, dh);
+
+      const id = sctx.getImageData(0, 0, dw, dh);
+      const d = id.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const enc = (d[i] << 8) | d[i + 1];
+        if (enc === 0) {
+          d[i + 3] = 0; // no data: let the basemap through
+          continue;
+        }
+        const v = (enc - 1) / 100;
+        let k = CLASS_RGB.length - 1;
+        for (let c = 0; c < CLASSES.length; c++)
+          if (v >= CLASSES[c].min) {
+            k = c;
+            break;
+          }
+        d[i] = CLASS_RGB[k][0];
+        d[i + 1] = CLASS_RGB[k][1];
+        d[i + 2] = CLASS_RGB[k][2];
+        d[i + 3] = 235;
+      }
+      sctx.putImageData(id, 0, 0);
+
+      const overlay = L.imageOverlay(small.toDataURL('image/png'), bounds, {
+        opacity: 1,
+        interactive: false,
+        className: 'wind__overlay',
+      });
+      const grid: Grid = { ctx: fctx, overlay };
+      grids.set(h, grid);
+      return grid;
+    }
+
+    const showHeight = async (h: string) => {
+      say(`Loading the ${h} m grid…`);
+      let grid: Grid;
+      try {
+        grid = await loadGrid(h);
+      } catch (err) {
+        console.error(err);
+        say('This map’s data could not be loaded.');
+        return;
+      }
+      for (const [k, g] of grids) if (k !== h && map.hasLayer(g.overlay)) map.removeLayer(g.overlay);
+      if (!map.hasLayer(grid.overlay)) grid.overlay.addTo(map);
+      grid.overlay.bringToBack();
+      // Keep the basemap beneath the grid but the turbines above it.
+      height = h;
+      statusEl?.remove();
+      root.querySelectorAll<HTMLButtonElement>('[data-height]').forEach((b) =>
+        b.classList.toggle('is-on', b.dataset.height === h),
+      );
+      drawLegend();
+    };
+
+    /** The exact modelled value under a point, or null outside the grid. */
+    const valueAt = (latlng: L.LatLng): number | null => {
+      const grid = grids.get(height);
+      if (!grid) return null;
+      const p = merc.project(latlng);
+      const px = Math.floor((p.x - meta.x0) / meta.res);
+      const py = Math.floor((meta.y0 - p.y) / meta.res);
+      if (px < 0 || py < 0 || px >= meta.w || py >= meta.h) return null;
+      const d = grid.ctx.getImageData(px, py, 1, 1).data;
+      const enc = (d[0] << 8) | d[1];
+      return enc === 0 ? null : (enc - 1) / 100;
+    };
+
+    const popup = L.popup({ maxWidth: 300, autoPan: true });
+
+    map.on('click', (ev) => {
+      // A turbine click is handled by its own marker; this is the grid.
+      const v = valueAt(ev.latlng);
+      if (v === null) return;
+      const info = meta.heights[height];
+      const cls = CLASSES.find((c) => v >= c.min) ?? CLASSES[CLASSES.length - 1];
+      let html = `<div class="wind-popup">`;
+      html += `<p class="wind-popup__label">Mean annual wind speed at ${height} m</p>`;
+      html += `<p class="wind-popup__value">${num(v, 2)}<span> m/s</span></p>`;
+      html += `<p class="wind-popup__meta">Class ${escapeHtml(cls.label)} m/s &middot; 150 m cell</p>`;
+      if (info?.capped && v >= 20) {
+        html += `<p class="wind-popup__warn">This grid is capped at 20 m/s, so the true value may be higher.</p>`;
+      }
+      html += `</div>`;
+      popup.setLatLng(ev.latlng).setContent(html).openOn(map);
+    });
+
+    // --- turbines ----------------------------------------------------------
+    const turbineLayers = new Map<string, L.LayerGroup>();
+    const wanted = new Set(LICENCES.map((l) => l.key));
+
+    await Promise.all(
+      LICENCES.map(async (lic) => {
+        const group = L.layerGroup();
+        turbineLayers.set(lic.key, group);
+        try {
+          const res = await fetch(`/data/wind/turbines-${lic.key}.geojson`);
+          if (!res.ok) throw new Error(`${res.status}`);
+          const fc: GeoJSON.FeatureCollection = await res.json();
+          L.geoJSON(fc, {
+            pointToLayer: (_f, latlng) =>
+              L.circleMarker(latlng, {
+                radius: 4,
+                color: '#ffffff',
+                weight: 1,
+                fillColor: lic.colour,
+                fillOpacity: 1,
+              }),
+            onEachFeature: (feature, lyr) => {
+              lyr.on('click', (ev) => {
+                L.DomEvent.stopPropagation(ev as unknown as Event);
+                const p = feature.properties as Record<string, unknown>;
+                const row = (k: string, v: unknown, unit = '') =>
+                  v === undefined || v === null || v === '' || v === 0
+                    ? ''
+                    : `<tr><th>${k}</th><td>${escapeHtml(v)}${unit}</td></tr>`;
+                let html = `<div class="wind-popup">`;
+                html += `<p class="wind-popup__label"><span class="wind__dot" style="background:${lic.colour}"></span>${lic.label} licence</p>`;
+                html += `<h3 class="wind-popup__name">${escapeHtml(p.wind_turbine_model || 'Wind turbine')}</h3>`;
+                html += `<table class="wind-popup__table"><tbody>`;
+                html += row('Operator', p.wind_turbine_company);
+                html += row('Registry no.', p.wind_turbine_registry_number);
+                html += row('Rated power', p.wind_turbine_power, ' MW');
+                html += row('Maximum power', p.wind_turbine_max_power, ' MW');
+                html += row('Rotor diameter', p.wind_turbine_diameter, ' m');
+                html += row('Hub height', p.wind_turbine_height, ' m');
+                html += row('Turbine ID', p.wind_turbine_id);
+                html += `</tbody></table>`;
+                // What the ground beneath it is modelled to do.
+                const v = valueAt((ev as L.LeafletMouseEvent).latlng);
+                if (v !== null) {
+                  html += `<p class="wind-popup__meta">Modelled wind at ${height} m here: <strong>${num(v, 2)} m/s</strong></p>`;
+                }
+                html += `</div>`;
+                popup.setLatLng((ev as L.LeafletMouseEvent).latlng).setContent(html).openOn(map);
+              });
+            },
+          }).addTo(group);
+        } catch (err) {
+          console.error(`Could not load the ${lic.key} turbines:`, err);
+        }
+      }),
+    );
+
+    const syncTurbines = () => {
+      const close = map.getZoom() >= TURBINE_ZOOM;
+      for (const lic of LICENCES) {
+        const group = turbineLayers.get(lic.key)!;
+        const shouldShow = close && wanted.has(lic.key);
+        if (shouldShow && !map.hasLayer(group)) group.addTo(map);
+        else if (!shouldShow && map.hasLayer(group)) map.removeLayer(group);
+      }
+      const note = root.querySelector<HTMLElement>('[data-wind-note]');
+      if (note) note.classList.toggle('is-zoomed', close);
+    };
+    map.on('zoomend', syncTurbines);
+
+    root.querySelectorAll<HTMLInputElement>('[data-turbine]').forEach((input) =>
+      input.addEventListener('change', () => {
+        const key = input.dataset.turbine!;
+        if (input.checked) wanted.add(key);
+        else wanted.delete(key);
+        syncTurbines();
+      }),
+    );
+
+    root.querySelectorAll<HTMLButtonElement>('[data-height]').forEach((b) =>
+      b.addEventListener('click', () => showHeight(b.dataset.height!)),
+    );
+
+    // --- legend ------------------------------------------------------------
+    const control = new L.Control({ position: 'bottomleft' });
+    let legendBox: HTMLElement | null = null;
+    control.onAdd = () => {
+      const box = L.DomUtil.create('div', 'map-legend');
+      L.DomEvent.disableClickPropagation(box);
+      L.DomEvent.disableScrollPropagation(box);
+      legendBox = box;
+      return box;
+    };
+    control.addTo(map);
+
+    const drawLegend = () => {
+      if (!legendBox) return;
+      const info = meta.heights[height];
+      let h = `<div class="map-legend__title">Mean annual wind speed (m/s)</div>`;
+      for (const c of CLASSES) {
+        h +=
+          `<div class="map-legend__class">` +
+          `<span class="map-legend__swatch" style="background:${c.colour}"></span>` +
+          `<span class="map-legend__name">${c.label}</span></div>`;
+      }
+      h += `<p class="map-legend__status">At ${height} m${
+        info ? `, ${info.min.toFixed(2)} to ${info.max.toFixed(2)} m/s` : ''
+      }${info?.capped ? ' (capped)' : ''}</p>`;
+      legendBox.innerHTML = h;
+    };
+
+    await showHeight('100');
+    syncTurbines();
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-wind]').forEach(init);
+</script>
+
+<style is:global>
+  .wind__bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.5rem;
+    align-items: center;
+    margin-bottom: 0.6rem;
+    font-size: 0.78rem;
+  }
+  .wind__group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+  }
+  .wind__label {
+    color: var(--text-muted);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    margin-right: 0.15rem;
+  }
+  .wind__btn {
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    background: none;
+    color: inherit;
+    font: inherit;
+    padding: 0.12rem 0.6rem;
+    cursor: pointer;
+  }
+  .wind__btn:hover {
+    border-color: var(--text-muted);
+  }
+  .wind__btn.is-on {
+    background: var(--text);
+    color: var(--bg);
+    border-color: var(--text);
+  }
+  .wind__check {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    cursor: pointer;
+  }
+  .wind__dot {
+    width: 0.65rem;
+    height: 0.65rem;
+    border-radius: 50%;
+    border: 1px solid rgba(0, 0, 0, 0.35);
+    display: inline-block;
+    flex: none;
+  }
+  .wind__note {
+    max-width: none;
+    margin: 0.5rem 0 0;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+  .wind__note.is-zoomed {
+    opacity: 0.55;
+  }
+  .wind__status {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: grid;
+    place-items: center;
+    margin: 0;
+    max-width: none;
+    pointer-events: none;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+  /* The grid is a data image; smoothing it would blur class boundaries that
+     are meant to be crisp. */
+  .wind__overlay {
+    image-rendering: pixelated;
+  }
+
+  .wind-popup__label {
+    margin: 0;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+  .wind-popup__value {
+    margin: 0.1rem 0 0;
+    font-size: 1.6rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .wind-popup__value span {
+    font-size: 0.85rem;
+    font-weight: 400;
+    color: var(--text-muted);
+    margin-left: 0.15rem;
+  }
+  .wind-popup__name {
+    margin: 0.15rem 0 0.4rem;
+    font-size: 0.95rem;
+  }
+  .wind-popup__meta {
+    margin: 0.35rem 0 0;
+    font-size: 0.74rem;
+    color: var(--text-muted);
+  }
+  .wind-popup__warn {
+    margin: 0.35rem 0 0;
+    font-size: 0.74rem;
+    color: #9a3412;
+  }
+  .wind-popup__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.74rem;
+  }
+  .wind-popup__table th {
+    text-align: left;
+    font-weight: 400;
+    color: var(--text-muted);
+    padding: 0.12rem 0.5rem 0.12rem 0;
+    border-top: 1px solid var(--rule);
+    white-space: nowrap;
+  }
+  .wind-popup__table td {
+    text-align: right;
+    padding: 0.12rem 0;
+    border-top: 1px solid var(--rule);
+    font-variant-numeric: tabular-nums;
+  }
+  .map-legend__swatch {
+    flex: none;
+    width: 1.1rem;
+    height: 0.75rem;
+    border: 1px solid rgba(0, 0, 0, 0.35);
+  }
+</style>

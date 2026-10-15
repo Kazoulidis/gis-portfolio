@@ -2,16 +2,17 @@
 import { defineConfig } from 'astro/config';
 
 export default defineConfig({
-  // Change this to your real domain before deploying. It is used for
-  // canonical URLs and the sitemap.
-  site: 'https://example.com',
+  // Used for canonical URLs and the og: metadata. It must match the hostname
+  // Nginx Proxy Manager serves, or every page will advertise a canonical URL
+  // that is not the one it was fetched from.
+  site: 'https://portfolio.kazoulidis.com',
   build: {
     // Emits /projects/foo.html instead of /projects/foo/index.html.
-    // Slightly simpler to serve from nginx; see deploy/nginx.conf.
+    // Slightly simpler to serve from nginx; see docker/nginx.conf.
     format: 'file',
   },
 
-  // There is no combined projects index — the Projects nav item points straight
+  // There is no combined projects index - the Projects nav item points straight
   // at the first category (see `projectsHref` in src/site.ts). This only catches
   // anyone who types or bookmarks the bare /projects. Nothing on the site links
   // here, so the redirect hop is never on a real navigation path.
