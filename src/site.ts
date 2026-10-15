@@ -19,14 +19,14 @@ export const site = {
   github: null,
   // Drop the file at public/cv.pdf, or set to null to hide the CV links.
   cv: '/cv.pdf',
-  // Self-hosted Umami (the stack in E:\Claude\umami). The tracker is only
+  // Self-hosted Umami (in the portfolio stack on the VPS). The tracker is only
   // added once `websiteId` is filled in - copy it from Umami after adding the
   // site there. `script` must match TRACKER_SCRIPT_NAME in that compose file,
   // and `endpoint` its COLLECT_API_ENDPOINT.
   analytics: {
     script: 'https://analytics.kazoulidis.com/site.js',
     endpoint: 'https://analytics.kazoulidis.com/api/k',
-    websiteId: '',
+    websiteId: '655cd38d-46c9-45e9-bd8a-d262295655a5',
     // Only count visits on the live site, never local previews.
     domains: 'portfolio.kazoulidis.com',
   },
