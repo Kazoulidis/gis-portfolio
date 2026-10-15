@@ -251,7 +251,7 @@ stack on the same box, terminates TLS and proxies to it.
 
 | Piece | Where |
 | --- | --- |
-| Compose file | `docker-compose.yml` → `/home/debian/docker/portfolio/` |
+| Compose file | kept outside this repo (it holds Umami's secrets): `E:\Claudeps\portfolio\docker-compose.yml` → `/home/debian/docker/portfolio/` |
 | Nginx config | `docker/nginx.conf` → `/home/debian/docker/appdata/portfolio/nginx.conf` |
 | Built site | `dist/` → `/home/debian/docker/appdata/portfolio/site/` |
 | Host port | `8082`; NPM forwards `portfolio.kazoulidis.com` to `172.17.0.1:8082` |
@@ -274,8 +274,9 @@ Two settings in `docker/nginx.conf` are load-bearing:
 - Cache lifetimes are set with `expires`, not `add_header`. A location that
   declares any `add_header` drops the server-level security headers.
 
-Analytics: self-hosted Umami, a separate stack (see `analytics` in
-`src/site.ts`). The tracker is only added once a website ID is set there.
+Analytics: self-hosted Umami, in the same compose file as the site, with its
+data under `appdata/portfolio/umami/` (see `analytics` in `src/site.ts`). The
+tracker is only added once a website ID is set there.
 
 ## Design notes
 
