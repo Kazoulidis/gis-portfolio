@@ -41,6 +41,7 @@ const { layers, caption } = Astro.props;
 
 <script>
   import * as L from 'leaflet';
+  import { whenNear } from '../lazy';
   import 'leaflet/dist/leaflet.css';
 
   const BASEMAP = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
@@ -261,7 +262,9 @@ const { layers, caption } = Astro.props;
     control.addTo(map);
   }
 
-  document.querySelectorAll<HTMLElement>('[data-reliefmap]').forEach(initMap);
+  // Started when the map nears the viewport, not on page load: it sits
+  // below the fold and its data runs to megabytes (see src/lazy.ts).
+  document.querySelectorAll<HTMLElement>('[data-reliefmap]').forEach((el) => whenNear(el, () => initMap(el)));
 </script>
 
 <style is:global>

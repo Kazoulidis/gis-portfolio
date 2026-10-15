@@ -103,6 +103,7 @@ const { src, caption } = Astro.props;
 
 <script>
   import * as L from 'leaflet';
+  import { whenNear } from '../lazy';
   import 'leaflet/dist/leaflet.css';
 
   // A dark basemap, because the subject is fire: warm polygons need somewhere
@@ -615,7 +616,9 @@ const { src, caption } = Astro.props;
     legend.addTo(map);
   }
 
-  document.querySelectorAll<HTMLElement>('[data-firemap]').forEach(initMap);
+  // Started when the map nears the viewport, not on page load: it sits
+  // below the fold and its data runs to megabytes (see src/lazy.ts).
+  document.querySelectorAll<HTMLElement>('[data-firemap]').forEach((el) => whenNear(el, () => initMap(el)));
 </script>
 
 <style is:global>

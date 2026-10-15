@@ -34,7 +34,8 @@ import { site } from '../site';
   <p>
     Like most web servers, this one keeps standard access logs: IP address, time, the
     page requested and the browser. They are used for security and troubleshooting
-    only, and are deleted after a limited period.
+    only, are capped in size, and old entries are deleted automatically as new ones
+    are written.
   </p>
 
   <h2>Map backgrounds</h2>

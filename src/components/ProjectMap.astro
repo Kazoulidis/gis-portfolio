@@ -58,6 +58,7 @@ const { layers, center = [37.98, 23.73], zoom = 6, caption, fit = true } = Astro
   // Namespace import, not a default import: Leaflet's ESM build (which is what
   // Vite resolves) exports named bindings only and has no default export.
   import * as L from 'leaflet';
+  import { whenNear } from '../lazy';
   import 'leaflet/dist/leaflet.css';
 
   interface LayerSpec {
@@ -257,7 +258,9 @@ const { layers, center = [37.98, 23.73], zoom = 6, caption, fit = true } = Astro
     }
   }
 
-  document.querySelectorAll<HTMLElement>('[data-map]').forEach(initMap);
+  // Started when the map nears the viewport, not on page load: it sits
+  // below the fold and its data runs to megabytes (see src/lazy.ts).
+  document.querySelectorAll<HTMLElement>('[data-map]').forEach((el) => whenNear(el, () => initMap(el)));
 </script>
 
 <style is:global>

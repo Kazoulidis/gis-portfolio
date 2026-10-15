@@ -62,6 +62,7 @@ const { src, caption } = Astro.props;
 
 <script>
   import * as L from 'leaflet';
+  import { whenNear } from '../lazy';
   import 'leaflet/dist/leaflet.css';
 
   const BASEMAP = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
@@ -178,6 +179,10 @@ const { src, caption } = Astro.props;
     const mTitle = root.querySelector<HTMLElement>('[data-map-title]');
     const mCount = root.querySelector<HTMLElement>('[data-map-counter]');
     if (!el) return;
+
+    // The carousel above starts at once; the choropleth and its data wait
+    // until the map is about to scroll into view (see src/lazy.ts).
+    await new Promise<void>((resolve) => whenNear(el, resolve));
 
     // Canvas rather than SVG: 75 units carry 1,166 rings between them, most of
     // which are islands, and that many SVG paths is a visible drag on panning.

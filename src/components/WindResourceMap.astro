@@ -72,6 +72,7 @@ const { src, caption } = Astro.props;
 
 <script>
   import * as L from 'leaflet';
+  import { whenNear } from '../lazy';
   import 'leaflet/dist/leaflet.css';
 
   const BASEMAP = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
@@ -411,7 +412,9 @@ const { src, caption } = Astro.props;
     syncTurbines();
   }
 
-  document.querySelectorAll<HTMLElement>('[data-wind]').forEach(init);
+  // Started when the map nears the viewport, not on page load: it sits
+  // below the fold and its data runs to megabytes (see src/lazy.ts).
+  document.querySelectorAll<HTMLElement>('[data-wind]').forEach((el) => whenNear(el, () => init(el)));
 </script>
 
 <style is:global>
