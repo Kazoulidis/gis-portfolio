@@ -251,7 +251,7 @@ stack on the same box, terminates TLS and proxies to it.
 
 | Piece | Where |
 | --- | --- |
-| Compose file | kept outside this repo (it holds Umami's secrets): `E:\Claudeps\portfolio\docker-compose.yml` → `/home/debian/docker/portfolio/` |
+| Compose file | kept outside this repo (it holds Umami's secrets): `E:\Claude\vps\portfolio\docker-compose.yml` → `/home/debian/docker/portfolio/` |
 | Nginx config | `docker/nginx.conf` → `/home/debian/docker/appdata/portfolio/nginx.conf` |
 | Built site | `dist/` → `/home/debian/docker/appdata/portfolio/site/` |
 | Host port | `8082`; NPM forwards `portfolio.kazoulidis.com` to `172.17.0.1:8082` |
