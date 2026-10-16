@@ -62,17 +62,28 @@ const isHome = path === '/';
       /* Umami, self-hosted: no cookies and no stored IP addresses; the country
          is looked up at collection time and only that is kept. is:inline so
          Astro leaves the tag exactly as written. Clicks on elements carrying
-         data-umami-event are recorded as events (CV and map downloads). */
+         data-umami-event are recorded as events (CV and map downloads).
+         The tracker runs umamiBeforeSend before every send and drops it when
+         that returns nothing. Browsers driven by automation (headless Chrome,
+         Selenium, Playwright) set navigator.webdriver; real visitors never do,
+         so this keeps the simpler bots out of the stats. */
       site.analytics.websiteId && (
-        <script
-          is:inline
-          defer
-          src={site.analytics.script}
-          data-website-id={site.analytics.websiteId}
-          data-host-url={site.analytics.endpoint.replace(/\/api\/.*$/, '')}
-          data-domains={site.analytics.domains}
-          data-do-not-track="true"
-        />
+        <>
+          <script is:inline>
+            window.umamiBeforeSend = (type, payload) =>
+              navigator.webdriver ? null : payload;
+          </script>
+          <script
+            is:inline
+            defer
+            src={site.analytics.script}
+            data-website-id={site.analytics.websiteId}
+            data-host-url={site.analytics.endpoint.replace(/\/api\/.*$/, '')}
+            data-domains={site.analytics.domains}
+            data-do-not-track="true"
+            data-before-send="umamiBeforeSend"
+          />
+        </>
       )
     }
     <link rel="canonical" href={new URL(path, Astro.site)} />
