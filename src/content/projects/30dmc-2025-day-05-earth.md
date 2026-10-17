@@ -1,6 +1,6 @@
 ---
 title: 'Day 5 - Earth: Mountainous Designations in Greece'
-summary: 'Greece measured two ways: terrain classified as mountainous under the EU less-favoured areas directive, and the 13,584 settlements classified as mountainous, semi-mountainous or lowland in the 2021 census. The two do not always agree.'
+summary: 'Two definitions of mountainous Greece: terrain under the EU less-favoured areas directive, and the 2021 census classification of 13,584 settlements. They don''t always agree.'
 date: 2025-11-05
 created: 2026-08-01
 category: '30-day-map-challenge'
@@ -14,7 +14,7 @@ layers:
     src: '/data/30dmc-2025-day-05-relief-zones.geojson'
   - name: 'Settlements'
     src: '/data/30dmc-2025-day-05-settlements.geojson'
-mapCaption: 'The interactive version, in the same colours as the printed map. Terrain zones come from the elevation and slope criteria; settlement dots carry their census designation. Click a settlement for its name and designation, and use the legend to switch any of the six classes off - turning the terrain off is the quickest way to see how the settlement designations fall on their own.'
+mapCaption: 'Same colours as the printed map. Terrain zones come from the elevation and slope criteria; settlements carry their census designation. Click a settlement for its name and designation. Turning the terrain off in the legend shows the settlements on their own.'
 thumbnail: '/images/30dmc-2025-day-05-square.webp'
 thumbnailAlt: 'Map of Greece with mountainous terrain in green and settlements as coloured dots'
 downloads:
@@ -31,32 +31,25 @@ dataSource:
 **Prompt:** Focus on the tangible and grounded. Map landforms, geology, soil,
 agriculture.
 
-Greece is a mountainous country, but "mountainous" turns out to be two different
-claims depending on who is asking. This map puts both on the same sheet.
+"Mountainous" has two official meanings in Greece, and this map shows both.
 
-The green is terrain, classified under **Directive 81/645/EEC** on less-favoured
-farming areas, which sets its thresholds explicitly: land at 800 m or above
-qualifies outright; between 600 and 800 m it also needs a slope of at least 16%;
-below 600 m the slope has to reach 20%. That is a measurement, taken from
-elevation and slope, with no reference to who lives there.
+The green is terrain, classified under **Directive 81/645/EEC** on
+less-favoured farming areas. Land at 800 m or higher qualifies outright.
+Between 600 and 800 m it also needs a slope of at least 16%, and below 600 m a
+slope of at least 20%. The classification uses only elevation and slope.
 
-The dots are settlements, and their designation comes from the **ELSTAT
-framework** used in the 2021 census: mountainous, semi-mountainous, or lowland.
-Of the 13,584 settlements, 4,725 are mountainous and 4,475 semi-mountainous -
-between them, two thirds of every inhabited place in the country.
+The dots are settlements, classified by ELSTAT in the 2021 census as
+mountainous, semi-mountainous or lowland. Of 13,584 settlements, 4,725 are
+mountainous and 4,475 semi-mountainous, together two thirds of the total.
 
-Putting the two together is the interesting part. They agree along the Pindus
-spine and through central Crete, where dark red dots sit inside dark green
-terrain. They disagree in places worth noticing: settlements designated
-mountainous on ground the directive does not classify at all, and
-lowland-designated settlements in valleys threaded through steep terrain. Switch
-the terrain off in the legend and the settlement pattern stands on its own,
-which makes the mismatch easier to see.
+The two mostly agree along the Pindus and in central Crete, where red dots sit
+inside dark green terrain. Elsewhere they don't: some settlements classed as
+mountainous stand on land the directive leaves out, and some lowland
+settlements sit in valleys surrounded by steep ground. Turning the terrain
+layer off makes these mismatches easier to see.
 
-A note on the data. The terrain layer arrives as three dissolved multipolygons
-carrying 1.22 million vertices across 22,911 separate parts - 23 MB of GeoJSON,
-far more than a browser should be asked to take. For the web version the
-geometry is generalised to about 165 m, and parts smaller than roughly four
-hectares are dropped, since at country scale those are smaller than a single
-pixel. That cuts it to 2.4 MB while keeping **98.1% of the mapped area**. The
-printed version above uses the full-resolution geometry.
+The terrain layer is three dissolved multipolygons with 1.22 million vertices
+in 22,911 parts, 23 MB as GeoJSON. For the web I simplified it to about 165 m
+and dropped parts smaller than about four hectares, which are below one pixel
+at country scale. That brings it to 2.4 MB and keeps **98.1% of the mapped
+area**. The printed map uses the full geometry.

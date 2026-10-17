@@ -13,14 +13,13 @@ tags: ['Python', 'Floating Car Data', 'Emissions', 'GIS']
 draft: true
 ---
 
-Gridded emission inventories describe road-transport pollution as values per
-grid cell, often kilometres across. Air-quality work at street level needs
-those emissions on the roads themselves. My diploma thesis at the Aristotle
-University of Thessaloniki developed a method to **downscale gridded
-road-transport emission data to the road-network level**. It used **GPS
-Floating Car Data (FCD)**, positions recorded by vehicles moving through
-traffic, to decide how much of each cell's emissions belongs to each road
-segment. The method was implemented in Python and graded **10/10**.
+Emission inventories give road-transport pollution as values per grid cell,
+often kilometres across, but street-level air-quality work needs emissions on
+the roads themselves. My diploma thesis at the Aristotle University of
+Thessaloniki developed a method to **downscale gridded road-transport
+emissions to individual road segments**, using **GPS Floating Car Data (FCD)**
+(positions recorded by vehicles in traffic) to split each cell's emissions
+between its roads. I implemented it in Python, and it was graded **10/10**.
 
 ## The question
 

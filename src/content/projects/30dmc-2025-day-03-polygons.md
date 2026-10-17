@@ -1,6 +1,6 @@
 ---
 title: 'Day 3 - Polygons: Nationally Designated Areas in Greece'
-summary: 'The 803 nationally designated protected areas of Greece, classified by IUCN category. They overlap heavily - a strict reserve inside a national park inside a wider sustainable-use zone - so the interactive version reports every area under the point you click.'
+summary: 'Greece''s 803 nationally designated protected areas, classified by IUCN category. Many of them overlap, so the interactive map lists every area at the point you click.'
 date: 2025-11-03
 created: 2026-07-26
 category: '30-day-map-challenge'
@@ -10,7 +10,7 @@ image: '/images/30dmc-2025-day-03-wide.webp'
 imageAlt: 'Printed A4 map: nationally designated protected areas across Greece, coloured and hatched by IUCN category, with legend and a table matching IUCN categories to national designation codes'
 map: '/data/30dmc-2025-day-03-protected-sites.geojson'
 mapComponent: 'protected-areas'
-mapCaption: 'The interactive version. Areas are coloured by IUCN category, in the same colours as the printed map. Because designations nest and overlap, clicking lists every area at that point rather than only the topmost one - with its name, national designation code, and categories. Use the legend to switch a category off.'
+mapCaption: 'Same colours as the printed map. Designations overlap, so a click lists every area at that point, not just the top one, with its name, national designation code and categories. Use the legend to turn categories off.'
 thumbnail: '/images/30dmc-2025-day-03-square.webp'
 thumbnailAlt: 'Map of Greece showing protected areas coloured by IUCN category'
 downloads:
@@ -31,32 +31,28 @@ dataSource:
 **Prompt:** Create a map focused on area features - administrative regions, land
 use.
 
-Greece protects a lot of ground, but not in tidy, separate parcels. The 803
-nationally designated areas in this dataset sit on top of one another: an
-absolute nature reserve zone inside a national park, the park's peripheral zone
-around that, and often a wildlife refuge or a sustainable-use designation
-overlapping the lot. Twenty-one different national designation types are in
-play, which is why both versions of this map classify by **IUCN category**
-instead - seven classes that say what the protection actually means rather than
+The 803 protected areas in this dataset often overlap: a strict reserve zone
+inside a national park, the park's buffer zone around it, and sometimes a
+wildlife refuge or a sustainable-use zone on top. They use 21 different
+national designation types, so both maps classify them by **IUCN category**
+instead. The seven categories describe what the protection means rather than
 which law created it.
 
-Wildlife refuges dominate by count: 603 of the 803 areas, almost all of them
-IUCN category IV, scattered as small blue polygons across the whole country.
-The green national parks are far fewer but far larger.
+Wildlife refuges make up 603 of the 803 areas, almost all in IUCN category IV,
+and show up as small blue polygons all over the country. National parks are
+few but much larger.
 
-The printed version was made in ArcGIS Pro, using hatching to separate
-categories IV, V and VI so the overlaps stay readable on paper. The interactive
-map takes the opposite approach to the same problem: instead of trying to draw
-the overlaps apart, it answers the question directly. **Click anywhere and it
-lists every protected area at that point**, ordered from the most specific
-designation outward, with each area's name, its national designation code, and
-its categories.
+The printed map, made in ArcGIS Pro, uses hatching for categories IV, V and VI
+so the overlaps stay readable on paper. The interactive map handles overlaps
+differently: **click anywhere and it lists every protected area at that
+point**, from the most specific designation outward, with its name, national
+code and categories.
 
 ## National designation types by IUCN category
 
-Each area carries a national designation code (NatDA), which is what the popups
-show. There are 28 of them, and this is how they map onto the seven IUCN
-categories that drive the colouring.
+The Greek scheme has 28 national designation codes (NatDA), and 21 of them
+appear in this dataset. This is how they map onto the IUCN categories used for
+the colours.
 
 | IUCN | Code | National designation type |
 | --- | --- | --- |
@@ -75,7 +71,7 @@ categories that drive the colouring.
 | | EL09 | Nature reserve zone in national marine park |
 | | EL21 | Game breeding station |
 | | EL84 | Nature reserve zone in regional park |
-| | EL95 | Wildlife refugee |
+| | EL95 | Wildlife refuge |
 | V | EL12 | Aesthetic forest |
 | | EL28 | Protected significant natural formation, protected landscape and landscape elements |
 | | EL88 | Protected landscape / seascape |
@@ -89,14 +85,14 @@ categories that drive the colouring.
 | N/A | EL98 | Protected area not yet classified |
 | | EL99 | Others |
 
-A note on preparing the data. The source is 15 MB - too heavy to send to a
-browser - so the map above draws a simplified copy, generalised to about 44 m of
-tolerance. That is invisible at this scale and cuts the file to 1.7 MB (74,000
-vertices, down from 378,000). The dataset offered for download is the original,
-unsimplified one.
+## Preparing the data
 
-Simplifying it was less routine than expected. GDAL's `-simplify` destroyed four
-polygons outright at every tolerance tried, and this build has no
-`-simplifypreservetopology`, so the generalisation runs as a small script that
-catches any ring about to collapse and retries it at a finer tolerance. It
-rescued 133 rings; no feature was lost.
+The source file is 15 MB, too heavy for a browser, so the web map uses a copy
+simplified to a tolerance of about 44 m. The difference isn't visible at this
+scale, and the file drops to 1.7 MB (74,000 vertices instead of 378,000). The
+download is the original, unsimplified file.
+
+GDAL's `-simplify` deleted four polygons outright at every tolerance I tried,
+and this GDAL build has no `-simplifypreservetopology`. So the simplification
+runs as a short script that retries any ring about to collapse at a finer
+tolerance. It saved 133 rings, and no feature was lost.

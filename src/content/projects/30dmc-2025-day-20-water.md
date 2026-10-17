@@ -1,6 +1,6 @@
 ---
 title: 'Day 20 - Water: Passenger-Ship Traffic in Greek Waters'
-summary: 'Every passenger-ship crossing recorded by AIS in Greek waters during 2024, counted into 1 km cells. In an archipelago the sea is the road network, and this is what its traffic map looks like.'
+summary: 'Every passenger-ship crossing recorded by AIS in Greek waters during 2024, counted in 1 km cells. In a country of islands, the sea is the road network.'
 date: 2025-11-20
 created: 2026-08-10
 category: '30-day-map-challenge'
@@ -24,53 +24,38 @@ dataSource:
 
 **Prompt:** Focus on the fluid - hydrology, oceans, currents, water accessibility.
 
-Water usually gets mapped as a physical thing: depth, currents, catchments. This
-takes the last item on the prompt instead and maps the sea as infrastructure.
-With around 6,000 Greek islands and islets and something over 200 of them
-inhabited, the sea is not a barrier between places so much as the thing that
-connects them - and like any transport network, it carries traffic that can be
-counted.
+Instead of depth or currents, this map treats the sea as transport
+infrastructure. Greece has around 6,000 islands and islets, a little over 200
+of them inhabited, and ferries are what connect them.
 
-Every cell is 1 km square and holds the number of passenger-ship crossings
-recorded there during 2024, from satellite and terrestrial AIS. The result is a
-network nobody drew: it emerges from ships repeating the same tracks until the
-tracks show up as lines on open water.
+Each 1 km cell holds the number of passenger-ship crossings recorded there in
+2024 by satellite and coastal AIS receivers. Nobody drew the routes: they
+appear because ships repeat the same tracks all year.
 
-The distribution is severe, which is why the legend needs eight classes rather
-than a smooth ramp. Roughly **half the sea shown carries no passenger traffic at
-all**, and of the cells that carry any, about **two thirds see fewer than ten
-crossings in a year** - one boat every few weeks. Nearly all the movement is
-concentrated into a handful of corridors, and the densest of them, the
-**Corfu - Igoumenitsa channel**, is a shuttle run frequent enough to behave like
-a bridge rather than a ferry.
+The traffic is very uneven, which is why the legend has eight classes. About
+**half the sea shown has no passenger traffic at all**, and about **two thirds
+of the cells with traffic see fewer than ten crossings a year**. Most of the
+movement runs along a few corridors. The busiest is the **Corfu - Igoumenitsa
+channel**, where ferries run so often the crossing works almost like a bridge.
 
-The shape the map exposes is a hub. Corridors fan out of the Saronic Gulf toward
-the Cyclades, the Dodecanese and Crete in a pattern that makes the centrality of
-Piraeus impossible to miss - for most islands, getting anywhere means getting to
-Athens first. Around the edges of that, the through-traffic crossing the Ionian
-and the southern Aegean belongs to ships passing rather than serving, and it is
-worth reading separately: a bright line near an island does not necessarily mean
-that island is well connected.
+The corridors fan out from the Saronic Gulf to the Cyclades, the Dodecanese
+and Crete, which shows how central Piraeus is: from most islands, you go
+through Athens to get anywhere. Some of the lines across the Ionian and the
+southern Aegean are ships passing through rather than serving Greek ports, so a
+bright line near an island doesn't always mean the island is well connected.
 
-That is what makes it a water map rather than a transport one. The same stretch
-of sea is a highway in one place and empty in another, and nothing about the
-water itself explains which is which. The dark corridors are where the sea works
-like a road; the enormous pale expanse between them is not distance exactly, but
-the absence of anything scheduled.
+Made in ArcGIS Pro over shaded relief, in the Greek Grid (GGRS87).
 
-Built in ArcGIS Pro over shaded relief in the Greek Grid (GGRS87).
+## A flaw in the source data
 
-One flaw in the source data is worth recording, because it bites exactly where
-the map is most interesting. The EMSA rasters are signed 16-bit integers, so a
-cell counting more than 32,767 crossings does not clip at the top - it wraps
-around into a large negative number. Twenty-nine cells inside this extent have
-done so, and they are not scattered noise: they sit in the busiest ferry
-crossings in the region, the Bosphorus and the Sea of Marmara, the approaches to
-Izmir, the Corfu - Igoumenitsa channel, and the mouth of Piraeus. Read back as
-unsigned, they imply between about 33,000 and 61,000 crossings a year.
+The EMSA rasters are signed 16-bit integers, so a cell with more than 32,767
+crossings doesn't stop at the maximum: it wraps around to a large negative
+number. Twenty-nine cells in this area have wrapped, and they are the busiest
+ferry crossings in the region: the Bosphorus and the Sea of Marmara, the
+approaches to Izmir, the Corfu - Igoumenitsa channel and the entrance to
+Piraeus. Read as unsigned values, they come to between about 33,000 and 61,000
+crossings a year.
 
-The consequence is that the very busiest cells are the ones the map cannot
-draw - they fall outside every class and vanish into the background, so the
-apparent maximum is not the real one. It is a good reminder that the minimum of
-a count raster is worth checking before the maximum: a negative number in data
-that can only be positive is the tell.
+Because they fall outside every class, these cells disappear from the map, so
+the highest value shown is not the real maximum. A negative value in a raster
+of counts is the sign to look for.

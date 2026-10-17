@@ -1,6 +1,6 @@
 ---
 title: 'Day 10 - Air: Wind Resource of Greece'
-summary: 'The mean annual wind speed over Greece on a 150 m grid, at three turbine hub heights, with all 9,088 licensed wind turbines placed on top of the resource they were sited for.'
+summary: 'Mean annual wind speed over Greece on a 150 m grid, at three turbine hub heights, with all 9,088 licensed wind turbines on top.'
 date: 2025-11-10
 created: 2026-08-23
 category: '30-day-map-challenge'
@@ -10,7 +10,7 @@ image: '/images/30dmc-2025-day-10-wide.webp'
 imageAlt: 'Printed A4 map of Greece showing mean annual wind speed at 100 metres above ground, pale cyan over the lowlands rising through blue and yellow to red along the Aegean ridgelines and islands'
 map: '/data/wind/wind-meta.json'
 mapComponent: 'wind-resource'
-mapCaption: 'The same grid, live and at all three hub heights. Switch between 80, 100 and 120 metres, and click anywhere to read the exact modelled mean annual speed for that 150 m cell. Zoom in and the licensed turbine fleet appears, coloured by licence type and switchable; click a turbine for its model, operator, rated power, rotor diameter and hub height, along with the wind modelled beneath it.'
+mapCaption: 'The full grid at all three hub heights. Switch between 80, 100 and 120 m, and click anywhere for the modelled mean speed of that 150 m cell. Zoom in to see the licensed turbines, coloured by licence stage; click one for its model, operator, power, rotor diameter, hub height and the modelled wind at its location.'
 thumbnail: '/images/30dmc-2025-day-10-square.webp'
 thumbnailAlt: 'Map of Greece shaded by mean annual wind speed, with the strongest winds along the Aegean islands and eastern ridgelines'
 downloads:
@@ -27,33 +27,26 @@ dataSource:
 
 **Prompt:** Focus on the atmosphere - weather, wind patterns, air traffic, pollution.
 
-Wind is the one part of the atmosphere Greece has built an industry on, and the
-map that industry runs on is this one: mean annual wind speed, modelled on a
-**150 m × 150 m grid** covering the whole country, at the heights a turbine hub
-actually sits. Each height is **5,865,840 cells**.
+This is the wind model used for wind-energy planning in Greece: mean annual
+wind speed on a **150 m grid** covering the whole country, at three turbine
+hub heights, with 5,865,840 cells per height.
 
-The pattern is almost the inverse of where people live. The interior plains sit
-in the pale cyan of the lowest class, while the strong winds run along the
-eastern ridgelines and out into the Aegean, where Evia, the Cyclades, Karpathos
-and eastern Crete carry the red of the top class. Wind is a coastal and upland
-resource here, and the islands that have the least of everything else have the
-most of this.
+Most of the interior plains fall in the lowest class (pale cyan). The strongest
+winds are on the eastern ridges and the Aegean islands, where Evia, the
+Cyclades, Karpathos and eastern Crete reach the top class.
 
-## Three heights, and why the middle one is the honest one
+## Hub heights
 
-The grid comes at 80, 100 and 120 metres. The interactive map opens at 100 m
-because that is where the fleet actually sits: the median hub height across
-Greece's licensed turbines is exactly **100 metres**, with a median rotor
-diameter of 136 metres.
+The grid comes at 80, 100 and 120 m. The interactive map opens at 100 m, the
+median hub height of Greece's licensed turbines (their median rotor diameter is
+136 m).
 
-There is a catch in the source data that matters more than it looks. The 80 m
-and 120 m grids are **clipped at 20 m/s** - every cell that would model faster
-is flattened to exactly 20.00 - while the **100 m grid is uncapped** and runs up
-to **32.10 m/s** on the most exposed ridges. So the three are not directly
-comparable at the top of the scale: switching from 100 m to 120 m makes the
-windiest places look calmer, which is an artefact of the ceiling rather than
-anything about the wind. The map says so where it matters, and flags any cell
-sitting on the cap.
+The 80 m and 120 m grids are **capped at 20 m/s**: every faster cell is stored
+as exactly 20.00. The 100 m grid has no cap and reaches **32.10 m/s** on the
+most exposed ridges. So at the top of the scale the three heights can't be
+compared directly, and switching from 100 m to 120 m makes the windiest places
+look calmer than they are. The map notes this and flags cells that sit on the
+cap.
 
 | Hub height | Modelled range | Ceiling |
 |---|---|---|
@@ -61,29 +54,24 @@ sitting on the cap.
 | 100 m | 0.42 - 32.10 m/s | none |
 | 120 m | 0.53 - 20.00 m/s | capped |
 
-## The fleet on top of the resource
+## Turbines
 
-Greece's licensed wind turbines are drawn over the grid once you zoom in far
-enough for a single machine to mean something, split by the stage each licence
-has reached:
+The licensed turbines appear once you zoom in, split by licence stage:
 
-- **5,599 with a production licence** - permitted, not necessarily built
-- **3,058 operating**
-- **431 under installation**
+- 5,599 with a production licence (permitted, not necessarily built)
+- 3,058 operating
+- 431 under installation
 
-Putting them on the resource rather than beside it is the point of the pairing.
-Click a turbine and you get its model, operator, rated and maximum power, rotor
-diameter and hub height, together with the modelled wind at the height you are
-currently viewing - which is the number that decides whether the machine was
-worth erecting.
+Clicking a turbine shows its model, operator, rated and maximum power, rotor
+diameter and hub height, plus the modelled wind speed at that point for the
+selected height.
 
-## Notes on the source
+## Data
 
-The grid and the turbine registry both come from the Regulatory Authority for
-Energy, Waste and Water. Almost six million polygons per height is far more than
-a browser can be handed as vector data, so for the web each height is carried as
-a lossless image with the speed encoded into the red and green channels rather
-than as colour. The page colours a reduced copy of it for display and reads a
-single pixel back when you click, which is why the popup can quote a cell value
-to two decimal places: it is the modelled number, not a sample of a picture of
-one. The printed sheet above uses the full-resolution grid directly.
+The wind grid and the turbine register both come from the Regulatory Authority
+for Energy, Waste and Water (RAAEY). Nearly six million polygons per height is
+too much for a browser as vector data, so on the web each height is stored as a
+lossless image with the speed encoded in its red and green channels. The page
+colours a reduced copy for display and reads the exact value back on click,
+which is why the popup can show the modelled speed to two decimals. The printed
+map uses the full-resolution grid.

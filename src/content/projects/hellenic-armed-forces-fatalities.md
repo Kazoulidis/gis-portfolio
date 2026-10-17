@@ -1,6 +1,6 @@
 ---
 title: 'Recorded Hellenic Armed Forces Fatalities by Birthplace'
-summary: 'A series of seventeen maps recording where the Hellenic Armed Forces'' fallen came from, across sixteen conflicts from the founding of the Greek state in 1830 to the peacekeeping mission to Somalia in 1993.'
+summary: 'Seventeen maps of where the Hellenic Armed Forces'' fallen were born, across sixteen conflicts from the founding of the Greek state in 1830 to the peacekeeping mission to Somalia in 1993.'
 date: 2026-08-21
 created: 2026-08-21
 category: 'misc'
@@ -8,7 +8,7 @@ context: 'Personal project'
 tags: ['ArcGIS Pro', 'Leaflet', 'GDAL/OGR']
 map: '/data/hellenic-fatalities.geojson'
 mapComponent: 'hellenic-fatalities'
-mapCaption: 'The printed series above, and the same seventeen maps as an interactive choropleth below. Each steps through the conflicts independently, so one war can be held on the printed sheet while another is read on the live map. Click any regional unit for its figure and its share of that map''s total; on the Total map the popup also breaks the number down by conflict. Every war keeps the class breaks used on its printed counterpart.'
+mapCaption: 'The printed series above, and the same seventeen maps as an interactive choropleth below. Each can be set to a different conflict, so you can compare two wars side by side. Click a regional unit for its figure and its share of that map''s total; on the Total map the popup also breaks the number down by conflict. Each war uses the same class breaks as its printed map.'
 thumbnail: '/images/hellenic-fatalities-square.webp'
 thumbnailAlt: 'Choropleth map of Greece showing recorded Hellenic Armed Forces fatalities by regional unit of birth, shaded from pale yellow to dark brown'
 downloads:
@@ -22,22 +22,20 @@ dataSource:
   label: 'Hellenic National Defense General Staff'
 ---
 
-**120,252** members of the Hellenic Armed Forces have been recorded by name as
-having died in service between the recognition of Greece as an independent state
-in 1830 and the peacekeeping mission to Somalia in 1993. This series asks a
-narrow question of that record: where did they come from?
+**120,252** members of the Hellenic Armed Forces are recorded by name as having
+died in service between Greek independence in 1830 and the peacekeeping mission
+to Somalia in 1993. These maps show where they were born.
 
-Of the full figure, **31,329 carry no recorded birthplace** and cannot appear on
-a map at all. What is mapped here is the remaining **88,923**, distributed across
-the 75 regional units of Greece by the place each of the fallen was born, not
-where they served or died. That distinction matters for reading it: a dark
-regional unit is a place that sent people, not a place that was fought over.
+**31,329** of them have no recorded birthplace and can't be mapped. The other
+**88,923** are counted by the regional unit they were born in, not where they
+served or died. A dark unit on these maps is a place many soldiers came from,
+not a place where fighting happened.
 
-## Seventeen maps rather than one
+## Seventeen maps
 
-There are sixteen conflicts in the record plus a combined total, and they differ
-in scale by four orders of magnitude. The Asia Minor Campaign accounts for
-**25,183** of the mapped fallen; the mission to Somalia accounts for **one**.
+The record covers sixteen conflicts, plus a map of the combined total, and
+their sizes differ by four orders of magnitude: the Asia Minor Campaign
+accounts for **25,183** of the mapped fallen, the Somalia mission for one.
 
 | Conflict | Mapped fallen | Share |
 |---|---:|---:|
@@ -50,32 +48,28 @@ in scale by four orders of magnitude. The Asia Minor Campaign accounts for
 | Cretan Revolts 1841-1898 | 1,161 | 1.3% |
 | All nine remaining conflicts | 3,029 | 3.4% |
 
-That spread is why each map is classified on its own breaks rather than a shared
-scale. A ramp wide enough for Asia Minor would render the Korean expedition, at
-a maximum of eleven fallen from any one unit, as a single flat colour; a ramp
-suited to Korea would saturate half the country in the top class for Asia Minor.
-The interactive map carries the same per-conflict classes as its printed
-counterpart, so the two can be read against each other without silently
-recalibrating.
+Because of that range, each map has its own class breaks. A scale wide enough
+for Asia Minor would show the Korean War, with at most eleven fallen from any
+one unit, as a single colour; a scale suited to Korea would put half the
+country in the top class for Asia Minor. The interactive maps use the same
+classes as the printed ones, so the two can be compared directly.
 
 ## What the totals show
 
-**Messenia** records the highest total of any regional unit, **4,708**, or 5.3%
-of everyone mapped. Aetolia-Acarnania, Ioannina, Euboea and Arcadia follow, all
-above 3,100. The pattern is not simply a population map: the heaviest losses
-concentrate in the rural Peloponnese and in Epirus and western Greece rather
-than in the two large cities, and Thessaloniki, for all its size, sits sixth.
+**Messenia** has the highest total, **4,708**, or 5.3% of everyone mapped,
+followed by Aetolia-Acarnania, Ioannina, Euboea and Arcadia, all above 3,100.
+This is not simply a population map: the highest losses are in the rural
+Peloponnese, Epirus and western Greece, not the two large cities, and
+Thessaloniki is only sixth.
 
-At the other end, **Mount Athos** is the one regional unit with no recorded
-fatalities in any conflict, which its monastic status explains. The single
-fatality of the Somalia mission was born in **Imathia**.
+**Mount Athos** is the only regional unit with no recorded fatalities in any
+conflict, as expected for a monastic community. The one fatality of the Somalia
+mission was born in **Imathia**.
 
-## Notes on the source
+## Data
 
-The record comes from the Hellenic National Defense General Staff. The map
-geometry is the 75 regional units, joined to the fatality table on the unit code
-and converted from a file geodatabase with GDAL/OGR. For the web version the
-geometry is reprojected to WGS84 and held at about 11 m precision, which brings
-the 1,166 rings that make up the mainland and the islands down to a size a
-browser can take without losing anything visible at the scales the map is read
-at.
+The record comes from the Hellenic National Defense General Staff. I joined it
+to the 75 regional units on the unit code and converted the file geodatabase
+with GDAL/OGR. For the web, the geometry is reprojected to WGS84 and stored at
+about 11 m precision, which keeps the 1,166 rings of the mainland and islands
+small enough for a browser with no visible loss at these scales.

@@ -1,6 +1,6 @@
 ---
 title: 'Day 1 - Points: UNESCO World Heritage Sites in Greece'
-summary: 'All 21 of Greece''s inscribed World Heritage sites, from the Temple of Apollo Epicurius in 1986 to Mount Olympus in 2026, resolving into the 46 individual monuments they are made of as you zoom in.'
+summary: 'Greece''s 21 World Heritage sites, from the Temple of Apollo Epicurius (1986) to Mount Olympus (2026). Zoom in and they split into the 46 monuments they are made of.'
 date: 2025-11-01
 created: 2026-08-05
 category: '30-day-map-challenge'
@@ -14,7 +14,7 @@ layers:
     src: '/data/30dmc-2025-day-01-unesco-sites.geojson'
   - name: 'Site components'
     src: '/data/30dmc-2025-day-01-unesco-components.geojson'
-mapCaption: 'The interactive version, in the same colours and symbols as the printed map. Click any site for its description and photographs, using the arrows to move through the gallery. Zoom right in and the sites hand off to the 46 individual monuments that make them up - click one of those for what it is and which inscription it belongs to.'
+mapCaption: 'Same colours and symbols as the printed map. Click a site for its description and photographs. Zoom in and the sites split into their 46 components; click one to see what it is and which site it belongs to.'
 thumbnail: '/images/30dmc-2025-day-01-square.webp'
 thumbnailAlt: 'Map of Greece with UNESCO World Heritage sites marked by classical temple symbols'
 downloads:
@@ -37,48 +37,35 @@ dataSource:
 
 **Prompt:** Map with point data - individual locations, points of interest, clusters.
 
-Greece has 21 World Heritage sites: 18 Cultural, 3 Mixed, and not one purely
-Natural. The list opens in 1986 with the Temple of Apollo Epicurius at Bassae
-and runs to the 2026 inscription of Mount Olympus, and what it records is a
-country where the history and the landscape tend to be the same argument. The
-three Mixed sites - Meteora, Mount Athos and Mount Olympus - are the ones where
-that is written into the inscription itself, recognised for their cultural and
-their natural value at once. Eleven more sites sit on Greece's tentative list.
+Greece has 21 World Heritage sites: 18 cultural, 3 mixed and none purely
+natural. The first, the Temple of Apollo Epicurius at Bassae, was inscribed in
+1986; the most recent, Mount Olympus, in 2026. The three mixed sites, Meteora,
+Mount Athos and Mount Olympus, are listed for both their cultural and their
+natural value. Another eleven sites are on Greece's tentative list.
 
-A point map of this is deceptively simple, because a World Heritage site is an
-administrative unit rather than a place. Some of these points are one building.
-Others are not: **Minoan Palatial Centres** is six palaces spread the length of
-Crete, from Kydonia in the west to Zakros in the east, and the **Paleochristian
-and Byzantine Monuments of Thessalonika** is fifteen separate churches scattered
-through a working city. Drawn at country scale they are single icons, which is
-correct for what the inscription is and misleading about where you would
-actually go.
+A World Heritage site is not always a single place. Some are one building, but
+the **Minoan Palatial Centres** are six palaces spread across Crete, from
+Kydonia to Zakros, and the **Paleochristian and Byzantine Monuments of
+Thessalonika** are fifteen churches around the city. At country scale each of
+them is one symbol.
 
-So the interactive map draws both. Zoomed out it shows the 21 inscriptions, in
-the printed map's symbology - a classical temple in brown for Cultural, green
-for Mixed. Zoom in far enough that one icon no longer honestly stands for one
-place, and the sites hand off to the 46 components underneath them. For most
-sites that changes little, because the inscription really is a single monument.
-For Thessalonika it turns one icon into fifteen churches you can walk between.
+The interactive map uses two layers for this. Zoomed out, it shows the 21 sites
+with the printed map's symbols: a temple in brown for cultural sites and in
+green for mixed ones. Zoomed in, it switches to the 46 individual components.
+For most sites nothing changes; for Thessalonika one symbol becomes fifteen
+churches.
 
-Clicking a site opens its description and its photograph gallery, moved through
-with arrow buttons; the image and its credit both link back to the original on
-the World Heritage Centre's site. Components carry neither the gallery nor the
-description, because both belong to the inscription rather than to any one
-monument inside it - repeating the same paragraph and the same photographs under
-all fifteen Thessalonika churches would tell you nothing about the church you
-actually clicked.
+Clicking a site opens its description and photo gallery, with links back to the
+originals on the World Heritage Centre's website. The components don't repeat
+the gallery or the description, since both describe the site as a whole rather
+than any one monument in it.
 
-Two notes on the images. All 534 are served from this site rather than hotlinked,
-re-encoded from the World Heritage Centre's originals - 753 MB of JPEG, some of
-it close to 5,000 pixels across, down to 69 MB of WebP at a size a popup can
-actually use. The gallery still fetches only the frame you are looking at. And
-the credits are honest about their limits: the dataset carries one photographer
-credit per site, for that site's main image, so that is the only image it is
-attached to. The rest are credited to the World Heritage Centre, which is where
-every photograph came from.
+The 534 photographs are hosted on this site rather than linked from UNESCO. I
+converted them from 753 MB of JPEG, some close to 5,000 pixels wide, to 69 MB
+of WebP, and the gallery loads only the photo on screen. The dataset has one
+photographer credit per site, for its main image, so only that image carries a
+name. The rest are credited to the World Heritage Centre.
 
-The printed map was made in ArcGIS Pro over a shaded relief background, with the
-site symbols drawn as a custom marker. The web version uses Leaflet on the same
-data, converted from the file geodatabase with GDAL/OGR and reprojected from the
-Greek Grid to WGS84.
+The printed map was made in ArcGIS Pro over shaded relief, with a custom marker
+for the sites. For the web version I converted the file geodatabase to GeoJSON
+with GDAL/OGR and reprojected it from the Greek Grid to WGS84.
