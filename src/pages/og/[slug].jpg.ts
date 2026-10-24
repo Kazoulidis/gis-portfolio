@@ -5,11 +5,12 @@
 import type { APIRoute } from 'astro';
 import { getCollection } from 'astro:content';
 import { projectCard } from '../../og';
+import { isVisible } from '../../projects';
 
 export async function getStaticPaths() {
   const projects = await getCollection(
     'projects',
-    ({ data }) => !data.draft && Boolean(data.image || data.thumbnail),
+    ({ data }) => isVisible({ data }) && Boolean(data.image || data.thumbnail),
   );
   return projects.map((project) => ({
     params: { slug: project.id },

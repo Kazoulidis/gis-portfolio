@@ -13,6 +13,7 @@ import {
   plainTitle,
 } from '../cv';
 import { getCollection } from 'astro:content';
+import { isVisible } from '../projects';
 
 // The newest work, whatever it happens to be - not a hand-picked list, so this
 // stays current on its own as projects are added. Categories opt in via the
@@ -35,7 +36,7 @@ const recent = (
   await getCollection(
     'projects',
     ({ data }) =>
-      !data.draft && Boolean(data.thumbnail) && homepageCategories.includes(data.category),
+      isVisible({ data }) && Boolean(data.thumbnail) && homepageCategories.includes(data.category),
   )
 )
   .sort((a, b) => madeOn(b).valueOf() - madeOn(a).valueOf())

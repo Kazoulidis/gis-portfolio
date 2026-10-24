@@ -1,0 +1,34 @@
+---
+/**
+ * Earlier years of a by-year category: /projects/30-day-map-challenge/2025.
+ * The newest year is the category's own page ([category].astro), so only the
+ * older years are built here.
+ */
+import { getCollection } from 'astro:content';
+import CategoryPage from '../../../components/CategoryPage.astro';
+import { projectCategories } from '../../../site';
+import { isVisible, projectYear, sortForCategory, yearsOf } from '../../../projects';
+
+export async function getStaticPaths() {
+  const all = await getCollection('projects', isVisible);
+  return projectCategories
+    .filter((category) => category.byYear)
+    .flatMap((category) => {
+      const inCategory = all.filter((project) => project.data.category === category.slug);
+      const years = yearsOf(inCategory);
+      return years.slice(1).map((year) => ({
+        params: { category: category.slug, year: String(year) },
+        props: {
+          category,
+          projects: sortForCategory(inCategory.filter((p) => projectYear(p) === year), category),
+          years,
+          year,
+        },
+      }));
+    });
+}
+
+const { category, projects, years, year } = Astro.props;
+---
+
+<CategoryPage category={category} projects={projects} years={years} year={year} />

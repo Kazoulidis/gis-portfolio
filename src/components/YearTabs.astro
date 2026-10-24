@@ -1,0 +1,31 @@
+---
+/**
+ * Year sub-tabs under a by-year category (the 30 Day Map Challenge). Newest
+ * year first; it lives at the category's own URL, earlier years at
+ * /projects/<category>/<year>. Shown only when there is more than one year.
+ */
+import type { ProjectCategory } from '../site';
+import { yearHref } from '../projects';
+
+interface Props {
+  category: ProjectCategory;
+  years: number[];
+  current: number;
+}
+
+const { category, years, current } = Astro.props;
+---
+
+<nav class="subnav subnav--years" aria-label={`${category.label} by year`}>
+  {
+    years.map((year) => (
+      <a
+        href={yearHref(category, year, years[0])}
+        data-astro-prefetch="load"
+        aria-current={year === current ? 'page' : undefined}
+      >
+        {year}
+      </a>
+    ))
+  }
+</nav>

@@ -1,0 +1,64 @@
+---
+/**
+ * The body of a category page, shared by /projects/<category> and, for a
+ * by-year category, /projects/<category>/<year>, so the two cannot drift apart.
+ */
+import type { CollectionEntry } from 'astro:content';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import CategoryTabs from './CategoryTabs.astro';
+import YearTabs from './YearTabs.astro';
+import ProjectList from './ProjectList.astro';
+import type { ProjectCategory } from '../site';
+
+interface Props {
+  category: ProjectCategory;
+  projects: CollectionEntry<'projects'>[];
+  /** For a by-year category: every year with projects, newest first, and the one shown. */
+  years?: number[];
+  year?: number;
+}
+
+const { category, projects, years = [], year } = Astro.props;
+const withYears = year !== undefined && years.length > 1;
+const heading = withYears ? `${category.label} ${year}` : category.label;
+---
+
+<BaseLayout
+  title={`${heading} - Projects`}
+  description={category.blurb}
+>
+  <h1>Projects</h1>
+  <p class="muted">
+    Selected work in spatial analysis, remote sensing and cartography. Each entry
+    has a short write-up and, where the data allows, an interactive map.
+  </p>
+
+  <CategoryTabs current={category.slug} />
+  {withYears && <YearTabs category={category} years={years} current={year!} />}
+
+  <section class="category-intro">
+    <h2>{heading}</h2>
+    <p>
+      {category.blurb}
+      {category.link && <> <a href={category.link.href}>{category.link.label}</a></>}
+    </p>
+  </section>
+
+  <ProjectList projects={projects} emptyMessage={`Nothing under ${heading} yet.`} />
+</BaseLayout>
+
+<style>
+  .category-intro {
+    margin: 2rem 0 0;
+  }
+
+  .category-intro h2 {
+    margin-top: 0;
+    font-size: 1.25rem;
+  }
+
+  .category-intro p {
+    color: var(--text-muted);
+    margin-bottom: 0;
+  }
+</style>

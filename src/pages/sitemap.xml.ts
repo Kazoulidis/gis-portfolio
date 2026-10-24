@@ -7,9 +7,10 @@
 import type { APIRoute } from 'astro';
 import { getCollection } from 'astro:content';
 import { projectCategories } from '../site';
+import { isVisible, yearsOf } from '../projects';
 
 export const GET: APIRoute = async ({ site }) => {
-  const projects = await getCollection('projects', ({ data }) => !data.draft);
+  const projects = await getCollection('projects', isVisible);
   const day = (d: Date) => d.toISOString().slice(0, 10);
 
   const entries: { path: string; lastmod?: string }[] = [
@@ -22,6 +23,14 @@ export const GET: APIRoute = async ({ site }) => {
     ...projectCategories
       .filter((c) => projects.some((p) => p.data.category === c.slug))
       .map((c) => ({ path: `/projects/${c.slug}` })),
+    // Earlier years of a by-year category (the newest year is the page above).
+    ...projectCategories
+      .filter((c) => c.byYear)
+      .flatMap((c) =>
+        yearsOf(projects.filter((p) => p.data.category === c.slug))
+          .slice(1)
+          .map((year) => ({ path: `/projects/${c.slug}/${year}` })),
+      ),
     ...projects.map((p) => ({
       path: `/projects/${p.id}`,
       lastmod: day(p.data.created ?? p.data.date),

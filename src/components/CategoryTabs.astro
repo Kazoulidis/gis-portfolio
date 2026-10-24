@@ -9,6 +9,7 @@
  */
 import { getCollection } from 'astro:content';
 import { projectCategories } from '../site';
+import { isVisible } from '../projects';
 
 interface Props {
   current: string;
@@ -18,7 +19,7 @@ const { current } = Astro.props;
 
 // Only categories with something published. [category].astro builds no page
 // for an empty one, so a tab for it would link to a 404.
-const published = await getCollection('projects', ({ data }) => !data.draft);
+const published = await getCollection('projects', isVisible);
 const visible = projectCategories.filter((category) =>
   published.some((project) => project.data.category === category.slug),
 );

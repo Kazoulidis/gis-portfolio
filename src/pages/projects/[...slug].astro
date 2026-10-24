@@ -14,6 +14,7 @@ import FatalitiesMaps from '../../components/FatalitiesMaps.astro';
 import WindResourceMap from '../../components/WindResourceMap.astro';
 import { projectCategories } from '../../site';
 import { plainTitle } from '../../cv';
+import { isVisible } from '../../projects';
 
 // Bespoke map components a project can select via `mapComponent:` in
 // frontmatter. Add a component here and reference its key. Both `map:` (one
@@ -33,7 +34,7 @@ const CUSTOM_MAPS: Record<string, typeof ProjectMap> = {
 };
 
 export async function getStaticPaths() {
-  const projects = await getCollection('projects', ({ data }) => !data.draft);
+  const projects = await getCollection('projects', isVisible);
   return projects.map((project) => ({
     params: { slug: project.id },
     props: { project },
@@ -99,6 +100,8 @@ const formattedDate = date.toLocaleDateString('en-GB', {
     <p class="eyebrow">
       {formattedDate}
       {context && <> &middot; {context}</>}
+      {/* Drafts only reach the dev server (see isVisible in src/projects.ts). */}
+      {project.data.draft && <span class="draft-flag">Draft - dev server only</span>}
     </p>
     <h1>{title}</h1>
     <p class="lede">{summary}</p>

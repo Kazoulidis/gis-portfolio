@@ -45,6 +45,7 @@ export const site = {
  *   link      optional, renders beside the blurb; null for none
  *   order     'desc' newest first - the right default for a portfolio
  *             'asc'  oldest first - right for a sequence, where Day 1 leads
+ *   byYear    split the category into one sub-tab per year (a yearly challenge)
  *   homepage  whether these projects can appear in "Recent projects" on the
  *             About page, which lists the newest few across every category with
  *             this flag set. Turn a category off once it has more entries than
@@ -66,6 +67,9 @@ export const projectCategories = [
     // A challenge reads as a sequence: Day 1 first, not Day 30.
     order: 'asc',
     homepage: true,
+    // One edition per year: the category page opens on the newest year, with
+    // sub-tabs for the others (only once there are two or more).
+    byYear: true,
   },
   {
     slug: 'school',
@@ -74,6 +78,7 @@ export const projectCategories = [
     link: null,
     order: 'desc',
     homepage: true,
+    byYear: false,
   },
   {
     slug: 'misc',
@@ -82,6 +87,7 @@ export const projectCategories = [
     link: null,
     order: 'desc',
     homepage: true,
+    byYear: false,
   },
 ] as const;
 

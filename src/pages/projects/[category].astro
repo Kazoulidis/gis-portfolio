@@ -7,15 +7,17 @@
  * only generates the paths its getStaticPaths returns, and those sets are
  * disjoint. If a project slug ever collides with a category slug, the build
  * fails on a duplicate route - noisily, which is what you want.
+ *
+ * A by-year category (the challenge) shows its newest year here; earlier
+ * years are built by [category]/[year].astro.
  */
 import { getCollection } from 'astro:content';
-import BaseLayout from '../../layouts/BaseLayout.astro';
-import CategoryTabs from '../../components/CategoryTabs.astro';
-import ProjectList from '../../components/ProjectList.astro';
-import { projectCategories, type ProjectCategory } from '../../site';
+import CategoryPage from '../../components/CategoryPage.astro';
+import { projectCategories } from '../../site';
+import { isVisible, projectYear, sortForCategory, yearsOf } from '../../projects';
 
 export async function getStaticPaths() {
-  const all = await getCollection('projects', ({ data }) => !data.draft);
+  const all = await getCollection('projects', isVisible);
 
   // A category with nothing published gets no page, and CategoryTabs drops its
   // tab to match - an empty "Nothing here yet" page is a placeholder by another
@@ -24,64 +26,21 @@ export async function getStaticPaths() {
     all.some((project) => project.data.category === category.slug),
   );
 
-  return populated.map((category) => ({
-    params: { category: category.slug },
-    props: {
-      category,
-      projects: all
-        .filter((project) => project.data.category === category.slug)
-        .sort((a, b) =>
-          category.order === 'asc'
-            ? a.data.date.valueOf() - b.data.date.valueOf()
-            : b.data.date.valueOf() - a.data.date.valueOf(),
-        ),
-    },
-  }));
+  return populated.map((category) => {
+    const inCategory = all.filter((project) => project.data.category === category.slug);
+    if (!category.byYear) {
+      return { params: { category: category.slug }, props: { category, projects: sortForCategory(inCategory, category) } };
+    }
+    const years = yearsOf(inCategory);
+    const newest = inCategory.filter((project) => projectYear(project) === years[0]);
+    return {
+      params: { category: category.slug },
+      props: { category, projects: sortForCategory(newest, category), years, year: years[0] },
+    };
+  });
 }
 
-interface Props {
-  category: ProjectCategory;
-  projects: Awaited<ReturnType<typeof getCollection<'projects'>>>;
-}
-
-const { category, projects } = Astro.props;
+const { category, projects, years, year } = Astro.props;
 ---
 
-<BaseLayout title={`${category.label} - Projects`} description={category.blurb}>
-  <h1>Projects</h1>
-  <p class="muted">
-    Selected work in spatial analysis, remote sensing and cartography. Each entry
-    has a short write-up and, where the data allows, an interactive map.
-  </p>
-
-  <CategoryTabs current={category.slug} />
-
-  <section class="category-intro">
-    <h2>{category.label}</h2>
-    <p>
-      {category.blurb}
-      {category.link && <> <a href={category.link.href}>{category.link.label}</a></>}
-    </p>
-  </section>
-
-  <ProjectList
-    projects={projects}
-    emptyMessage={`Nothing under ${category.label} yet.`}
-  />
-</BaseLayout>
-
-<style>
-  .category-intro {
-    margin: 2rem 0 0;
-  }
-
-  .category-intro h2 {
-    margin-top: 0;
-    font-size: 1.25rem;
-  }
-
-  .category-intro p {
-    color: var(--text-muted);
-    margin-bottom: 0;
-  }
-</style>
+<CategoryPage category={category} projects={projects} years={years} year={year} />
