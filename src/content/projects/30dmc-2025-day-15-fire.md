@@ -7,6 +7,7 @@ category: '30-day-map-challenge'
 context: '#30DayMapChallenge 2025 · Day 15'
 tags: ['ArcGIS Pro', 'Leaflet', 'MODIS', 'GDAL/OGR']
 image: '/images/30dmc-2025-day-15-wide.webp'
+imageFull: '/images/30dmc-2025-day-15-full.webp'
 imageAlt: 'Printed A4 map of Greece showing wildfire scars from 2000 to 2026 as orange and dark red patches, shaded by the area burned per day, concentrated in the Peloponnese, Attica, Evia and Thrace'
 map: '/data/30dmc-2025-day-15-burned-area.geojson'
 mapComponent: 'fire-timeline'

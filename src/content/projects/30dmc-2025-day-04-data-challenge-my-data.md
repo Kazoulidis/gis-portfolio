@@ -7,6 +7,7 @@ category: '30-day-map-challenge'
 context: '#30DayMapChallenge 2025 · Day 4'
 tags: ['ArcGIS Pro', 'Leaflet', 'EXIF', 'GDAL/OGR']
 image: '/images/30dmc-2025-day-04-wide.webp'
+imageFull: '/images/30dmc-2025-day-04-full.webp'
 imageAlt: 'Printed map of central Edessa with coloured pin symbols marking where each photograph was taken, surrounded by seven of the photographs themselves'
 map: '/data/30dmc-2025-day-04-edessa-trip.geojson'
 mapComponent: 'photo-trip'

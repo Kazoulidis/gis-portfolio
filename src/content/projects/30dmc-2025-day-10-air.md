@@ -7,6 +7,7 @@ category: '30-day-map-challenge'
 context: '#30DayMapChallenge 2025 · Day 10'
 tags: ['ArcGIS Pro', 'Leaflet', 'GDAL/OGR']
 image: '/images/30dmc-2025-day-10-wide.webp'
+imageFull: '/images/30dmc-2025-day-10-full.webp'
 imageAlt: 'Printed A4 map of Greece showing mean annual wind speed at 100 metres above ground, pale cyan over the lowlands rising through blue and yellow to red along the Aegean ridgelines and islands'
 map: '/data/wind/wind-meta.json'
 mapComponent: 'wind-resource'

@@ -7,6 +7,7 @@ category: '30-day-map-challenge'
 context: '#30DayMapChallenge 2025 · Day 1'
 tags: ['ArcGIS Pro', 'Leaflet', 'GDAL/OGR']
 image: '/images/30dmc-2025-day-01-wide.webp'
+imageFull: '/images/30dmc-2025-day-01-full.webp'
 imageAlt: 'Printed A4 map of Greece showing 21 UNESCO World Heritage sites as classical temple symbols, brown for cultural sites and green for mixed sites, over a shaded relief background'
 mapComponent: 'unesco-sites'
 layers:

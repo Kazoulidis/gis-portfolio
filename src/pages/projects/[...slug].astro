@@ -2,6 +2,7 @@
 import { getCollection, render, type CollectionEntry } from 'astro:content';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import ProjectMap from '../../components/ProjectMap.astro';
+import ZoomableImage from '../../components/ZoomableImage.astro';
 import HexbinPointMap from '../../components/HexbinPointMap.astro';
 import RailwayMap from '../../components/RailwayMap.astro';
 import ProtectedAreasMap from '../../components/ProtectedAreasMap.astro';
@@ -117,11 +118,7 @@ const formattedDate = date.toLocaleDateString('en-GB', {
     }
 
     {
-      image && (
-        <figure class="project-image">
-          <img src={image} alt={imageAlt ?? ''} loading="eager" decoding="async" />
-        </figure>
-      )
+      image && <ZoomableImage src={image} full={project.data.imageFull} alt={imageAlt ?? ''} />
     }
 
     {
@@ -163,14 +160,14 @@ const formattedDate = date.toLocaleDateString('en-GB', {
 
     {
       dataSource && (
-        <p class="data-source">
-          <span class="data-source__label">Data source</span>
-          {dataSource.href ? (
-            <a href={dataSource.href}>{dataSource.label}</a>
-          ) : (
-            <span>{dataSource.label}</span>
-          )}
-        </p>
+        <div class="data-source">
+          <span class="data-source__label">{dataSource.length > 1 ? 'Data sources' : 'Data source'}</span>
+          <ul class="data-source__list">
+            {dataSource.map((source) => (
+              <li>{source.href ? <a href={source.href}>{source.label}</a> : source.label}</li>
+            ))}
+          </ul>
+        </div>
       )
     }
 
@@ -225,27 +222,6 @@ const formattedDate = date.toLocaleDateString('en-GB', {
     margin-bottom: 0.3rem;
   }
 
-  /* The finished map leads the page, so it gets the full frame width rather
-     than the text measure. */
-  .project-image {
-    margin: 2rem 0;
-    max-width: none;
-  }
-
-  .project-image img {
-    display: block;
-    width: 100%;
-    height: auto;
-    border: 1px solid var(--rule);
-    border-radius: var(--radius);
-  }
-
-  .project-image figcaption {
-    font-size: 0.85rem;
-    color: var(--text-muted);
-    margin-top: 0.6rem;
-  }
-
   .downloads {
     margin: 2rem 0;
   }
@@ -284,6 +260,16 @@ const formattedDate = date.toLocaleDateString('en-GB', {
     font-size: 0.85rem;
     color: var(--text-muted);
     margin: 1.5rem 0 0;
+  }
+
+  .data-source__list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .data-source__list li + li {
+    margin-top: 0.15rem;
   }
 
   .data-source__label {

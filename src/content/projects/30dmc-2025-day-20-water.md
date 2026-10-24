@@ -7,6 +7,7 @@ category: '30-day-map-challenge'
 context: '#30DayMapChallenge 2025 · Day 20'
 tags: ['ArcGIS Pro']
 image: '/images/30dmc-2025-day-20-wide.webp'
+imageFull: '/images/30dmc-2025-day-20-full.webp'
 imageAlt: 'Printed A4 map of Greek waters showing passenger-ship traffic density in eight shades of blue, with bright corridors fanning out from Piraeus across the Aegean and a dense band in the Corfu channel'
 thumbnail: '/images/30dmc-2025-day-20-square.webp'
 thumbnailAlt: 'Map of passenger-ship traffic density across the Aegean and Ionian seas'

@@ -7,6 +7,7 @@ category: '30-day-map-challenge'
 context: '#30DayMapChallenge 2025 · Day 5'
 tags: ['ArcGIS Pro', 'Leaflet', 'GDAL/OGR']
 image: '/images/30dmc-2025-day-05-wide.webp'
+imageFull: '/images/30dmc-2025-day-05-full.webp'
 imageAlt: 'Printed A4 map of Greece showing mountainous terrain in three shades of green over a grey country outline, overlaid with thousands of small coloured dots marking settlements by mountainous designation'
 mapComponent: 'relief-settlements'
 layers:

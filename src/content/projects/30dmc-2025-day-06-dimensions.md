@@ -7,6 +7,7 @@ category: '30-day-map-challenge'
 context: '#30DayMapChallenge 2025 · Day 6'
 tags: ['ArcGIS Pro', 'MapLibre GL', 'H3']
 image: '/images/30dmc-2025-day-06-wide.webp'
+imageFull: '/images/30dmc-2025-day-06-full.webp'
 imageAlt: 'Printed A4 map: a 3D view of population hexagons around Thessaloniki, with low yellow hexagons across the countryside rising into a dense column of tall red hexagons over the city centre'
 map: '/data/30dmc-2025-day-06-population-h3.json'
 mapComponent: 'population-hex-3d'

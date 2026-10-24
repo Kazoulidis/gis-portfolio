@@ -7,6 +7,7 @@ category: '30-day-map-challenge'
 context: '#30DayMapChallenge 2026 · Day 1'
 tags: ['ArcGIS Pro', 'RTKLIB', 'GNSS', 'PPP', 'Python']
 image: '/images/30dmc-2026-day-01-wide.webp'
+imageFull: '/images/30dmc-2026-day-01-full.webp'
 imageAlt: 'Printed A4 map of Greece with arrows from 212 GNSS stations, short and yellow in the north, long and dark red over the Peloponnese, the Aegean and Crete, all pointing south-west; legend with arrows drawn to scale and a table of positioning results for station TUC2'
 thumbnail: '/images/30dmc-2026-day-01-square.webp'
 thumbnailAlt: 'Map of Greece with GNSS velocity arrows pointing south-west, longest over Crete'
@@ -21,8 +22,20 @@ downloads:
     href: '/downloads/30dmc-2026-day-01-ppp-results.csv'
     note: 'CSV · PPP minus official position, mm · 1 KB'
 dataSource:
-  label: 'Nevada Geodetic Laboratory (MIDAS velocities, daily positions); EUREF/EPN via BKG (TUC2 observations); CODE (orbits, clocks)'
-  href: 'https://geodesy.unr.edu/'
+  - label: 'Nevada Geodetic Laboratory - MIDAS velocities and daily station positions'
+    href: 'https://geodesy.unr.edu/'
+  - label: 'EUREF Permanent GNSS Network - TUC2 observations (via BKG)'
+    href: 'https://epncb.eu/'
+  - label: 'CODE (IGS MGEX) - multi-GNSS final orbits, clocks and biases'
+    href: 'https://www.aiub.unibe.ch/research/code___analysis_center/'
+  - label: 'IGS - antenna calibrations (igs20.atx)'
+    href: 'https://files.igs.org/pub/station/general/'
+  - label: 'EMODnet Bathymetry - digital terrain model (2024)'
+    href: 'https://doi.org/10.12770/cf51df64-56f9-4a99-b1aa-36b8d7b743a1'
+  - label: 'Copernicus DEM GLO-90 - land relief'
+    href: 'https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM'
+  - label: '© EuroGeographics, via Eurostat GISCO - NUTS administrative boundaries'
+    href: 'https://ec.europa.eu/eurostat/web/gisco/geodata/statistical-units/territorial-units-statistics'
 # Keep off the site until the challenge day.
 draft: true
 ---

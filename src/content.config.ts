@@ -8,6 +8,11 @@ import { projectCategorySlugs } from './site';
  * The schema below is enforced at build time, so a typo in a project's
  * frontmatter fails the build rather than shipping a broken page.
  */
+const dataSourceItem = z.object({
+  label: z.string(),
+  href: z.string().optional(),
+});
+
 const projects = defineCollection({
   loader: glob({ pattern: '**/*.md', base: './src/content/projects' }),
   schema: z.object({
@@ -42,6 +47,10 @@ const projects = defineCollection({
     // interactive one supports it.
     image: z.string().optional(),
     imageAlt: z.string().optional(),
+    // A larger copy of `image` for the zoom viewer, fetched only when someone
+    // opens it - the page itself loads the light `image`. Without it the
+    // viewer zooms into `image`.
+    imageFull: z.string().optional(),
 
     // Files a reader can take away: the full-resolution map, the source data,
     // a PDF. Rendered as buttons after the maps. Paths are under public/, so
@@ -98,12 +107,12 @@ const projects = defineCollection({
     // Who produced the underlying data. Kept separate from `links` because
     // provenance is a credit, not a "see also" - in GIS work it is often the
     // first thing a knowledgeable reader looks for. `href` is optional; some
-    // sources have no public URL.
+    // sources have no public URL. One source or a list of them; either way
+    // the page gets a list, so a map built from five datasets can credit
+    // (and link) all five.
     dataSource: z
-      .object({
-        label: z.string(),
-        href: z.string().optional(),
-      })
+      .union([dataSourceItem, z.array(dataSourceItem).min(1)])
+      .transform((value) => (Array.isArray(value) ? value : [value]))
       .optional(),
 
     // Optional outbound links (StoryMap, repo, PDF, publication).

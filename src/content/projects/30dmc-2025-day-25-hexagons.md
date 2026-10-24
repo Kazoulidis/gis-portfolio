@@ -7,6 +7,7 @@ category: '30-day-map-challenge'
 context: '#30DayMapChallenge 2025 · Day 25'
 tags: ['ArcGIS Pro', 'Leaflet', 'd3-hexbin']
 image: '/images/30dmc-2025-day-25-wide.webp'
+imageFull: '/images/30dmc-2025-day-25-full.webp'
 imageAlt: 'Printed A4 map: concentration of Greek refugee settlements in 1928, shown as hexagons over Greece, shaded from pale to dark red by refugee share, with legend and scale bar'
 map: '/data/30dmc-2025-day-25-refugees.geojson'
 mapComponent: 'refugee-hexbin'

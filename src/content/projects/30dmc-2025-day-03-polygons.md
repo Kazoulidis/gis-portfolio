@@ -7,6 +7,7 @@ category: '30-day-map-challenge'
 context: '#30DayMapChallenge 2025 · Day 3'
 tags: ['ArcGIS Pro', 'Leaflet', 'GDAL/OGR']
 image: '/images/30dmc-2025-day-03-wide.webp'
+imageFull: '/images/30dmc-2025-day-03-full.webp'
 imageAlt: 'Printed A4 map: nationally designated protected areas across Greece, coloured and hatched by IUCN category, with legend and a table matching IUCN categories to national designation codes'
 map: '/data/30dmc-2025-day-03-protected-sites.geojson'
 mapComponent: 'protected-areas'

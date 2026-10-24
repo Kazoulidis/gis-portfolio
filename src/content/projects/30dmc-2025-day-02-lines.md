@@ -7,6 +7,7 @@ category: '30-day-map-challenge'
 context: '#30DayMapChallenge 2025 · Day 2'
 tags: ['ArcGIS Pro', 'Leaflet', 'GDAL/OGR']
 image: '/images/30dmc-2025-day-02-wide.webp'
+imageFull: '/images/30dmc-2025-day-02-full.webp'
 imageAlt: 'Printed A4 map: the Greek railway network drawn by gauge and status, with active lines in blue, suspended in orange, inactive in red and tourist routes in magenta'
 mapComponent: 'railway-network'
 layers:
