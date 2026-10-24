@@ -24,10 +24,6 @@ const { src, full, alt } = Astro.props;
 <figure class="project-image" data-zoomable data-full={full ?? src}>
   <button type="button" class="zoomable__open" aria-label="Open the map full screen to zoom in">
     <img src={src} alt={alt} loading="eager" decoding="async" />
-    <span class="zoomable__badge" aria-hidden="true">
-      <svg viewBox="0 0 24 24" width="16" height="16"><circle cx="10.5" cy="10.5" r="6.5" /><path d="M15.5 15.5 21 21M10.5 7.5v6M7.5 10.5h6" /></svg>
-      Zoom
-    </span>
   </button>
 
   <dialog class="zoomable__dialog" aria-label="Map viewer">
@@ -249,33 +245,6 @@ const { src, full, alt } = Astro.props;
     height: auto;
     border: 1px solid var(--rule);
     border-radius: var(--radius);
-  }
-
-  .zoomable__badge {
-    position: absolute;
-    right: 0.6rem;
-    bottom: 0.6rem;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    padding: 0.3rem 0.6rem;
-    font: 600 0.8rem var(--font-sans);
-    color: #fff;
-    background: rgb(20 24 28 / 0.72);
-    border-radius: var(--radius);
-    transition: background 0.15s;
-  }
-
-  .zoomable__badge svg {
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 2;
-    stroke-linecap: round;
-  }
-
-  .zoomable__open:hover .zoomable__badge,
-  .zoomable__open:focus-visible .zoomable__badge {
-    background: var(--accent);
   }
 
   .zoomable__dialog {
