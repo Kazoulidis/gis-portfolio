@@ -36,8 +36,7 @@ dataSource:
     href: 'https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM'
   - label: '© EuroGeographics, via Eurostat GISCO - NUTS administrative boundaries'
     href: 'https://ec.europa.eu/eurostat/web/gisco/geodata/statistical-units/territorial-units-statistics'
-# Keep off the site until the challenge day.
-draft: true
+draft: false
 ---
 
 **Prompt:** Points.
