@@ -32,8 +32,10 @@ downloads:
     href: '/data/30dmc-2025-day-01-unesco-components.geojson'
     note: 'GeoJSON · 46 components · 9 KB'
 dataSource:
-  label: 'UNESCO World Heritage List'
-  href: 'https://whc.unesco.org/en/statesparties/gr'
+  - label: 'UNESCO World Heritage List - sites, components and descriptions'
+    href: 'https://whc.unesco.org/en/statesparties/gr'
+  - label: 'Photographs: UNESCO World Heritage Centre; main images credited to their photographers'
+    href: 'https://whc.unesco.org/en/statesparties/gr'
 ---
 
 **Prompt:** Map with point data - individual locations, points of interest, clusters.

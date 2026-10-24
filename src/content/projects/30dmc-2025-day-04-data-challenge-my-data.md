@@ -22,7 +22,9 @@ downloads:
     href: '/downloads/30dmc-2025-day-04-map-square.png'
     note: 'PNG · 4724 × 4724 · 1.8 MB'
 dataSource:
-  label: 'My own photographs and their EXIF coordinates. Basemap: OpenStreetMap contributors'
+  - label: 'My own photographs and their EXIF coordinates'
+  - label: 'Basemap: map data © OpenStreetMap contributors, Microsoft, Esri Community Maps contributors; map layer by Esri'
+    href: 'https://www.openstreetmap.org/copyright'
 ---
 
 **Prompt:** Visualise a personal dataset, such as GPS traces or your commute.

@@ -27,6 +27,7 @@ downloads:
     note: 'PNG · 4724 × 4724 · 5.8 MB'
 dataSource:
   label: 'Hellenic Statistical Authority (ELSTAT), 2021 population census'
+  href: 'https://www.statistics.gr/en/2021-census-pop-hous'
 ---
 
 **Prompt:** Focus on the tangible and grounded. Map landforms, geology, soil,

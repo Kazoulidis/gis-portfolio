@@ -19,8 +19,8 @@ downloads:
     href: '/downloads/30dmc-2025-day-20-map-square.png'
     note: 'PNG · 4724 × 4724 · 4.9 MB'
 dataSource:
-  label: 'EMODnet Human Activities, EMSA Route Density'
-  href: 'https://emodnet.ec.europa.eu/en/human-activities'
+  label: 'EMODnet Human Activities, EMSA Route Density Map (1 km, 2024 passenger)'
+  href: 'https://emodnet.ec.europa.eu/geonetwork/srv/eng/catalog.search#/metadata/74eef9c6-13fe-4630-b935-f26871c8b661'
 ---
 
 **Prompt:** Focus on the fluid - hydrology, oceans, currents, water accessibility.

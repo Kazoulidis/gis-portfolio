@@ -26,7 +26,7 @@ downloads:
     note: 'GeoJSON · 17,971 patches · 4.2 MB'
 dataSource:
   label: 'MODIS MCD64A1 Collection 6.1 burned area, NASA LP DAAC (via University of Maryland)'
-  href: 'https://lpdaac.usgs.gov/documents/1006/MCD64_User_Guide_V61.pdf#page=23'
+  href: 'https://lpdaac.usgs.gov/products/mcd64a1v061/'
 ---
 
 **Prompt:** Focus on energy, light or transformation. Map heat, wildfires,
