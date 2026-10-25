@@ -32,7 +32,7 @@ dataSource:
     href: 'https://files.igs.org/pub/station/general/'
   - label: 'EMODnet Bathymetry - digital terrain model (2024)'
     href: 'https://doi.org/10.12770/cf51df64-56f9-4a99-b1aa-36b8d7b743a1'
-  - label: 'Copernicus DEM GLO-90 - land relief'
+  - label: 'Copernicus DEM GLO-90 - land elevation'
     href: 'https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM'
   - label: 'Hellenic Statistical Authority (ELSTAT) - Greek regional boundaries'
     href: 'https://www.statistics.gr/en/digital-cartographical-data'
