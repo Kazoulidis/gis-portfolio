@@ -14,10 +14,10 @@ thumbnailAlt: 'Map of Greece with GNSS velocity arrows pointing south-west, long
 downloads:
   - label: 'Full-resolution map'
     href: '/downloads/30dmc-2026-day-01-map.jpg'
-    note: 'JPEG · 7016 × 4961 · 6.6 MB'
+    note: 'JPEG · 7016 × 4961 · 6.9 MB'
   - label: 'Square version'
     href: '/downloads/30dmc-2026-day-01-map-square.jpg'
-    note: 'JPEG · 4724 × 4724 · 4.7 MB'
+    note: 'JPEG · 4724 × 4724 · 4.9 MB'
   - label: 'TUC2 positioning results'
     href: '/downloads/30dmc-2026-day-01-ppp-results.csv'
     note: 'CSV · PPP minus official position, mm · 1 KB'
@@ -34,8 +34,12 @@ dataSource:
     href: 'https://doi.org/10.12770/cf51df64-56f9-4a99-b1aa-36b8d7b743a1'
   - label: 'Copernicus DEM GLO-90 - land relief'
     href: 'https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM'
-  - label: '© EuroGeographics, via Eurostat GISCO - NUTS administrative boundaries'
+  - label: 'Hellenic Statistical Authority (ELSTAT) - Greek regional boundaries'
+    href: 'https://www.statistics.gr/en/digital-cartographical-data'
+  - label: '© EuroGeographics, via Eurostat GISCO - NUTS boundaries of the neighbouring countries'
     href: 'https://ec.europa.eu/eurostat/web/gisco/geodata/statistical-units/territorial-units-statistics'
+  - label: 'Natural Earth - country boundaries of the locator map'
+    href: 'https://www.naturalearthdata.com/'
 draft: false
 ---
 
