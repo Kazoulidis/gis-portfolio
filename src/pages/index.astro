@@ -1,5 +1,6 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
+import RecentProjectsCard from '../components/RecentProjectsCard.astro';
 import { site, projectCategories, projectsHref } from '../site';
 import {
   summary,
@@ -221,6 +222,7 @@ const fullDate = (d: Date) =>
     </div>
 
     <aside class="sidebar">
+      <RecentProjectsCard projects={recent} />
       <h3>Contact</h3>
       <ul>
         <li><a href={`mailto:${site.email}`}>Email</a></li>

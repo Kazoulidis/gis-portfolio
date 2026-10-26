@@ -1,0 +1,218 @@
+---
+/**
+ * A small card at the top of the About page's sidebar that cycles through the
+ * most recent projects, one at a time. Each slide links to its project page.
+ *
+ * Cycles every few seconds, pauses while the pointer or keyboard focus is on
+ * it or the tab is hidden, and never moves on its own for readers who ask for
+ * reduced motion; the dots switch slides by hand either way. Without
+ * JavaScript the first project shows and still links.
+ */
+import type { CollectionEntry } from 'astro:content';
+import { plainTitle } from '../cv';
+
+interface Props {
+  projects: CollectionEntry<'projects'>[];
+  heading?: string;
+}
+
+const { projects, heading = 'Check out my recent projects' } = Astro.props;
+---
+
+{
+  projects.length > 0 && (
+    <section class="recent-card" data-recent-card aria-roledescription="carousel" aria-label="Recent projects">
+      <h3 class="recent-card__heading">{heading}</h3>
+      <div class="recent-card__slides">
+        {projects.map((project, i) => (
+          <a
+            class="recent-card__slide"
+            href={`/projects/${project.id}`}
+            aria-hidden={i === 0 ? undefined : 'true'}
+            tabindex={i === 0 ? undefined : -1}
+            data-umami-event="recent-card"
+            data-umami-event-project={project.id}
+          >
+            <img
+              src={project.data.thumbnail}
+              alt=""
+              width="900"
+              height="900"
+              loading={i === 0 ? 'eager' : 'lazy'}
+              decoding="async"
+            />
+            <span class="recent-card__title">{plainTitle(project.data.title)}</span>
+            {project.data.context && <span class="recent-card__context">{project.data.context}</span>}
+          </a>
+        ))}
+      </div>
+      {projects.length > 1 && (
+        <div class="recent-card__dots">
+          {projects.map((project, i) => (
+            <button
+              type="button"
+              class="recent-card__dot"
+              aria-label={`Show ${plainTitle(project.data.title)}`}
+              aria-current={i === 0 ? 'true' : undefined}
+              data-index={i}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+<script>
+  const INTERVAL = 5000;
+
+  for (const card of document.querySelectorAll<HTMLElement>('[data-recent-card]')) {
+    const slides = [...card.querySelectorAll<HTMLElement>('.recent-card__slide')];
+    const dots = [...card.querySelectorAll<HTMLButtonElement>('.recent-card__dot')];
+    if (slides.length < 2) continue;
+
+    let current = 0;
+    let timer: number | undefined;
+    let paused = false;
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    const show = (index: number) => {
+      current = (index + slides.length) % slides.length;
+      slides.forEach((slide, i) => {
+        const on = i === current;
+        slide.classList.toggle('is-active', on);
+        if (on) {
+          slide.removeAttribute('aria-hidden');
+          slide.removeAttribute('tabindex');
+        } else {
+          slide.setAttribute('aria-hidden', 'true');
+          slide.setAttribute('tabindex', '-1');
+        }
+      });
+      dots.forEach((dot, i) => (i === current ? dot.setAttribute('aria-current', 'true') : dot.removeAttribute('aria-current')));
+    };
+
+    const stop = () => window.clearInterval(timer);
+    const start = () => {
+      stop();
+      if (!reduced && !paused && !document.hidden) timer = window.setInterval(() => show(current + 1), INTERVAL);
+    };
+
+    dots.forEach((dot) =>
+      dot.addEventListener('click', () => {
+        show(Number(dot.dataset.index));
+        start();
+      }),
+    );
+    for (const [on, off] of [['mouseenter', 'mouseleave'], ['focusin', 'focusout']] as const) {
+      card.addEventListener(on, () => ((paused = true), stop()));
+      card.addEventListener(off, () => ((paused = false), start()));
+    }
+    document.addEventListener('visibilitychange', start);
+
+    card.classList.add('is-enhanced');
+    show(0);
+    start();
+  }
+</script>
+
+<style>
+  .recent-card {
+    margin-bottom: 1.75rem;
+    padding: 0.75rem;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    background: var(--bg-surface);
+  }
+
+  .recent-card .recent-card__heading {
+    margin: 0 0 0.6rem;
+  }
+
+  .recent-card__slides {
+    display: grid;
+  }
+
+  /* All slides share one grid cell, so the card keeps the height of the
+     tallest and nothing below it jumps as the slides change. */
+  .recent-card__slide {
+    grid-area: 1 / 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .recent-card.is-enhanced .recent-card__slide {
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.4s ease, visibility 0.4s;
+  }
+
+  .recent-card.is-enhanced .recent-card__slide.is-active {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  /* Without JavaScript only the first project shows. */
+  .recent-card:not(.is-enhanced) .recent-card__slide:not(:first-child) {
+    display: none;
+  }
+
+  .recent-card__slide img {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+    object-fit: cover;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+  }
+
+  .recent-card__title {
+    font-family: var(--font-serif);
+    font-size: 1rem;
+    line-height: 1.3;
+    color: var(--accent);
+  }
+
+  .recent-card__slide:hover .recent-card__title,
+  .recent-card__slide:focus-visible .recent-card__title {
+    color: var(--accent-hover);
+    text-decoration: underline;
+  }
+
+  .recent-card__context {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+
+  .recent-card__dots {
+    display: flex;
+    justify-content: center;
+    gap: 0.4rem;
+    margin-top: 0.6rem;
+  }
+
+  .recent-card__dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    padding: 0;
+    border: 1px solid var(--text-muted);
+    border-radius: 50%;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .recent-card__dot[aria-current='true'] {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .recent-card.is-enhanced .recent-card__slide {
+      transition: none;
+    }
+  }
+</style>
