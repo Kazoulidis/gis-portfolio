@@ -64,7 +64,7 @@ const { projects, heading = 'Check out my recent projects' } = Astro.props;
 }
 
 <script>
-  const INTERVAL = 5000;
+  const INTERVAL = 3000;
 
   for (const card of document.querySelectorAll<HTMLElement>('[data-recent-card]')) {
     const slides = [...card.querySelectorAll<HTMLElement>('.recent-card__slide')];
