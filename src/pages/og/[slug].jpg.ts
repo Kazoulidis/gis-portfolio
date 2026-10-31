@@ -5,13 +5,10 @@
 import type { APIRoute } from 'astro';
 import { getCollection } from 'astro:content';
 import { projectCard } from '../../og';
-import { isVisible } from '../../projects';
 
+// Drafts included: a draft shared by link should still preview with its map.
 export async function getStaticPaths() {
-  const projects = await getCollection(
-    'projects',
-    ({ data }) => isVisible({ data }) && Boolean(data.image || data.thumbnail),
-  );
+  const projects = await getCollection('projects', ({ data }) => Boolean(data.image || data.thumbnail));
   return projects.map((project) => ({
     params: { slug: project.id },
     props: { source: (project.data.image ?? project.data.thumbnail)! },

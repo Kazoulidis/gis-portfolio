@@ -10,6 +10,8 @@ interface Props {
   imageAlt?: string;
   /** 'article' for a project page, 'website' otherwise. */
   type?: 'website' | 'article';
+  /** Keep the page out of search results: an unlisted draft, shared by link. */
+  noindex?: boolean;
 }
 
 const {
@@ -18,6 +20,7 @@ const {
   image = '/og/default.jpg',
   imageAlt = `${site.name}, ${site.role}`,
   type = 'website',
+  noindex = false,
 } = Astro.props;
 
 // Search results cut titles at about 60 characters, so the home page uses the
@@ -55,6 +58,7 @@ const isHome = path === '/';
     <title>{pageTitle}</title>
     <meta name="description" content={description} />
     <meta name="author" content={site.name} />
+    {noindex && <meta name="robots" content="noindex" />}
     <!-- Declared explicitly: without it every browser falls back to requesting
          /favicon.ico, which 404s on each page load. -->
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />

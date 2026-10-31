@@ -17,7 +17,6 @@ import MunicipalityShapes from '../../components/MunicipalityShapes.astro';
 import QuakeTimelineMap from '../../components/QuakeTimelineMap.astro';
 import { projectCategories } from '../../site';
 import { plainTitle } from '../../cv';
-import { isVisible } from '../../projects';
 
 // Bespoke map components a project can select via `mapComponent:` in
 // frontmatter. Add a component here and reference its key. Both `map:` (one
@@ -38,8 +37,10 @@ const CUSTOM_MAPS: Record<string, typeof ProjectMap> = {
   'quake-timeline': QuakeTimelineMap,
 };
 
+// Every project gets its page, drafts included: a draft is unlisted, reachable
+// by its link but kept off every list (see isListed in src/projects.ts).
 export async function getStaticPaths() {
-  const projects = await getCollection('projects', isVisible);
+  const projects = await getCollection('projects');
   return projects.map((project) => ({
     params: { slug: project.id },
     props: { project },
@@ -100,13 +101,17 @@ const formattedDate = date.toLocaleDateString('en-GB', {
   image={image || project.data.thumbnail ? `/og/${project.id}.jpg` : undefined}
   imageAlt={imageAlt ?? project.data.thumbnailAlt}
   type="article"
+  noindex={project.data.draft}
 >
   <article>
     <p class="eyebrow">
       {formattedDate}
       {context && <> &middot; {context}</>}
-      {/* Drafts only reach the dev server (see isVisible in src/projects.ts). */}
-      {project.data.draft && <span class="draft-flag">Draft - dev server only</span>}
+      {/* Marked on the dev server only; on the live site a draft reads as a
+          finished page to anyone given its link. */}
+      {import.meta.env.DEV && project.data.draft && (
+        <span class="draft-flag">Draft - unlisted on the live site</span>
+      )}
     </p>
     <h1>{title}</h1>
     <p class="lede">{summary}</p>

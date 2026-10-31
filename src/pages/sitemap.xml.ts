@@ -7,10 +7,10 @@
 import type { APIRoute } from 'astro';
 import { getCollection } from 'astro:content';
 import { projectCategories } from '../site';
-import { isVisible, yearsOf } from '../projects';
+import { isListed, yearsOf } from '../projects';
 
 export const GET: APIRoute = async ({ site }) => {
-  const projects = await getCollection('projects', isVisible);
+  const projects = await getCollection('projects', isListed);
   const day = (d: Date) => d.toISOString().slice(0, 10);
 
   const entries: { path: string; lastmod?: string }[] = [

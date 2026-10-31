@@ -7,10 +7,10 @@
 import { getCollection } from 'astro:content';
 import CategoryPage from '../../../components/CategoryPage.astro';
 import { projectCategories } from '../../../site';
-import { isVisible, projectYear, sortForCategory, yearsOf } from '../../../projects';
+import { isListed, projectYear, sortForCategory, yearsOf } from '../../../projects';
 
 export async function getStaticPaths() {
-  const all = await getCollection('projects', isVisible);
+  const all = await getCollection('projects', isListed);
   return projectCategories
     .filter((category) => category.byYear)
     .flatMap((category) => {

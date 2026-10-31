@@ -119,7 +119,8 @@ const projects = defineCollection({
     links: z
       .array(z.object({ label: z.string(), href: z.string() }))
       .default([]),
-    // Set true to keep a project out of the index while you draft it.
+    // Set true to unlist a project: its page is built and reachable by link,
+    // but no list, tab or sitemap shows it (see isListed in src/projects.ts).
     draft: z.boolean().default(false),
   })
     .refine((data) => !(data.map && data.layers), {

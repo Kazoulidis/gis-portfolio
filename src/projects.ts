@@ -7,13 +7,16 @@ import type { ProjectCategory } from './site';
 type Project = CollectionEntry<'projects'>;
 
 /**
- * Whether a project is shown. Drafts appear on the dev server (`npm run dev`)
- * so a page can be checked in place before it goes live; a production build
- * leaves them out everywhere - pages, tabs, lists, the sitemap and the
- * link-preview images. Use this as the getCollection filter, never `!data.draft`
- * on its own, or dev and production drift apart.
+ * Whether a project is listed. A draft is unlisted, not hidden: a production
+ * build still gives it its page and link-preview image, so it can be shared by
+ * link before its day, but leaves it out of the tabs, the category pages, the
+ * About page's recent projects and the sitemap, and marks its page noindex.
+ * On the dev server (`npm run dev`) drafts are listed too, so a page can be
+ * checked in place. Use this as the getCollection filter for anything that
+ * lists projects, never `!data.draft` on its own, or dev and production drift
+ * apart.
  */
-export const isVisible = ({ data }: { data: { draft: boolean } }) =>
+export const isListed = ({ data }: { data: { draft: boolean } }) =>
   import.meta.env.DEV || !data.draft;
 
 /** The year a project belongs to. UTC: frontmatter dates parse as UTC midnight. */

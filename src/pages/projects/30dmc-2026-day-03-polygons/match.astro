@@ -8,19 +8,15 @@
 import { getEntry } from 'astro:content';
 import BaseLayout from '../../../layouts/BaseLayout.astro';
 import Day03Tabs from '../../../components/Day03Tabs.astro';
-import { isVisible } from '../../../projects';
 
-// A dynamic route only so the page can follow the Day 3 draft flag: a fixed
-// page is always built, this one only while its project is visible.
-export async function getStaticPaths() {
-  const day = await getEntry('projects', '30dmc-2026-day-03-polygons');
-  return day && isVisible(day) ? [{ params: { page: 'match' } }] : [];
-}
+// Unlisted with Day 3 while it is a draft: still reachable, kept out of search.
+const day = await getEntry('projects', '30dmc-2026-day-03-polygons');
 
 const back = '/projects/30dmc-2026-day-03-polygons';
 ---
 
 <BaseLayout
+  noindex={day?.data.draft ?? false}
   title="Draw a Municipality"
   description="Draw a shape and see which of Greece's 332 municipalities it is most like. Your drawing morphs into the closest one, with a match percentage."
 >
