@@ -37,6 +37,7 @@ npm run build     # the finished site in dist/
 ## Deployment
 
 The site runs as a Docker image on my server, behind Nginx Proxy Manager. Each
-version tag (`v2026.11.04`, for example) runs a GitHub Actions workflow that
-builds the site into an nginx image for arm64 and publishes it to
-`ghcr.io/kazoulidis/gis-portfolio`. The server then pulls the new image.
+push to `main` runs a GitHub Actions workflow that builds the site into an
+nginx image for arm64 and publishes it to `ghcr.io/kazoulidis/gis-portfolio`,
+as `latest` and as the date and commit (`2026-11-04-cf63338`). The server then
+pulls the new image.

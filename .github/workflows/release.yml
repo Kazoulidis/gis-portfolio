@@ -1,11 +1,15 @@
 # Build the portfolio image and publish it to the GitHub Container Registry.
 #
-# Runs when a version tag is pushed:
+# Every push to main is a release: `git push`, wait a few minutes (the
+# repository's Actions tab shows progress), then pull on the server. Each build
+# is published twice:
 #
-#   git tag v2026.11.04 && git push origin v2026.11.04
+#   ghcr.io/kazoulidis/gis-portfolio:latest               what the server runs
+#   ghcr.io/kazoulidis/gis-portfolio:2026-11-04-cf63338   date (Athens) and commit,
+#                                                          kept for rolling back
 #
-# and can be started by hand from the Actions tab. Publishes
-# ghcr.io/kazoulidis/gis-portfolio with the tag's name and as `latest`.
+# A push that only touches the README builds nothing. A build can also be
+# started by hand from the Actions tab.
 #
 # Only for arm64, the Oracle Ampere box it runs on. The final stage of the
 # Dockerfile only copies files, so no emulation (QEMU) is needed.
@@ -14,7 +18,8 @@ name: Release image
 
 on:
   push:
-    tags: ['v*']
+    branches: [main]
+    paths-ignore: ['README.md']
   workflow_dispatch:
 
 permissions:
@@ -42,8 +47,8 @@ jobs:
         with:
           images: ghcr.io/kazoulidis/gis-portfolio
           tags: |
-            type=ref,event=tag
             type=raw,value=latest
+            type=sha,format=short,prefix={{date 'YYYY-MM-DD' tz='Europe/Athens'}}-
 
       - uses: docker/build-push-action@v6
         with:

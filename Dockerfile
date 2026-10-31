@@ -1,6 +1,6 @@
 # The portfolio as a ready-to-run image: the built site inside stock nginx.
 #
-# Built by .github/workflows/release.yml on every version tag and published to
+# Built by .github/workflows/release.yml on every push to main and published to
 # ghcr.io/kazoulidis/gis-portfolio. The VPS pulls it; nothing is built there.
 #
 # The site is split over four layers - downloads, images, data, then the pages
