@@ -1,0 +1,835 @@
+---
+/**
+ * An animated map of earthquakes over time, on the pattern of FireTimelineMap.
+ *
+ * 61,449 events of M2.5 and over, February 2011 to September 2026, each with its
+ * day, magnitude and class (background, mainshock-aftershock or swarm). Four
+ * views:
+ *   Total     every event at once - the composite, and the default
+ *   By day    a continuous run through the record; an event flashes on its day
+ *             and fades over the following month, so a sequence builds up and
+ *             clears on screen
+ *   By month  one discrete frame per month
+ *   By year   one discrete frame per year
+ * A menu jumps to the sequences named on the printed map: it zooms to one and
+ * runs it from its first day.
+ *
+ * Drawn on a custom canvas layer, like the fire map: the points are projected
+ * once per zoom level and redrawn each frame with only their alpha changing.
+ * The file is in columns and sorted by time, so a day, month or year is one
+ * contiguous slice found by binary search rather than a scan of every event.
+ *
+ * Columns read (see Day_04/prep/web_data.py):
+ *   t0 first day; d day from t0; lat, lon x 1,000; m ML x 10;
+ *   c class (0 background, 1 mainshock-aftershock, 2 swarm);
+ *   starts first day of each cluster; seq the named sequences
+ */
+interface Props {
+  src: string;
+  caption?: string;
+}
+
+const { src, caption } = Astro.props;
+---
+
+<figure class="map-figure">
+  <div class="quake-map">
+    <div
+      class="map map--tall"
+      data-quakemap
+      data-src={src}
+      role="application"
+      aria-label={caption ?? 'Animated map of earthquakes'}
+    >
+    </div>
+
+    <div class="quake-ui" data-quake-ui hidden>
+      <div class="quake-ui__top">
+        <div class="quake-ui__modes" role="group" aria-label="View">
+          <button type="button" class="quake-ui__mode is-active" data-quake-mode="total">Total</button>
+          <button type="button" class="quake-ui__mode" data-quake-mode="day">By day</button>
+          <button type="button" class="quake-ui__mode" data-quake-mode="month">By month</button>
+          <button type="button" class="quake-ui__mode" data-quake-mode="year">By year</button>
+        </div>
+        <select class="quake-ui__seq" data-quake-seq aria-label="Jump to a sequence">
+          <option value="">Jump to a sequence...</option>
+        </select>
+      </div>
+
+      <div class="quake-ui__row">
+        <button type="button" class="quake-ui__play" data-quake-play aria-label="Play">
+          <span data-quake-play-icon>&#9654;</span>
+        </button>
+        <div class="quake-ui__readout">
+          <strong data-quake-date>&nbsp;</strong>
+          <span data-quake-stats>&nbsp;</span>
+        </div>
+        <label class="quake-ui__speed">
+          Speed
+          <select data-quake-speed aria-label="Animation speed">
+            <option value="0.5">0.5&times;</option>
+            <option value="1" selected>1&times;</option>
+            <option value="2">2&times;</option>
+            <option value="4">4&times;</option>
+            <option value="8">8&times;</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="quake-ui__track">
+        <button type="button" class="quake-ui__step" data-quake-prev aria-label="Previous">&#8249;</button>
+        <div class="quake-ui__trackmid">
+          <input
+            class="quake-ui__slider"
+            type="range"
+            min="0"
+            max="1"
+            value="0"
+            step="1"
+            data-quake-slider
+            aria-label="Timeline"
+          />
+          <div class="quake-ui__ticks" data-quake-ticks></div>
+        </div>
+        <button type="button" class="quake-ui__step" data-quake-next aria-label="Next">&#8250;</button>
+      </div>
+    </div>
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<script>
+  import * as L from 'leaflet';
+  import { whenNear } from '../lazy';
+  import 'leaflet/dist/leaflet.css';
+
+  // The fire map's dark basemap: the red and yellow clusters glow against it,
+  // as the fire patches do.
+  const BASEMAP = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+  const ATTRIBUTION =
+    'Tiles &copy; <a href="https://www.esri.com/">Esri</a> - Esri, HERE, Garmin, ' +
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
+  // In By day, how long an event stays visible after its day. Most sequences
+  // are over within a month, so a 30-day fade keeps one on screen while it
+  // lasts and clears it soon after.
+  const FADE_DAYS = 30;
+
+  // Frames per second at 1x for the discrete modes. By day runs on
+  // requestAnimationFrame, one calendar day per frame at 1x.
+  const FPS = { month: 6, year: 1.2 };
+
+  // The printed map's class colours, except the background: its dark grey would
+  // vanish on the dark basemap, so here it is a light grey, kept faint.
+  const CLASSES = [
+    { label: 'Background', rgb: [175, 175, 175], alpha: 0.25 },
+    { label: 'Mainshock-aftershock', rgb: [210, 35, 50], alpha: 0.75 },
+    { label: 'Swarm', rgb: [250, 190, 20], alpha: 0.8 },
+  ] as const;
+
+  // Radius in pixels at zoom 7, by magnitude: M2.5 is a speck, M6 about 5.5 px.
+  // Zooming in grows the points, more slowly than the map, so a sequence opens
+  // up instead of staying a blot.
+  const radius = (m: number) => 0.9 + (m - 2.5) * 1.3;
+  const zoomFactor = (z: number) => Math.min(3, Math.max(0.7, Math.pow(2, (z - 7) * 0.4)));
+
+  // Greece and its seas, for the opening view; the data box itself runs wider.
+  const GREECE: L.LatLngBoundsExpression = [[34.6, 19.3], [41.8, 28.4]];
+
+  const DAY_MS = 86400000;
+  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+  interface Seq {
+    name: string;
+    cls: number;
+    start: number;
+    days: number;
+    n: number;
+    mmax: number;
+    bbox: [number, number, number, number];
+  }
+  interface Data {
+    t0: string;
+    d: number[];
+    lat: number[];
+    lon: number[];
+    m: number[];
+    c: number[];
+    starts: number[];
+    seq: Seq[];
+  }
+
+  type Mode = 'total' | 'day' | 'month' | 'year';
+
+  /** First position in a sorted array holding a value >= x. */
+  function lowerBound(a: Int32Array | number[], x: number) {
+    let lo = 0;
+    let hi = a.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (a[mid] < x) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  }
+
+  async function initMap(el: HTMLElement) {
+    const src = el.dataset.src;
+    if (!src) return;
+    const root = el.closest('.quake-map') as HTMLElement;
+    const ui = root.querySelector('[data-quake-ui]') as HTMLElement;
+
+    const map = L.map(el, { scrollWheelZoom: true, zoomControl: true });
+    // Real tiles only to z16 over Greece; past that, stretch them (see the fire map).
+    L.tileLayer(BASEMAP, { attribution: ATTRIBUTION, maxZoom: 19, maxNativeZoom: 16 }).addTo(map);
+    L.control.scale({ imperial: false }).addTo(map);
+    map.fitBounds(GREECE);
+
+    let data: Data;
+    try {
+      const res = await fetch(src);
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      data = await res.json();
+    } catch (err) {
+      console.error(`Could not load ${src}:`, err);
+      el.insertAdjacentHTML('beforeend', '<p class="map-error">This map’s data could not be loaded.</p>');
+      return;
+    }
+
+    // --- Columns ------------------------------------------------------------
+    const N = data.d.length;
+    const day = Int32Array.from(data.d);
+    const lat = Float64Array.from(data.lat, (v) => v / 1000);
+    const lon = Float64Array.from(data.lon, (v) => v / 1000);
+    const mag = Float32Array.from(data.m, (v) => v / 10);
+    const cls = Uint8Array.from(data.c);
+    const t0 = Math.floor(Date.parse(data.t0 + 'T00:00:00Z') / DAY_MS);
+    const firstDay = day[0];
+    const lastDay = day[N - 1];
+    const dateOf = (d: number) => new Date((t0 + d) * DAY_MS);
+
+    // Total draws background first, then mainshock-aftershock, then swarms on
+    // top, each by magnitude - the order of the printed map.
+    const totalOrder = Uint32Array.from({ length: N }, (_, i) => i).sort(
+      (a, b) => cls[a] - cls[b] || mag[a] - mag[b],
+    );
+
+    // Months and years as contiguous slices of the time-sorted columns.
+    const monthKey = (d: number) => {
+      const t = dateOf(d);
+      return t.getUTCFullYear() * 12 + t.getUTCMonth();
+    };
+    const firstMonth = monthKey(firstDay);
+    const months = monthKey(lastDay) - firstMonth + 1;
+    const monthStart = new Int32Array(months + 1);
+    {
+      let k = 0;
+      for (let mi = 0; mi <= months; mi++) {
+        while (k < N && monthKey(day[k]) - firstMonth < mi) k++;
+        monthStart[mi] = k;
+      }
+    }
+    const firstYear = dateOf(firstDay).getUTCFullYear();
+    const years = dateOf(lastDay).getUTCFullYear() - firstYear + 1;
+    const yearStart = new Int32Array(years + 1);
+    {
+      let k = 0;
+      for (let yi = 0; yi <= years; yi++) {
+        while (k < N && dateOf(day[k]).getUTCFullYear() - firstYear < yi) k++;
+        yearStart[yi] = k;
+      }
+    }
+    const clustered = cls.reduce((s, c) => s + (c > 0 ? 1 : 0), 0);
+
+    // --- Canvas layer -------------------------------------------------------
+    let mode: Mode = 'total';
+    let index = 0;
+    let px: Float32Array | null = null;
+    let py: Float32Array | null = null;
+
+    const COLOURS = CLASSES.map((c) => c.rgb.join(','));
+
+    function dot(ctx: CanvasRenderingContext2D, x: number, y: number, r: number) {
+      // Below about a pixel and a half an arc is indistinguishable from a
+      // square and several times slower; most events are that small.
+      if (r < 1.4) ctx.fillRect(x - r, y - r, 2 * r, 2 * r);
+      else {
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, 2 * Math.PI);
+        ctx.fill();
+      }
+    }
+
+    function paint(ctx: CanvasRenderingContext2D, m: L.Map, ox: number, oy: number) {
+      if (!px || !py) {
+        px = new Float32Array(N);
+        py = new Float32Array(N);
+        for (let i = 0; i < N; i++) {
+          const p = m.latLngToLayerPoint([lat[i], lon[i]]);
+          px[i] = p.x;
+          py[i] = p.y;
+        }
+      }
+      const zf = zoomFactor(m.getZoom());
+
+      if (mode === 'total') {
+        for (let k = 0; k < N; k++) {
+          const i = totalOrder[k];
+          const c = cls[i];
+          ctx.fillStyle = `rgba(${COLOURS[c]},${CLASSES[c].alpha})`;
+          dot(ctx, px[i] - ox, py[i] - oy, radius(mag[i]) * zf);
+        }
+        return;
+      }
+
+      let from: number;
+      let to: number;
+      const current = firstDay + index;
+      if (mode === 'day') {
+        from = lowerBound(day, current - FADE_DAYS + 1);
+        to = lowerBound(day, current + 1);
+      } else if (mode === 'month') {
+        from = monthStart[index];
+        to = monthStart[index + 1];
+      } else {
+        from = yearStart[index];
+        to = yearStart[index + 1];
+      }
+      // Oldest first, so the newest events sit on top.
+      for (let i = from; i < to; i++) {
+        const c = cls[i];
+        let a: number = CLASSES[c].alpha;
+        if (mode === 'day') {
+          const t = 1 - (current - day[i]) / FADE_DAYS;
+          a *= 0.25 + 0.75 * t * t;
+        }
+        ctx.fillStyle = `rgba(${COLOURS[c]},${a.toFixed(3)})`;
+        // An event on the current day draws larger, so each new one is seen.
+        const r = radius(mag[i]) * zf * (mode === 'day' && day[i] === current ? 1.6 : 1);
+        dot(ctx, px[i] - ox, py[i] - oy, r);
+      }
+    }
+
+    const QuakeLayer = L.Layer.extend({
+      onAdd(m: L.Map) {
+        this._map = m;
+        const canvas = (this._canvas = L.DomUtil.create('canvas', 'quake-canvas'));
+        canvas.style.position = 'absolute';
+        canvas.style.pointerEvents = 'none';
+        m.getPanes().overlayPane.appendChild(canvas);
+        m.on('moveend zoomend resize', this._reset, this);
+        this._zoom = null;
+        this._reset();
+      },
+      onRemove(m: L.Map) {
+        m.off('moveend zoomend resize', this._reset, this);
+        this._canvas.remove();
+      },
+      _reset() {
+        const m = this._map as L.Map;
+        const size = m.getSize();
+        const topLeft = m.containerPointToLayerPoint([0, 0]);
+        L.DomUtil.setPosition(this._canvas, topLeft);
+        const dpr = window.devicePixelRatio || 1;
+        this._canvas.width = Math.round(size.x * dpr);
+        this._canvas.height = Math.round(size.y * dpr);
+        this._canvas.style.width = size.x + 'px';
+        this._canvas.style.height = size.y + 'px';
+        this._dpr = dpr;
+        this._origin = topLeft;
+        // Panning keeps layer coordinates; only a new zoom needs reprojecting.
+        const z = m.getZoom();
+        if (z !== this._zoom) {
+          this._zoom = z;
+          px = py = null;
+        }
+        this.draw();
+      },
+      draw() {
+        const m = this._map as L.Map;
+        if (!m) return;
+        const ctx = this._canvas.getContext('2d') as CanvasRenderingContext2D;
+        const dpr = this._dpr;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, this._canvas.width / dpr, this._canvas.height / dpr);
+        paint(ctx, m, this._origin.x, this._origin.y);
+      },
+    });
+
+    const quakeLayer = new (QuakeLayer as unknown as new () => L.Layer)();
+    map.addLayer(quakeLayer);
+
+    // --- UI -----------------------------------------------------------------
+    const slider = root.querySelector('[data-quake-slider]') as HTMLInputElement;
+    const dateEl = root.querySelector('[data-quake-date]') as HTMLElement;
+    const statsEl = root.querySelector('[data-quake-stats]') as HTMLElement;
+    const playBtn = root.querySelector('[data-quake-play]') as HTMLButtonElement;
+    const playIcon = root.querySelector('[data-quake-play-icon]') as HTMLElement;
+    const ticks = root.querySelector('[data-quake-ticks]') as HTMLElement;
+    const speedSel = root.querySelector('[data-quake-speed]') as HTMLSelectElement;
+    const seqSel = root.querySelector('[data-quake-seq]') as HTMLSelectElement;
+    const prevBtn = root.querySelector('[data-quake-prev]') as HTMLButtonElement;
+    const nextBtn = root.querySelector('[data-quake-next]') as HTMLButtonElement;
+    const modeBtns = [...root.querySelectorAll<HTMLButtonElement>('[data-quake-mode]')];
+    ui.hidden = false;
+
+    for (const [k, s] of data.seq.entries()) {
+      const o = document.createElement('option');
+      o.value = String(k);
+      o.textContent = `${s.name} (${s.cls === 2 ? 'swarm' : 'mainshock-aftershock'}, M${s.mmax.toFixed(1)})`;
+      seqSel.appendChild(o);
+    }
+
+    const count = () =>
+      mode === 'day' ? lastDay - firstDay + 1 : mode === 'month' ? months : mode === 'year' ? years : 1;
+    const num = (n: number) => n.toLocaleString('en-GB');
+
+    /** Largest magnitude and count in a slice of the time-sorted columns. */
+    function slice(from: number, to: number) {
+      let max = 0;
+      for (let i = from; i < to; i++) if (mag[i] > max) max = mag[i];
+      return { n: to - from, max };
+    }
+    const largest = (s: { n: number; max: number }) => (s.n ? ` · largest M${s.max.toFixed(1)}` : '');
+
+    function renderTicks() {
+      ticks.innerHTML = '';
+      if (mode === 'total') return;
+      const n = count();
+      for (let y = 2012; y <= 2026; y += 2) {
+        let i: number;
+        if (mode === 'year') i = y - firstYear;
+        else if (mode === 'month') i = y * 12 - firstMonth;
+        else i = Math.floor(Date.parse(`${y}-01-01T00:00:00Z`) / DAY_MS) - t0 - firstDay;
+        if (i < 0 || i > n - 1) continue;
+        const tick = document.createElement('span');
+        tick.className = 'quake-ui__tick';
+        tick.style.left = (i / (n - 1)) * 100 + '%';
+        tick.textContent = String(y);
+        ticks.appendChild(tick);
+      }
+    }
+
+    function render() {
+      (quakeLayer as unknown as { draw: () => void }).draw();
+
+      if (mode === 'total') {
+        dateEl.textContent = 'February 2011 - September 2026';
+        statsEl.textContent = `${num(N)} earthquakes of M2.5+ · ${num(clustered)} in clusters`;
+      } else if (mode === 'day') {
+        const current = firstDay + index;
+        const d = dateOf(current);
+        dateEl.textContent = `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+        const today = slice(lowerBound(day, current), lowerBound(day, current + 1));
+        const month = slice(lowerBound(day, current - FADE_DAYS + 1), lowerBound(day, current + 1));
+        statsEl.textContent = `${num(today.n)} that day${largest(today)} · ${num(month.n)} in the last 30 days`;
+      } else if (mode === 'month') {
+        const k = firstMonth + index;
+        dateEl.textContent = `${MONTHS[k % 12]} ${Math.floor(k / 12)}`;
+        const s = slice(monthStart[index], monthStart[index + 1]);
+        statsEl.textContent = `${num(s.n)} earthquakes${largest(s)}`;
+      } else {
+        const y = firstYear + index;
+        dateEl.textContent = String(y);
+        const s = slice(yearStart[index], yearStart[index + 1]);
+        const part = y === firstYear ? ' (from February)' : y === firstYear + years - 1 ? ' (to September)' : '';
+        statsEl.textContent = `${num(s.n)} earthquakes${part}${largest(s)}`;
+      }
+
+      slider.value = String(index);
+    }
+
+    function setMode(next: Mode, { resetIndex = true } = {}) {
+      mode = next;
+      for (const b of modeBtns) b.classList.toggle('is-active', b.dataset.quakeMode === next);
+      const n = count();
+      slider.max = String(Math.max(0, n - 1));
+      slider.disabled = next === 'total';
+      slider.classList.toggle('is-disabled', next === 'total');
+      prevBtn.disabled = nextBtn.disabled = next === 'total';
+      // By day steps between the days a cluster began; By month and By year
+      // step one frame.
+      const what = next === 'day' ? 'cluster start' : next === 'month' ? 'month' : 'year';
+      prevBtn.title = `Previous ${what}`;
+      nextBtn.title = `Next ${what}`;
+      prevBtn.setAttribute('aria-label', `Previous ${what}`);
+      nextBtn.setAttribute('aria-label', `Next ${what}`);
+      if (resetIndex) index = 0;
+      if (index > n - 1) index = n - 1;
+      renderTicks();
+      render();
+    }
+
+    function jump(dir: 1 | -1) {
+      stop();
+      if (mode === 'day') {
+        const at = firstDay + index;
+        const k = dir === 1 ? lowerBound(data.starts, at + 1) : lowerBound(data.starts, at) - 1;
+        if (k < 0 || k >= data.starts.length) return;
+        index = data.starts[k] - firstDay;
+      } else {
+        index = Math.min(count() - 1, Math.max(0, index + dir));
+      }
+      render();
+    }
+
+    let timer: number | null = null;
+    let raf: number | null = null;
+    const isPlaying = () => timer !== null || raf !== null;
+
+    function stop() {
+      if (timer !== null) {
+        window.clearInterval(timer);
+        timer = null;
+      }
+      if (raf !== null) {
+        cancelAnimationFrame(raf);
+        raf = null;
+      }
+      playIcon.innerHTML = '&#9654;';
+      playBtn.setAttribute('aria-label', 'Play');
+    }
+
+    function start() {
+      // Pressing play from the composite moves to the day run, from the start.
+      if (mode === 'total') setMode('day');
+      const last = count() - 1;
+      if (index >= last) index = 0;
+      const speed = Number(speedSel.value) || 1;
+
+      if (mode === 'day') {
+        // One calendar day per frame at 1x; the accumulator lets 0.5x hold a
+        // day for two frames and the higher speeds advance several per frame.
+        let acc = 0;
+        const tick = () => {
+          acc += speed;
+          const whole = Math.floor(acc);
+          if (whole >= 1) {
+            acc -= whole;
+            index += whole;
+            if (index >= last) {
+              index = last;
+              render();
+              stop();
+              return;
+            }
+            render();
+          }
+          raf = requestAnimationFrame(tick);
+        };
+        raf = requestAnimationFrame(tick);
+      } else {
+        const fps = FPS[mode as 'month' | 'year'] * speed;
+        timer = window.setInterval(() => {
+          index += 1;
+          if (index >= last) {
+            index = last;
+            render();
+            stop();
+            return;
+          }
+          render();
+        }, 1000 / fps);
+      }
+
+      playIcon.innerHTML = '&#10073;&#10073;';
+      playBtn.setAttribute('aria-label', 'Pause');
+      render();
+    }
+
+    playBtn.addEventListener('click', () => (isPlaying() ? stop() : start()));
+    prevBtn.addEventListener('click', () => jump(-1));
+    nextBtn.addEventListener('click', () => jump(1));
+
+    slider.addEventListener('input', () => {
+      stop();
+      index = Number(slider.value);
+      render();
+    });
+
+    speedSel.addEventListener('change', () => {
+      if (isPlaying()) {
+        stop();
+        start();
+      }
+    });
+
+    for (const btn of modeBtns) {
+      btn.addEventListener('click', () => {
+        stop();
+        setMode(btn.dataset.quakeMode as Mode);
+      });
+    }
+
+    // A named sequence: zoom to it and run it by day from two days before its
+    // first event, so the first shock is seen arriving.
+    seqSel.addEventListener('change', () => {
+      const s = data.seq[Number(seqSel.value)];
+      if (!s) return;
+      stop();
+      const [south, west, north, east] = s.bbox;
+      map.fitBounds([[south, west], [north, east]], { padding: [40, 40], maxZoom: 10 });
+      setMode('day', { resetIndex: false });
+      index = Math.max(0, s.start - 2 - firstDay);
+      start();
+    });
+
+    setMode('total');
+
+    // --- Legend -------------------------------------------------------------
+    const legend = new L.Control({ position: 'topright' });
+    legend.onAdd = () => {
+      const box = L.DomUtil.create('div', 'map-legend map-legend--quake');
+      L.DomEvent.disableClickPropagation(box);
+      // Swarm first, to read the same way round as the printed legend.
+      const rows = [1, 2, 0]
+        .map((c) => CLASSES[c])
+        .map(
+          (c) =>
+            `<div class="map-legend__class"><span class="map-legend__dot" style="background:rgb(${c.rgb.join(',')})"></span>` +
+            `<span>${c.label}</span></div>`,
+        )
+        .join('');
+      const sizes = [3, 4, 5, 6]
+        .map((m) => {
+          const d = 2 * radius(m);
+          return `<span class="map-legend__size"><span style="width:${d}px;height:${d}px"></span>${m}</span>`;
+        })
+        .join('');
+      box.innerHTML =
+        `<div class="map-legend__title">Earthquakes M2.5+</div>` +
+        rows +
+        `<div class="map-legend__subtitle">Magnitude (ML)</div>` +
+        `<div class="map-legend__sizes">${sizes}</div>` +
+        `<div class="map-legend__note">A cluster is 10 or more quakes within 10 km and 3 days of each other.</div>`;
+      return box;
+    };
+    legend.addTo(map);
+  }
+
+  // Started when the map nears the viewport (see src/lazy.ts).
+  document.querySelectorAll<HTMLElement>('[data-quakemap]').forEach((el) => whenNear(el, () => initMap(el)));
+</script>
+
+<style is:global>
+  .quake-map {
+    position: relative;
+  }
+
+  .quake-ui {
+    margin-top: 0.6rem;
+    padding: 0.55rem 0.75rem 0.5rem;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    background: var(--bg-surface);
+  }
+
+  .quake-ui__top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.45rem;
+    margin-bottom: 0.55rem;
+  }
+  .quake-ui__modes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+  .quake-ui__mode {
+    font-size: 0.78rem;
+    padding: 0.2rem 0.6rem;
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    background: var(--bg);
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+  .quake-ui__mode:hover {
+    color: var(--text);
+    border-color: var(--text-muted);
+  }
+  .quake-ui__mode.is-active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--bg-surface);
+  }
+  .quake-ui__seq {
+    font: inherit;
+    font-size: 0.78rem;
+    max-width: 100%;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    padding: 0.15rem 0.3rem;
+  }
+
+  .quake-ui__row {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+  }
+  .quake-ui__play {
+    flex: none;
+    width: 2.1rem;
+    height: 2.1rem;
+    border: 1px solid var(--rule);
+    border-radius: 50%;
+    background: var(--bg);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 0.7rem;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .quake-ui__play:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .quake-ui__readout {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.15rem 0.7rem;
+    min-width: 0;
+    flex: 1;
+  }
+  .quake-ui__readout strong {
+    font-family: var(--font-serif);
+    font-size: 1.02rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .quake-ui__readout span {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .quake-ui__speed {
+    flex: none;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+  .quake-ui__speed select {
+    font: inherit;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    padding: 0.1rem 0.2rem;
+  }
+
+  .quake-ui__track {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+  }
+  .quake-ui__trackmid {
+    flex: 1;
+    min-width: 0;
+  }
+  .quake-ui__step {
+    flex: none;
+    width: 1.7rem;
+    height: 1.7rem;
+    margin-top: 0.1rem;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .quake-ui__step:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .quake-ui__step:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+
+  .quake-ui__slider {
+    display: block;
+    width: 100%;
+    margin: 0.15rem 0 0;
+    accent-color: #d22332;
+  }
+  .quake-ui__slider.is-disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+  .quake-ui__ticks {
+    position: relative;
+    height: 1rem;
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .quake-ui__tick {
+    position: absolute;
+    transform: translateX(-50%);
+    white-space: nowrap;
+  }
+
+  @media (max-width: 30rem) {
+    .quake-ui__row {
+      flex-wrap: wrap;
+    }
+    .quake-ui__speed {
+      order: 3;
+      margin-left: auto;
+    }
+  }
+
+  .map-legend--quake {
+    width: 11.5rem;
+  }
+  .map-legend--quake .map-legend__class {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.06rem 0;
+    font-size: 0.76rem;
+  }
+  .map-legend--quake .map-legend__dot {
+    flex: none;
+    width: 0.65rem;
+    height: 0.65rem;
+    border-radius: 50%;
+    border: 1px solid rgba(0, 0, 0, 0.25);
+  }
+  .map-legend--quake .map-legend__subtitle {
+    margin-top: 0.35rem;
+    font-size: 0.76rem;
+    font-weight: 600;
+  }
+  .map-legend--quake .map-legend__sizes {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    font-size: 0.76rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .map-legend--quake .map-legend__size {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+  .map-legend--quake .map-legend__size > span {
+    display: inline-block;
+    border-radius: 50%;
+    background: rgb(150, 150, 150);
+  }
+</style>

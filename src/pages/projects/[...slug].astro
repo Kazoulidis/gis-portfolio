@@ -14,6 +14,7 @@ import PopulationHex3DMap from '../../components/PopulationHex3DMap.astro';
 import FatalitiesMaps from '../../components/FatalitiesMaps.astro';
 import WindResourceMap from '../../components/WindResourceMap.astro';
 import MunicipalityShapes from '../../components/MunicipalityShapes.astro';
+import QuakeTimelineMap from '../../components/QuakeTimelineMap.astro';
 import { projectCategories } from '../../site';
 import { plainTitle } from '../../cv';
 import { isVisible } from '../../projects';
@@ -34,6 +35,7 @@ const CUSTOM_MAPS: Record<string, typeof ProjectMap> = {
   'hellenic-fatalities': FatalitiesMaps,
   'wind-resource': WindResourceMap,
   'municipality-shapes': MunicipalityShapes,
+  'quake-timeline': QuakeTimelineMap,
 };
 
 export async function getStaticPaths() {
