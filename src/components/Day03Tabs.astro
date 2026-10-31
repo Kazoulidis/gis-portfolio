@@ -1,0 +1,71 @@
+---
+/**
+ * Day 3 (2026): the two interactive views as tabs, so the drawing game is as
+ * easy to find as the map. Each tab is its own page; the explore tab links to
+ * the interactive section of the project page, below the printed sheet.
+ */
+interface Props {
+  active: 'explore' | 'draw';
+}
+
+const { active } = Astro.props;
+const tabs = [
+  { key: 'explore', label: 'Explore the ranking', href: '/projects/30dmc-2026-day-03-polygons#explore' },
+  { key: 'draw', label: 'Draw a municipality', href: '/projects/30dmc-2026-day-03-polygons/match' },
+];
+---
+
+<nav class="d3-tabs" aria-label="Day 3 interactive views">
+  {
+    tabs.map((t) => (
+      <a href={t.href} class="d3-tabs__tab" aria-current={t.key === active ? 'page' : undefined}>
+        {t.key === 'draw' && (
+          <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+            <path d="M2 14l1-4 8-8 3 3-8 8zM10 3l3 3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+          </svg>
+        )}
+        {t.key === 'explore' && (
+          <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+            <path d="M2 2h5v5H2zM9 2h5v5H9zM2 9h5v5H2zM9 9h5v5H9z" fill="none" stroke="currentColor" stroke-width="1.5" />
+          </svg>
+        )}
+        {t.label}
+      </a>
+    ))
+  }
+</nav>
+
+<style>
+  .d3-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin: 0 0 1rem;
+    border-bottom: 1px solid var(--rule);
+    max-width: none;
+  }
+  .d3-tabs__tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.55rem 1rem;
+    margin-bottom: -1px;
+    font-family: var(--font-sans);
+    font-size: 0.95rem;
+    text-decoration: none;
+    color: var(--text-muted);
+    border: 1px solid transparent;
+    border-radius: var(--radius) var(--radius) 0 0;
+  }
+  .d3-tabs__tab:hover {
+    color: var(--accent);
+    background: var(--bg-subtle);
+  }
+  .d3-tabs__tab[aria-current='page'] {
+    color: var(--text);
+    font-weight: 600;
+    background: var(--bg-surface);
+    border-color: var(--rule);
+    border-bottom-color: var(--bg-surface);
+  }
+</style>

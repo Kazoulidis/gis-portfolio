@@ -1,0 +1,382 @@
+---
+/**
+ * Day 3 (2026): every Greek municipality ranked by compactness, as a map and as
+ * a wall of silhouettes, linked both ways.
+ *
+ * The wall draws each municipality at the same area (from the normalised
+ * shapes file), so the eye compares shape, not size. Hovering a silhouette
+ * lights the municipality up on the map; hovering the map lights up its
+ * silhouette. Clicking either zooms the map and scrolls the wall to it.
+ *
+ *   src     the map layer, WGS 84 GeoJSON (code, name, unit, rank, pp, ...)
+ *   shapes  the normalised shapes, from the same prep script (web_data.py)
+ */
+interface Props {
+  src: string;
+  caption?: string;
+}
+
+const { src, caption } = Astro.props;
+import Day03Tabs from './Day03Tabs.astro';
+const shapes = '/data/30dmc-2026-day-03-shapes.json';
+---
+
+<div id="explore" class="shapes-anchor"></div>
+<Day03Tabs active="explore" />
+
+<figure class="map-figure shapes-figure" style="margin-top:0" data-shapes data-src={src} data-shapes-src={shapes}>
+  <div class="shapes-controls">
+    <input class="shapes-search" type="search" placeholder="Find a municipality" aria-label="Find a municipality" />
+    <span class="shapes-count" aria-live="polite"></span>
+  </div>
+
+  <div class="shapes-layout">
+    <div class="map shapes-map" role="application" aria-label={caption ?? 'Map of Greek municipalities by compactness'}></div>
+    <div class="shapes-side">
+      <div class="shapes-card" aria-live="polite">
+        <p class="shapes-card__hint">Hover a shape or the map. A circle scores 1.00.</p>
+      </div>
+      <div class="shapes-legend"></div>
+    </div>
+  </div>
+
+  <ol class="shapes-wall" aria-label="Municipalities from roundest to most fragmented"></ol>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<script>
+  import * as L from 'leaflet';
+  import 'leaflet/dist/leaflet.css';
+  import { whenNear } from '../lazy';
+  import { CLASSES, colourFor, shapePath, type Shape } from '../day03';
+
+  const BASEMAP = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+  const ATTRIBUTION =
+    'Tiles &copy; <a href="https://www.esri.com/">Esri</a> - Esri, HERE, Garmin, ' +
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
+  const esc = (v: unknown) =>
+    String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
+  const fmt = (n: number, d = 0) => n.toLocaleString('en-GB', { minimumFractionDigits: d, maximumFractionDigits: d });
+
+  async function init(root: HTMLElement) {
+    const mapEl = root.querySelector<HTMLElement>('.shapes-map')!;
+    const wall = root.querySelector<HTMLOListElement>('.shapes-wall')!;
+    const card = root.querySelector<HTMLElement>('.shapes-card')!;
+    const search = root.querySelector<HTMLInputElement>('.shapes-search')!;
+    const count = root.querySelector<HTMLElement>('.shapes-count')!;
+
+    let geo: GeoJSON.FeatureCollection;
+    let shapes: Shape[];
+    try {
+      [geo, shapes] = await Promise.all(
+        [root.dataset.src!, root.dataset.shapesSrc!].map(async (u) => {
+          const r = await fetch(u);
+          if (!r.ok) throw new Error(`${u}: ${r.status}`);
+          return r.json();
+        }),
+      );
+    } catch (err) {
+      console.error(err);
+      mapEl.insertAdjacentHTML('beforeend', '<p class="map-error">This map’s data could not be loaded.</p>');
+      return;
+    }
+    const total = shapes.length;
+
+    // --- Map ---------------------------------------------------------------
+    const map = L.map(mapEl, { preferCanvas: true, scrollWheelZoom: true });
+    L.tileLayer(BASEMAP, { attribution: ATTRIBUTION, maxZoom: 16, maxNativeZoom: 16 }).addTo(map);
+    L.control.scale({ imperial: false }).addTo(map);
+
+    const base = (pp: number): L.PathOptions => ({ color: '#ffffff', weight: 0.6, fillColor: colourFor(pp), fillOpacity: 0.85 });
+    const layers = new Map<string, L.Path>();
+    const geoLayer = L.geoJSON(geo, {
+      style: (f) => base(f!.properties.pp),
+      onEachFeature: (f, layer) => {
+        layers.set(f.properties.code, layer as L.Path);
+        layer.on('mouseover', () => select(f.properties.code, 'map'));
+        layer.on('mouseout', () => select(null, 'map'));
+        layer.on('click', () => select(f.properties.code, 'map', true));
+      },
+    }).addTo(map);
+    const home = () => map.fitBounds(geoLayer.getBounds(), { padding: [8, 8] });
+    home();
+
+    // Back to the whole country after zooming in on a municipality.
+    const reset = new L.Control({ position: 'topleft' });
+    reset.onAdd = () => {
+      const bar = L.DomUtil.create('div', 'leaflet-bar');
+      const btn = L.DomUtil.create('a', 'shapes-home', bar) as HTMLAnchorElement;
+      btn.href = '#';
+      btn.role = 'button';
+      btn.title = 'Show all of Greece';
+      btn.setAttribute('aria-label', 'Show all of Greece');
+      btn.innerHTML =
+        '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>';
+      L.DomEvent.on(btn, 'click', (e) => {
+        L.DomEvent.preventDefault(e);
+        L.DomEvent.stopPropagation(e);
+        home();
+      });
+      return bar;
+    };
+    reset.addTo(map);
+
+    // --- Wall --------------------------------------------------------------
+    const tiles = new Map<string, HTMLLIElement>();
+    const byCode = new Map(shapes.map((s) => [s.code, s]));
+    for (const s of shapes) {
+      const li = document.createElement('li');
+      li.className = 'shapes-tile';
+      li.tabIndex = 0;
+      li.dataset.code = s.code;
+      li.innerHTML =
+        `<svg viewBox="-1.6 -1.6 3.2 3.2" aria-hidden="true"><path d="${shapePath(s)}" fill="${colourFor(s.pp)}" fill-rule="evenodd"/></svg>` +
+        `<span class="shapes-tile__rank">${s.rank}</span><span class="visually-hidden">${esc(s.name)}, score ${s.pp.toFixed(2)}</span>`;
+      li.title = `${s.rank}. ${s.name} (${s.unit}) · ${s.pp.toFixed(2)}`;
+      li.addEventListener('mouseenter', () => select(s.code, 'wall'));
+      li.addEventListener('mouseleave', () => select(null, 'wall'));
+      li.addEventListener('focus', () => select(s.code, 'wall'));
+      li.addEventListener('click', () => select(s.code, 'wall', true));
+      li.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          select(s.code, 'wall', true);
+        }
+      });
+      tiles.set(s.code, li);
+      wall.appendChild(li);
+    }
+
+    // --- Legend ------------------------------------------------------------
+    root.querySelector('.shapes-legend')!.innerHTML =
+      '<p class="shapes-legend__title">Compactness (Polsby-Popper)</p>' +
+      CLASSES.map((c) => `<span class="shapes-legend__row"><span class="shapes-legend__swatch" style="background:${c.colour}"></span>${c.label}</span>`).join('');
+
+    // --- Linking -----------------------------------------------------------
+    let pinned: string | null = null;
+    let current: string | null = null;
+
+    function showCard(code: string | null) {
+      const s = code ? byCode.get(code) : undefined;
+      if (!s) {
+        card.innerHTML = '<p class="shapes-card__hint">Hover a shape or the map. A circle scores 1.00.</p>';
+        return;
+      }
+      card.innerHTML =
+        `<svg class="shapes-card__shape" viewBox="-1.6 -1.6 3.2 3.2" aria-hidden="true"><path d="${shapePath(s)}" fill="${colourFor(s.pp)}" fill-rule="evenodd"/></svg>` +
+        `<div><p class="shapes-card__name">${esc(s.name)}</p>` +
+        `<p class="shapes-card__unit">${esc(s.unit)}${s.island ? ' · island' : ''}</p>` +
+        `<dl class="shapes-card__meta"><dt>Rank</dt><dd>${s.rank} of ${total}</dd>` +
+        `<dt>Score</dt><dd>${s.pp.toFixed(2)}</dd><dt>Area</dt><dd>${fmt(s.area)} km²</dd>` +
+        `<dt>Pieces</dt><dd>${s.parts}</dd></dl></div>`;
+    }
+
+    function highlight(code: string | null, on: boolean) {
+      if (!code) return;
+      const layer = layers.get(code);
+      const s = byCode.get(code);
+      if (layer && s) {
+        layer.setStyle(on ? { color: '#23282d', weight: 2.2, fillOpacity: 1 } : base(s.pp));
+        if (on) layer.bringToFront();
+      }
+      tiles.get(code)?.classList.toggle('is-active', on);
+    }
+
+    function select(code: string | null, from: 'map' | 'wall', pin = false) {
+      if (pin && code) {
+        highlight(pinned, false);
+        pinned = code;
+        const layer = layers.get(code) as L.Polygon | undefined;
+        if (layer) map.flyToBounds(layer.getBounds(), { padding: [40, 40], maxZoom: 11, duration: 0.6 });
+        // Clicking on the wall jumps back up to the map, which is now zooming
+        // to the shape; clicking on the map brings its tile into view below.
+        if (from === 'map') tiles.get(code)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        else mapEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+      const next = code ?? pinned;
+      if (current && current !== next && current !== pinned) highlight(current, false);
+      current = next;
+      highlight(next, true);
+      showCard(next);
+    }
+
+    // --- Search ------------------------------------------------------------
+    function applyFilter() {
+      const q = search.value.trim().toLowerCase();
+      let shown = 0;
+      for (const s of shapes) {
+        const ok = !q || s.name.toLowerCase().includes(q) || s.unit.toLowerCase().includes(q);
+        tiles.get(s.code)!.hidden = !ok;
+        const layer = layers.get(s.code)!;
+        layer.setStyle(ok ? base(s.pp) : { fillOpacity: 0.12, weight: 0.3 });
+        if (ok) shown++;
+      }
+      count.textContent = shown === total ? `${total} municipalities` : `${shown} of ${total}`;
+      if (current) highlight(current, true);
+    }
+    search.addEventListener('input', applyFilter);
+    applyFilter();
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-shapes]').forEach((el) => whenNear(el, () => init(el)));
+</script>
+
+<style is:global>
+  .shapes-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.85rem;
+  }
+  .shapes-search {
+    flex: 1 1 12rem;
+    max-width: 18rem;
+    font: inherit;
+    padding: 0.35rem 0.6rem;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    background: var(--bg-surface);
+    color: var(--text);
+  }
+  .shapes-home {
+    display: grid !important;
+    place-items: center;
+    color: var(--text) !important;
+  }
+  .shapes-anchor {
+    scroll-margin-top: 1rem;
+  }
+  .shapes-count {
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .shapes-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 15rem;
+    gap: 0.75rem;
+  }
+  @media (max-width: 48rem) {
+    .shapes-layout {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  .shapes-side {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .shapes-card {
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+    min-height: 9rem;
+    padding: 0.75rem;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    background: var(--bg-surface);
+    font-size: 0.85rem;
+  }
+  .shapes-card__hint {
+    margin: 0;
+    color: var(--text-muted);
+  }
+  .shapes-card__shape {
+    flex: none;
+    width: 4.5rem;
+    height: 4.5rem;
+  }
+  .shapes-card__name {
+    margin: 0;
+    font-family: var(--font-serif);
+    font-weight: 600;
+    font-size: 1rem;
+    line-height: 1.25;
+  }
+  .shapes-card__unit {
+    margin: 0 0 0.4rem;
+    color: var(--text-muted);
+  }
+  .shapes-card__meta {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.05rem 0.6rem;
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .shapes-card__meta dt {
+    color: var(--text-muted);
+  }
+  .shapes-card__meta dd {
+    margin: 0;
+  }
+  .shapes-legend {
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+  .shapes-legend__title {
+    margin: 0 0 0.25rem;
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .shapes-legend__row {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+  .shapes-legend__swatch {
+    width: 0.9rem;
+    height: 0.9rem;
+    border-radius: 2px;
+  }
+
+  .shapes-wall {
+    list-style: none;
+    margin: 1rem 0 0;
+    padding: 0;
+    max-width: none;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(3.6rem, 1fr));
+    gap: 0.25rem;
+  }
+  .shapes-tile {
+    position: relative;
+    aspect-ratio: 1;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    cursor: pointer;
+    outline: none;
+  }
+  .shapes-tile svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .shapes-tile__rank {
+    position: absolute;
+    top: 0.1rem;
+    left: 0.2rem;
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .shapes-tile:hover,
+  .shapes-tile:focus-visible,
+  .shapes-tile.is-active {
+    border-color: var(--text);
+    background: var(--bg-surface);
+  }
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+</style>

@@ -1,0 +1,558 @@
+---
+/**
+ * Day 3 (2026) side page: draw a shape and find the Greek municipality it is
+ * most like. The drawing morphs into the match, which is scored by overlap:
+ * both shapes at the same area and centred on their centroids, north up, then
+ * the shared area as a share of the two combined (intersection over union).
+ */
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import Day03Tabs from '../../../components/Day03Tabs.astro';
+
+const back = '/projects/30dmc-2026-day-03-polygons';
+---
+
+<BaseLayout
+  title="Draw a Municipality"
+  description="Draw a shape and see which of Greece's 332 municipalities it is most like. Your drawing morphs into the closest one, with a match percentage."
+>
+  <article class="match" data-match data-shapes-src="/data/30dmc-2026-day-03-shapes.json">
+    <p class="eyebrow">#30DayMapChallenge 2026 · Day 3 · <a href={back}>Odd-shaped municipalities</a></p>
+    <h1>Draw a municipality</h1>
+    <p class="lede">
+      Draw any closed shape in the box below. It is compared with all 332 Greek municipalities at the same size and
+      at any angle, then morphs into the one it is most like.
+    </p>
+
+    <Day03Tabs active="draw" />
+
+    <div class="match-layout">
+      <div class="match-pad">
+        <svg class="match-svg" viewBox="0 0 500 500" role="img" aria-label="Drawing area">
+          <path class="match-target" d="" />
+          <path class="match-ghost" d="" vector-effect="non-scaling-stroke" />
+          <path class="match-stroke" d="" vector-effect="non-scaling-stroke" />
+        </svg>
+        <svg class="match-north" viewBox="-30 -30 60 60" role="button" tabindex="0" aria-label="Turn north up">
+          <title>Turn north up</title>
+          <g>
+            <path d="M0,-26 L9,10 L0,4 L-9,10 Z" />
+            <text y="26" text-anchor="middle">N</text>
+          </g>
+        </svg>
+        <p class="match-prompt">Draw here</p>
+        <button type="button" class="button button--ghost match-clear">Clear</button>
+      </div>
+
+      <div class="match-result" aria-live="polite">
+        <p class="match-result__hint">Your result appears here. Keep it to one outline; lift the pen to finish.</p>
+      </div>
+    </div>
+
+    <h2 class="match-how">How the match works</h2>
+    <p>
+      Each shape is moved so its centre of mass sits in the middle and scaled to the same area, so a small city
+      district and a large mountain municipality can match. Both are then laid on a 64 by 64 grid, and the score
+      is the area they share divided by the area they cover together: 100% means the same shape, 0% means no
+      overlap at all. Your drawing is tried at every 10° turn, so a shape drawn on its side still finds its match;
+      a north arrow on the result shows where the match's north ended up. Island municipalities count every island, so they are hard to
+      match with one outline.
+    </p>
+    <p><a href={back}>&larr; Day 3: Odd-shaped municipalities</a></p>
+  </article>
+</BaseLayout>
+
+<script>
+  import { colourFor, shapePath, normaliseDrawn, rasterise, overlap, resample, align, rotate, type Shape } from '../../../day03';
+
+  const esc = (v: unknown) =>
+    String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
+  const d = (pts: number[][]) => 'M' + pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join('L') + 'Z';
+  const bounds = (pts: number[][]) => {
+    let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+    for (const [x, y] of pts) {
+      x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+    }
+    return [x0, y0, x1, y1];
+  };
+  /** A square viewBox [x, y, size, size] around the points with an 8% margin, at least `min` across. */
+  const viewFor = (pts: number[][], min: number) => {
+    const [x0, y0, x1, y1] = bounds(pts);
+    const size = Math.max(min, Math.max(x1 - x0, y1 - y0) * 1.16);
+    return [(x0 + x1) / 2 - size / 2, (y0 + y1) / 2 - size / 2, size, size];
+  };
+  const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
+
+  async function init(root: HTMLElement) {
+    const svg = root.querySelector<SVGSVGElement>('.match-svg')!;
+    const stroke = root.querySelector<SVGPathElement>('.match-stroke')!;
+    const target = root.querySelector<SVGPathElement>('.match-target')!;
+    const ghost = root.querySelector<SVGPathElement>('.match-ghost')!;
+    const north = root.querySelector<SVGGElement>('.match-north g')!;
+    const northBox = root.querySelector<SVGSVGElement>('.match-north')!;
+    const prompt = root.querySelector<HTMLElement>('.match-prompt')!;
+    const result = root.querySelector<HTMLElement>('.match-result')!;
+    const hint = result.innerHTML;
+
+    let shapes: Shape[] = [];
+    let masks: Uint8Array[] = [];
+    const ready = fetch(root.dataset.shapesSrc!)
+      .then((r) => r.json())
+      .then((s: Shape[]) => {
+        shapes = s;
+        masks = s.map((x) => rasterise(x.rings));
+      })
+      .catch((err) => {
+        console.error(err);
+        result.innerHTML = '<p class="match-result__hint">The municipalities could not be loaded.</p>';
+      });
+
+    let pts: number[][] = [];
+    let turnNorth: (() => void) | null = null;
+    type Ranked = { s: Shape; score: number; angle: number };
+    let ranked: Ranked[] = [];
+    let drawn: ReturnType<typeof normaliseDrawn> = null;
+    let shown: number[][] = []; // the outline on screen, where the next morph starts
+    let drawing = false;
+    let anim = 0;
+
+    /** Ease the drawing box's viewBox to a new frame. */
+    function zoomTo(to: number[]) {
+      const from = svg.getAttribute('viewBox')!.split(' ').map(Number);
+      const t0 = performance.now();
+      const frame = (now: number) => {
+        const k = ease(Math.min(1, (now - t0) / 500));
+        svg.setAttribute('viewBox', from.map((v, i) => v + (to[i] - v) * k).join(' '));
+        if (k < 1) anim = requestAnimationFrame(frame);
+      };
+      anim = requestAnimationFrame(frame);
+    }
+
+    const toSvg = (e: PointerEvent) => {
+      const r = svg.getBoundingClientRect();
+      return [((e.clientX - r.left) / r.width) * 500, ((e.clientY - r.top) / r.height) * 500];
+    };
+
+    function reset() {
+      cancelAnimationFrame(anim);
+      pts = [];
+      stroke.setAttribute('d', '');
+      stroke.classList.remove('is-closed');
+      target.setAttribute('d', '');
+      target.style.opacity = '0';
+      ghost.setAttribute('d', '');
+      ghost.style.opacity = '0';
+      northBox.style.opacity = '0';
+      northBox.classList.remove('is-live');
+      turnNorth = null;
+      ranked = [];
+      drawn = null;
+      svg.setAttribute('viewBox', '0 0 500 500');
+      prompt.hidden = false;
+      result.innerHTML = hint;
+    }
+
+    svg.addEventListener('pointerdown', (e) => {
+      reset();
+      drawing = true;
+      prompt.hidden = true;
+      svg.setPointerCapture(e.pointerId);
+      pts.push(toSvg(e));
+    });
+    svg.addEventListener('pointermove', (e) => {
+      if (!drawing) return;
+      const p = toSvg(e);
+      const last = pts[pts.length - 1];
+      if (Math.hypot(p[0] - last[0], p[1] - last[1]) < 2) return;
+      pts.push(p);
+      stroke.setAttribute('d', 'M' + pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join('L'));
+    });
+    const finish = async () => {
+      if (!drawing) return;
+      drawing = false;
+      const norm = normaliseDrawn(pts);
+      if (!norm) {
+        result.innerHTML = '<p class="match-result__hint">That shape is too small or too thin. Draw a closed outline.</p>';
+        return;
+      }
+      stroke.setAttribute('d', d(pts));
+      stroke.classList.add('is-closed');
+      await ready;
+      if (!shapes.length) return;
+
+      // Try the drawing at every 10° turn and keep, for each municipality, the
+      // turn that fits it best: a shape drawn on its side still finds its match.
+      const turns = Array.from({ length: 36 }, (_, i) => i * 10);
+      const turned = turns.map((a) => rasterise([rotate(norm.ring, a)]));
+      const scored = shapes
+        .map((s, i) => {
+          let score = -1;
+          let angle = 0;
+          turned.forEach((m, j) => {
+            const v = overlap(m, masks[i]);
+            if (v > score) {
+              score = v;
+              angle = turns[j];
+            }
+          });
+          return { s, score, angle };
+        })
+        .sort((a, b) => b.score - a.score);
+      ranked = scored.slice(0, 6);
+      drawn = norm;
+      shown = resample(pts, 96);
+      morphTo(0);
+    };
+
+    /**
+     * Morph whatever outline is on screen (the drawing at first, then the last
+     * match) into ranked[i], at the drawing's size and at the angle it fitted
+     * best. The match is not turned back: a north arrow shows where its north
+     * ended up instead.
+     */
+    function morphTo(i: number) {
+      if (!drawn) return;
+      const norm = drawn;
+      const entry = ranked[i];
+      const signed = entry.angle > 180 ? entry.angle - 360 : entry.angle; // the short way round
+      cancelAnimationFrame(anim);
+      turnNorth = null;
+      target.style.opacity = '0';
+      northBox.style.opacity = '0';
+      northBox.classList.remove('is-live');
+      ghost.setAttribute('d', d(pts));
+
+      const to = rotate(entry.s.outline, -signed).map(norm.toScreen);
+      const from = align(resample(shown, to.length), to);
+      // The pose of the result with north turned `a` degrees clockwise from up:
+      // a = signed is the drawing's angle, a = 0 is north up. The drawing turns
+      // with the match so the two stay laid over each other.
+      const pose = (a: number) => {
+        target.setAttribute(
+          'd',
+          shapePath({ rings: entry.s.rings.map((r) => rotate(r, -a).map(norm.toScreen).map(([x, y]) => [x, -y])) }),
+        );
+        ghost.setAttribute('d', d(rotate(norm.ring, signed - a).map(norm.toScreen)));
+        north.setAttribute('transform', `rotate(${a})`);
+        shown = rotate(entry.s.outline, -a).map(norm.toScreen);
+      };
+      const fit = (a: number) => {
+        const all = [
+          ...rotate(norm.ring, signed - a).map(norm.toScreen),
+          ...entry.s.rings.flatMap((r) => rotate(r, -a).map(norm.toScreen)),
+        ];
+        const [x0, y0, x1, y1] = bounds(all);
+        // Zoom out and centre if the match or the drawing runs off the box.
+        zoomTo(x0 < 10 || y0 < 10 || x1 > 490 || y1 > 490 ? viewFor(all, 500) : [0, 0, 500, 500]);
+      };
+      target.setAttribute('fill', colourFor(entry.s.pp));
+      const MORPH = 1200;
+      const t0 = performance.now();
+      const step = (now: number) => {
+        const k = ease(Math.min(1, (now - t0) / MORPH));
+        stroke.setAttribute('d', d(from.map((p, j) => [p[0] + (to[j][0] - p[0]) * k, p[1] + (to[j][1] - p[1]) * k])));
+        if (k < 1) anim = requestAnimationFrame(step);
+        else {
+          // The match settles in and the drawing comes back as a dashed outline
+          // on top of it, so the two can be compared where they overlap.
+          pose(signed);
+          stroke.setAttribute('d', '');
+          target.style.opacity = '1';
+          ghost.style.opacity = '1';
+          northBox.style.opacity = '1';
+          northBox.classList.toggle('is-live', signed !== 0);
+          fit(signed);
+          // Clicking the arrow turns the result north up, and back again.
+          let at = signed;
+          turnNorth = () => {
+            const start = at;
+            const end = at ? 0 : signed;
+            const t1 = performance.now();
+            const spin = (now: number) => {
+              const k = ease(Math.min(1, (now - t1) / (300 + Math.abs(signed) * 4)));
+              pose(start + (end - start) * k);
+              if (k < 1) anim = requestAnimationFrame(spin);
+              else {
+                at = end;
+                fit(at);
+              }
+            };
+            cancelAnimationFrame(anim);
+            anim = requestAnimationFrame(spin);
+          };
+        }
+      };
+      anim = requestAnimationFrame(step);
+      showResult(i, norm.ring, signed);
+    }
+    northBox.addEventListener('click', () => turnNorth?.());
+    northBox.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        turnNorth?.();
+      }
+    });
+    svg.addEventListener('pointerup', finish);
+    svg.addEventListener('pointercancel', finish);
+    root.querySelector('.match-clear')!.addEventListener('click', reset);
+
+    function showResult(sel: number, mine: number[][], turn: number) {
+      const best = ranked[sel];
+      const pct = (x: number) => `${Math.round(x * 100)}%`;
+      // Each thumbnail is framed on its own shape, so scattered islands stay in view.
+      const box = (rings: number[][][]) => viewFor(rings.flat().map(([x, y]) => [x, -y]), 0).join(' ');
+      const mini = (s: Shape) =>
+        `<svg viewBox="${box(s.rings)}" aria-hidden="true"><path d="${shapePath(s)}" fill="${colourFor(s.pp)}" fill-rule="evenodd"/></svg>`;
+      const tiltedRings = best.s.rings.map((r) => rotate(r, -turn));
+      result.innerHTML =
+        `<p class="match-result__pct">${pct(best.score)}</p>` +
+        `<p class="match-result__name">${esc(best.s.name)}</p>` +
+        `<p class="match-result__meta">${sel ? `Match ${sel + 1} of ${ranked.length} · ` : ''}${esc(best.s.unit)} · rank ${best.s.rank} of ${shapes.length} for compactness · score ${best.s.pp.toFixed(2)}</p>` +
+        // Side by side at the same area, as they were compared.
+        `<div class="match-compare">` +
+        `<figure><svg viewBox="${box([mine])}" aria-hidden="true"><path d="${shapePath({ rings: [mine] })}" class="match-compare__mine" vector-effect="non-scaling-stroke"/></svg><figcaption>Your shape</figcaption></figure>` +
+        `<figure><svg viewBox="${box(tiltedRings)}" aria-hidden="true"><path d="${shapePath({ rings: tiltedRings })}" fill="${colourFor(best.s.pp)}" fill-rule="evenodd"/></svg>` +
+        `<figcaption>${esc(best.s.name)}${turn ? `, north turned ${Math.abs(turn)}° ${turn > 0 ? 'clockwise' : 'anticlockwise'}` : ''}</figcaption></figure>` +
+        `</div>` +
+        // The list stays the same whichever match is shown: the picked one is
+        // highlighted, and a link leads back to the best match.
+        `<p class="match-result__sub">Next closest · click one to morph into it</p><ol class="match-runners">` +
+        ranked
+          .slice(1)
+          .map(
+            (r, j) =>
+              `<li><button type="button" data-i="${j + 1}"${j + 1 === sel ? ' aria-current="true"' : ''}>${mini(r.s)}<span><strong>${esc(r.s.name)}</strong> ${pct(r.score)}<br><small>${esc(r.s.unit)}</small></span></button></li>`,
+          )
+          .join('') +
+        '</ol>' +
+        (sel ? `<button type="button" class="match-back" data-i="0">&larr; Back to the best match, ${esc(ranked[0].s.name)}</button>` : '');
+      result.querySelectorAll<HTMLButtonElement>('.match-runners button, .match-back').forEach((b) =>
+        b.addEventListener('click', () => {
+          morphTo(Number(b.dataset.i));
+          svg.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }),
+      );
+    }
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-match]').forEach((el) => init(el));
+</script>
+
+<style is:global>
+  /* Global: the result panel is filled in by script, which scoped styles do
+     not reach. Every class here is prefixed match- to keep it local. */
+  .match .lede {
+    font-family: var(--font-serif);
+    font-size: 1.2rem;
+    line-height: 1.55;
+    color: var(--text-muted);
+  }
+  .match-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 28rem) minmax(0, 1fr);
+    gap: 1.5rem;
+    align-items: start;
+    margin: 1.5rem 0 2rem;
+  }
+  @media (max-width: 48rem) {
+    .match-layout {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  .match-pad {
+    position: relative;
+  }
+  .match-svg {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1;
+    background: var(--bg-surface);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    touch-action: none;
+    cursor: crosshair;
+  }
+  .match-stroke {
+    fill: none;
+    stroke: var(--text);
+    stroke-width: 2.5;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+  }
+  .match-stroke.is-closed {
+    fill: rgba(35, 40, 45, 0.06);
+  }
+  .match-ghost {
+    fill: none;
+    stroke: var(--text);
+    stroke-width: 2;
+    stroke-dasharray: 7 5;
+    stroke-linejoin: round;
+    opacity: 0;
+    transition: opacity 0.5s;
+    pointer-events: none;
+  }
+  .match-north {
+    position: absolute;
+    top: 0.6rem;
+    right: 0.6rem;
+    width: 2.6rem;
+    height: 2.6rem;
+    opacity: 0;
+    transition: opacity 0.5s;
+    pointer-events: none;
+    border-radius: 50%;
+  }
+  .match-north.is-live {
+    pointer-events: auto;
+    cursor: pointer;
+  }
+  .match-north.is-live:hover,
+  .match-north.is-live:focus-visible {
+    background: var(--bg-subtle);
+    outline: none;
+  }
+  .match-north path {
+    fill: var(--text);
+  }
+  .match-north text {
+    fill: var(--text);
+    font-family: var(--font-serif);
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .match-compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    max-width: 22rem;
+    margin: 0 0 1.25rem;
+  }
+  .match-compare figure {
+    margin: 0;
+  }
+  .match-compare svg {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1;
+    background: var(--bg-surface);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+  }
+  .match-compare figcaption {
+    margin-top: 0.3rem;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    text-align: center;
+  }
+  .match-compare__mine {
+    fill: rgba(35, 40, 45, 0.12);
+    stroke: var(--text);
+    stroke-width: 1.5;
+    stroke-linejoin: round;
+  }
+  .match-target {
+    fill-rule: evenodd;
+    opacity: 0;
+    transition: opacity 0.5s;
+    pointer-events: none;
+  }
+  .match-prompt {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    margin: 0;
+    color: var(--text-muted);
+    font-family: var(--font-serif);
+    font-size: 1.3rem;
+    pointer-events: none;
+  }
+  .match-prompt[hidden] {
+    display: none;
+  }
+  .match-clear {
+    margin-top: 0.6rem;
+  }
+  .match-result__hint {
+    color: var(--text-muted);
+    margin: 0;
+  }
+  .match-result__pct {
+    margin: 0;
+    font-family: var(--font-serif);
+    font-size: 3rem;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .match-result__name {
+    margin: 0.4rem 0 0;
+    font-family: var(--font-serif);
+    font-size: 1.4rem;
+    font-weight: 600;
+  }
+  .match-result__meta {
+    margin: 0.2rem 0 1rem;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+  }
+  .match-result__sub,
+  .match-how {
+    margin: 0 0 0.4rem;
+    font-size: 0.75rem;
+    font-family: var(--font-sans);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .match-runners {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 0.4rem;
+    font-size: 0.9rem;
+  }
+  .match-runners button {
+    display: flex;
+    gap: 0.6rem;
+    align-items: center;
+    width: 100%;
+    padding: 0.25rem 0.4rem;
+    font: inherit;
+    text-align: left;
+    color: inherit;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    cursor: pointer;
+  }
+  .match-runners button[aria-current='true'] {
+    background: var(--bg-surface);
+    border-color: var(--text);
+  }
+  .match-back {
+    margin-top: 0.6rem;
+    padding: 0;
+    font: inherit;
+    font-size: 0.9rem;
+    color: var(--accent);
+    background: none;
+    border: 0;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+  .match-runners button:hover,
+  .match-runners button:focus-visible {
+    background: var(--bg-surface);
+    border-color: var(--rule);
+    outline: none;
+  }
+  .match-runners svg {
+    flex: none;
+    width: 2.6rem;
+    height: 2.6rem;
+  }
+  .match-runners small {
+    color: var(--text-muted);
+  }
+</style>

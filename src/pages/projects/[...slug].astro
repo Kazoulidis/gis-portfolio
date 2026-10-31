@@ -13,6 +13,7 @@ import UnescoMap from '../../components/UnescoMap.astro';
 import PopulationHex3DMap from '../../components/PopulationHex3DMap.astro';
 import FatalitiesMaps from '../../components/FatalitiesMaps.astro';
 import WindResourceMap from '../../components/WindResourceMap.astro';
+import MunicipalityShapes from '../../components/MunicipalityShapes.astro';
 import { projectCategories } from '../../site';
 import { plainTitle } from '../../cv';
 import { isVisible } from '../../projects';
@@ -32,6 +33,7 @@ const CUSTOM_MAPS: Record<string, typeof ProjectMap> = {
   'population-hex-3d': PopulationHex3DMap,
   'hellenic-fatalities': FatalitiesMaps,
   'wind-resource': WindResourceMap,
+  'municipality-shapes': MunicipalityShapes,
 };
 
 export async function getStaticPaths() {

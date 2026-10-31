@@ -17,8 +17,12 @@ export default defineConfig({
   // anyone who types or bookmarks the bare /projects. Nothing on the site links
   // here, so the redirect hop is never on a real navigation path.
   // Keep the target in step with the first entry of `projectCategories`.
+  //
+  // /polygons (the day's prompt) is the short link printed on the Day 3 (2026)
+  // sheet: the full project URL does not fit on one line at the sheet's 9 pt.
   redirects: {
     '/projects': '/projects/30-day-map-challenge',
+    '/polygons': '/projects/30dmc-2026-day-03-polygons',
   },
 
   // Fetch a page before it is clicked, so navigation is instant rather than
