@@ -244,28 +244,41 @@ PATH, but shells started beforehand keep the old value.
 
 ### Production (Oracle ARM64 VPS, behind Nginx Proxy Manager)
 
-The site is built on this machine and copied to the VPS as plain files. The
-server runs stock `nginx:1.29-alpine` with the built site bind-mounted, so there
-is no image to build and no Node on the server. Nginx Proxy Manager, a separate
-stack on the same box, terminates TLS and proxies to it.
+The site ships as a Docker image: the built site and `docker/nginx.conf` inside
+`nginx:1.29-alpine`. GitHub builds it (`.github/workflows/release.yml`, from the
+`Dockerfile`) and publishes it to `ghcr.io/kazoulidis/gis-portfolio`; the VPS
+only pulls it, so there is no Node and no build on the server. Nginx Proxy
+Manager, a separate stack on the same box, terminates TLS and proxies to it.
 
 | Piece | Where |
 | --- | --- |
 | Compose file | kept outside this repo (it holds Umami's secrets): `E:\Claude\vps\portfolio\docker-compose.yml` → `/home/debian/docker/portfolio/` |
-| Nginx config | `docker/nginx.conf` → `/home/debian/docker/appdata/portfolio/nginx.conf` |
-| Built site | `dist/` → `/home/debian/docker/appdata/portfolio/site/` |
+| Image | `ghcr.io/kazoulidis/gis-portfolio`, tagged per release and `latest`, arm64 |
 | Host port | `8082`; NPM forwards `portfolio.kazoulidis.com` to `172.17.0.1:8082` |
 
-Publishing a change:
+Publishing a change - tag the commit, and the workflow builds and publishes the
+image in a few minutes (follow it in the repository's Actions tab):
 
 ```sh
-./deploy/deploy.sh            # build + copy the site; nothing to restart
-./deploy/deploy.sh --config   # also copy nginx.conf and reload nginx
+git push
+git tag v2026.11.04 && git push origin v2026.11.04
 ```
 
-The script uses rsync where available and falls back to tar over ssh (Git Bash
-on Windows has no rsync). A key file can be passed with
-`SSH_OPTS="-i path/to/key"`.
+Then on the VPS, in `/home/debian/docker/portfolio/`:
+
+```sh
+sudo docker compose pull portfolio && sudo docker compose up -d portfolio
+```
+
+The image is split into layers (downloads, images, data, pages), so a release
+that only changes text pulls a few MB. A changed nginx.conf ships the same way.
+
+**The repository is public, drafts included.** `draft: true` keeps a page off
+the live site, not off GitHub, so commit a 30 Day Map Challenge page on its day.
+
+The older route still works while the image is new: `./deploy/deploy.sh` builds
+here and copies `dist/` to the server over ssh. It needs the bind-mount version
+of the compose file, so it is a fallback, not something to mix with the image.
 
 Two settings in `docker/nginx.conf` are load-bearing:
 

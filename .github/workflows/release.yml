@@ -1,0 +1,54 @@
+# Build the portfolio image and publish it to the GitHub Container Registry.
+#
+# Runs when a version tag is pushed:
+#
+#   git tag v2026.11.04 && git push origin v2026.11.04
+#
+# and can be started by hand from the Actions tab. Publishes
+# ghcr.io/kazoulidis/gis-portfolio with the tag's name and as `latest`.
+#
+# Only for arm64, the Oracle Ampere box it runs on. The final stage of the
+# Dockerfile only copies files, so no emulation (QEMU) is needed.
+
+name: Release image
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # The workflow's own token can publish to this repository's packages, so
+      # there is no password or personal token to store.
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/kazoulidis/gis-portfolio
+          tags: |
+            type=ref,event=tag
+            type=raw,value=latest
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
