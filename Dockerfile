@@ -23,6 +23,8 @@ RUN npm run build \
  && find /layers dist -exec touch -h -d @0 {} +
 
 FROM nginx:1.29-alpine
+# Shown on the package page on GitHub.
+LABEL org.opencontainers.image.description="Antonis Kazoulidis's GIS portfolio (portfolio.kazoulidis.com), served by nginx."
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 # Largest and least often changed first.
 COPY --from=build /layers/downloads /usr/share/nginx/html/downloads
