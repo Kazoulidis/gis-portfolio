@@ -48,6 +48,9 @@ const { projects, heading = 'Check out my recent projects' } = Astro.props;
       </div>
       {projects.length > 1 && (
         <div class="recent-card__dots">
+          <button type="button" class="recent-card__arrow" aria-label="Previous project" data-step="-1">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5" /></svg>
+          </button>
           {projects.map((project, i) => (
             <button
               type="button"
@@ -57,6 +60,9 @@ const { projects, heading = 'Check out my recent projects' } = Astro.props;
               data-index={i}
             />
           ))}
+          <button type="button" class="recent-card__arrow" aria-label="Next project" data-step="1">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5" /></svg>
+          </button>
         </div>
       )}
     </section>
@@ -101,6 +107,12 @@ const { projects, heading = 'Check out my recent projects' } = Astro.props;
     dots.forEach((dot) =>
       dot.addEventListener('click', () => {
         show(Number(dot.dataset.index));
+        start();
+      }),
+    );
+    card.querySelectorAll<HTMLButtonElement>('.recent-card__arrow').forEach((arrow) =>
+      arrow.addEventListener('click', () => {
+        show(current + Number(arrow.dataset.step));
         start();
       }),
     );
@@ -191,6 +203,7 @@ const { projects, heading = 'Check out my recent projects' } = Astro.props;
   .recent-card__dots {
     display: flex;
     justify-content: center;
+    align-items: center;
     gap: 0.4rem;
     margin-top: 0.6rem;
   }
@@ -208,6 +221,48 @@ const { projects, heading = 'Check out my recent projects' } = Astro.props;
   .recent-card__dot[aria-current='true'] {
     background: var(--accent);
     border-color: var(--accent);
+  }
+
+  /* Previous / next, either side of the dots. They only work with JavaScript,
+     so they appear once the card is enhanced. */
+  .recent-card__arrow {
+    display: none;
+    place-items: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+
+  .recent-card.is-enhanced .recent-card__arrow {
+    display: grid;
+  }
+
+  .recent-card__arrow:first-child {
+    margin-right: 0.3rem;
+  }
+
+  .recent-card__arrow:last-child {
+    margin-left: 0.3rem;
+  }
+
+  .recent-card__arrow:hover,
+  .recent-card__arrow:focus-visible {
+    color: var(--accent);
+  }
+
+  .recent-card__arrow svg {
+    width: 1rem;
+    height: 1rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
 
   @media (prefers-reduced-motion: reduce) {
