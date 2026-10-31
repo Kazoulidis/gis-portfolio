@@ -15,6 +15,7 @@ import FatalitiesMaps from '../../components/FatalitiesMaps.astro';
 import WindResourceMap from '../../components/WindResourceMap.astro';
 import MunicipalityShapes from '../../components/MunicipalityShapes.astro';
 import QuakeTimelineMap from '../../components/QuakeTimelineMap.astro';
+import SightlineMap from '../../components/SightlineMap.astro';
 import { projectCategories } from '../../site';
 import { plainTitle } from '../../cv';
 
@@ -35,6 +36,7 @@ const CUSTOM_MAPS: Record<string, typeof ProjectMap> = {
   'wind-resource': WindResourceMap,
   'municipality-shapes': MunicipalityShapes,
   'quake-timeline': QuakeTimelineMap,
+  'olympus-sightline': SightlineMap,
 };
 
 // Every project gets its page, drafts included: a draft is unlisted, reachable
