@@ -26,7 +26,7 @@ dataSource:
     href: 'https://www.statistics.gr/en/digital-cartographical-data'
   - label: '© EuroGeographics, via Eurostat GISCO - NUTS boundaries of the neighbouring countries'
     href: 'https://ec.europa.eu/eurostat/web/gisco/geodata/statistical-units/territorial-units-statistics'
-draft: false
+draft: true
 ---
 
 **Prompt:** Polygons.

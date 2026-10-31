@@ -5,8 +5,17 @@
  * both shapes at the same area and centred on their centroids, north up, then
  * the shared area as a share of the two combined (intersection over union).
  */
+import { getEntry } from 'astro:content';
 import BaseLayout from '../../../layouts/BaseLayout.astro';
 import Day03Tabs from '../../../components/Day03Tabs.astro';
+import { isVisible } from '../../../projects';
+
+// A dynamic route only so the page can follow the Day 3 draft flag: a fixed
+// page is always built, this one only while its project is visible.
+export async function getStaticPaths() {
+  const day = await getEntry('projects', '30dmc-2026-day-03-polygons');
+  return day && isVisible(day) ? [{ params: { page: 'match' } }] : [];
+}
 
 const back = '/projects/30dmc-2026-day-03-polygons';
 ---

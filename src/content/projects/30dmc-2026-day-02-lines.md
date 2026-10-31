@@ -33,7 +33,7 @@ dataSource:
     href: 'https://ec.europa.eu/eurostat/web/gisco/geodata/statistical-units/territorial-units-statistics'
   - label: 'Natural Earth - countries for the guide map'
     href: 'https://www.naturalearthdata.com/'
-draft: false
+draft: true
 ---
 
 **Prompt:** Lines.

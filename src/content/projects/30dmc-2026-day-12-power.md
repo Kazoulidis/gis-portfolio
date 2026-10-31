@@ -37,7 +37,7 @@ dataSource:
     href: 'https://ec.europa.eu/eurostat/web/gisco/geodata/statistical-units/territorial-units-statistics'
   - label: 'Natural Earth - country boundaries of the locator map'
     href: 'https://www.naturalearthdata.com/'
-draft: false
+draft: true
 ---
 
 **Prompt:** Power.
