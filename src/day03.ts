@@ -183,24 +183,28 @@ export function resample(ring: number[][], n = 96): number[][] {
 }
 
 /**
- * Rotate the drawn outline's starting point so it lines up with the target's,
- * point for point: the cyclic shift with the smallest total distance. Without
- * this the morph would cross over itself on the way.
+ * Line the drawn outline up with the target's, point for point: the starting
+ * point and the direction round with the smallest total distance. A drawing
+ * can go either way round, and one going against the target's direction would
+ * turn inside out on the way; without the shift the morph would cross over
+ * itself.
  */
 export function align(from: number[][], to: number[][]): number[][] {
   const n = from.length;
-  let best = 0;
+  let best: number[][] = from;
   let bestD = Infinity;
-  for (let s = 0; s < n; s++) {
-    let d = 0;
-    for (let i = 0; i < n && d < bestD; i++) {
-      const p = from[(i + s) % n];
-      d += (p[0] - to[i][0]) ** 2 + (p[1] - to[i][1]) ** 2;
-    }
-    if (d < bestD) {
-      bestD = d;
-      best = s;
+  for (const ring of [from, [...from].reverse()]) {
+    for (let s = 0; s < n; s++) {
+      let d = 0;
+      for (let i = 0; i < n && d < bestD; i++) {
+        const p = ring[(i + s) % n];
+        d += (p[0] - to[i][0]) ** 2 + (p[1] - to[i][1]) ** 2;
+      }
+      if (d < bestD) {
+        bestD = d;
+        best = ring.map((_, i) => ring[(i + s) % n]);
+      }
     }
   }
-  return from.map((_, i) => from[(i + best) % n]);
+  return best;
 }
