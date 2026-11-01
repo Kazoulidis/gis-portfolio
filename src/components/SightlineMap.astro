@@ -236,8 +236,8 @@ const { src, caption } = Astro.props;
     const viewer = L.marker([start.lat, start.lon], { icon: viewerIcon, draggable: true, autoPan: true, keyboard: true, title: 'Drag me' }).addTo(map);
     // The place the viewer was put on from the list or a preset, until it is moved by hand.
     let atPlace: Place | null = null;
-    map.on('click', (e: L.LeafletMouseEvent) => { atPlace = null; viewer.setLatLng(e.latlng); update(); });
-    viewer.on('dragstart', () => { atPlace = null; });
+    map.on('click', (e: L.LeafletMouseEvent) => { atPlace = null; placeSel.value = ''; viewer.setLatLng(e.latlng); update(); });
+    viewer.on('dragstart', () => { atPlace = null; placeSel.value = ''; });
     // While dragging, a quicker sketch of the view; the full one as soon as the figure rests.
     let rest = 0;
     viewer.on('drag', () => { update(true); clearTimeout(rest); rest = window.setTimeout(() => update(), 150); });
