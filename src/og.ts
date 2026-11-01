@@ -5,6 +5,7 @@
  * WebP inconsistently. 1200 x 630 is the size LinkedIn, Facebook and X all
  * crop to without cutting anything off.
  */
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import sharp from 'sharp';
@@ -14,7 +15,19 @@ export const OG_HEIGHT = 630;
 
 // From the project root, not relative to this module: at build time the code
 // runs from a bundled copy under dist/.prerender/, where `../public` doesn't exist.
-const publicFile = (path: string) => readFile(join(process.cwd(), 'public', path));
+const publicPath = (path: string) => join(process.cwd(), 'public', path);
+const publicFile = (path: string) => readFile(publicPath(path));
+
+/**
+ * The image a project's card is cut from: the wide print image, else the
+ * square thumbnail, whichever is actually on disk. A draft is built before
+ * its map is exported, so its frontmatter can name images that don't exist
+ * yet; such a page gets no card of its own (and falls back to the site's)
+ * rather than failing the whole build.
+ */
+export function cardSource(data: { image?: string; thumbnail?: string }) {
+  return [data.image, data.thumbnail].find((p): p is string => Boolean(p) && existsSync(publicPath(p!)));
+}
 
 /**
  * A project's own map, whole, on the site's paper colour. Fitted rather than

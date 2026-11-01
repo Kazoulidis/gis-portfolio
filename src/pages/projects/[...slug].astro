@@ -18,6 +18,7 @@ import QuakeTimelineMap from '../../components/QuakeTimelineMap.astro';
 import SightlineMap from '../../components/SightlineMap.astro';
 import { projectCategories } from '../../site';
 import { plainTitle } from '../../cv';
+import { cardSource } from '../../og';
 
 // Bespoke map components a project can select via `mapComponent:` in
 // frontmatter. Add a component here and reference its key. Both `map:` (one
@@ -100,7 +101,7 @@ const formattedDate = date.toLocaleDateString('en-GB', {
 <BaseLayout
   title={plainTitle(title)}
   description={summary}
-  image={image || project.data.thumbnail ? `/og/${project.id}.jpg` : undefined}
+  image={cardSource(project.data) ? `/og/${project.id}.jpg` : undefined}
   imageAlt={imageAlt ?? project.data.thumbnailAlt}
   type="article"
   noindex={project.data.draft}

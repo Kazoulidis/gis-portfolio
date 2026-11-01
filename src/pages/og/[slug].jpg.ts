@@ -4,14 +4,15 @@
  */
 import type { APIRoute } from 'astro';
 import { getCollection } from 'astro:content';
-import { projectCard } from '../../og';
+import { cardSource, projectCard } from '../../og';
 
-// Drafts included: a draft shared by link should still preview with its map.
+// Drafts included: a draft shared by link should still preview with its map,
+// once the map is there (see cardSource).
 export async function getStaticPaths() {
-  const projects = await getCollection('projects', ({ data }) => Boolean(data.image || data.thumbnail));
+  const projects = await getCollection('projects', ({ data }) => Boolean(cardSource(data)));
   return projects.map((project) => ({
     params: { slug: project.id },
-    props: { source: (project.data.image ?? project.data.thumbnail)! },
+    props: { source: cardSource(project.data)! },
   }));
 }
 
