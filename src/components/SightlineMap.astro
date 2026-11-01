@@ -207,8 +207,10 @@ const { src, caption } = Astro.props;
     let atPlace: Place | null = null;
     map.on('click', (e: L.LeafletMouseEvent) => { atPlace = null; viewer.setLatLng(e.latlng); update(); });
     viewer.on('dragstart', () => { atPlace = null; });
-    viewer.on('drag', () => update());
-    viewer.on('dragend', () => update());
+    // While dragging, a quicker sketch of the view; the full one as soon as the figure rests.
+    let rest = 0;
+    viewer.on('drag', () => { update(true); clearTimeout(rest); rest = window.setTimeout(() => update(), 150); });
+    viewer.on('dragend', () => { clearTimeout(rest); update(); });
 
     // Recentre: frame the viewer and the summit together, after the map has been panned away.
     const recentre = new L.Control({ position: 'topleft' });
@@ -349,7 +351,7 @@ const { src, caption } = Astro.props;
     }
 
     // --- Panorama -------------------------------------------------------------
-    function drawPano(s: Sight, eye: number) {
+    function drawPano(s: Sight, eye: number, quick: boolean) {
       const dpr = window.devicePixelRatio || 1;
       const cssW = pano.clientWidth, cssH = pano.clientHeight;
       const scale = dpr;
@@ -357,49 +359,78 @@ const { src, caption } = Astro.props;
       pano.width = W; pano.height = Hh;
       const ctx = pano.getContext('2d')!;
       const az0 = Math.atan2(-s.vx, -s.vy);                 // toward the summit, in the grid's plane
-      const angles = new Float32Array(W);
-      // Sample the skyline: distance steps grow with distance, as detail shrinks.
-      const steps: number[] = [];
-      for (let dd = 120; dd < 300_000; dd += Math.max(CELL / 2, dd * 0.004)) steps.push(dd);
-      // First pass: the skyline top, to fit the vertical scale.
-      const sumAng = Math.atan((meta.summit.elev - (s.D * s.D) / (2 * R_EFF) - s.h0) / s.D) / rad;
-      // Vertical range: from just below the horizon to above the higher of Olympus and the skyline.
-      const cols: { a: Float32Array; sea: Uint8Array; far: Float32Array }[] = [];
-      let top = Math.max(sumAng, 0.2);
-      for (let j = 0; j < W; j++) {
-        const az = az0 + ((j / (W - 1)) - 0.5) * FOV * rad;
-        const sx = Math.sin(az), sy = Math.cos(az);
-        const a = new Float32Array(steps.length), sea = new Uint8Array(steps.length);
-        for (let k = 0; k < steps.length; k++) {
-          const dd = steps[k];
-          const hh = height(s.vx + sx * dd, s.vy + sy * dd);
-          a[k] = Math.atan((hh - (dd * dd) / (2 * R_EFF) - s.h0) / dd) / rad;
-          sea[k] = hh <= 0 ? 1 : 0;
-          if (a[k] > top) top = a[k];
-        }
-        cols.push({ a, sea, far: new Float32Array(0) });
-        angles[j] = 0;
+      // Sample the skyline: distance steps grow with distance, as detail shrinks. Per step,
+      // the curve's drop and the colour (paler with distance) are worked out once.
+      const stepList: number[] = [];
+      const grow = quick ? 0.007 : 0.004;
+      for (let dd = 120; dd < 300_000; dd += Math.max(quick ? CELL : CELL / 2, dd * grow)) stepList.push(dd);
+      const NS = stepList.length;
+      const steps = Float64Array.from(stepList);
+      const lift = new Float64Array(NS), colour = new Uint32Array(NS);
+      const SEA = (255 << 24) | (230 << 16) | (199 << 8) | 158;        // RGBA, little-endian
+      for (let k = 0; k < NS; k++) {
+        lift[k] = -(steps[k] * steps[k]) / (2 * R_EFF) - s.h0;
+        const t = Math.min(1, steps[k] / 150_000) ** 0.7;
+        const r = Math.round(77 + 127 * t), g = Math.round(84 + 130 * t), b = Math.round(92 + 138 * t);
+        colour[k] = (255 << 24) | (b << 16) | (g << 8) | r;
       }
+      const sumAng = Math.atan((meta.summit.elev - (s.D * s.D) / (2 * R_EFF) - s.h0) / s.D) / rad;
+      // First pass: the slope (rise over distance) of every step in every column, and the
+      // highest of them to fit the vertical scale. Slopes order as angles do, so the arctangent
+      // waits for the few steps that end up drawn. The terrain is sampled once per screen pixel
+      // across (a 300 m grid has no more to give), every other one while dragging, and always
+      // drawn at the screen's full resolution, so the outline stays sharp.
+      const WS = Math.max(100, Math.round(quick ? cssW / 2 : cssW));
+      const slope = new Float32Array(WS * NS), sea = new Uint8Array(WS * NS);
+      let topSlope = -Infinity;
+      // The terrain lookup, inlined from height() for this hot loop.
+      const fx0 = F ? F.x - F.half : 0, fy0 = F ? F.y + F.half : 0, fn = F ? F.size : 0;
+      for (let j = 0; j < WS; j++) {
+        const az = az0 + ((j / (WS - 1)) - 0.5) * FOV * rad;
+        const sx = Math.sin(az), sy = Math.cos(az), o = j * NS;
+        for (let k = 0; k < NS; k++) {
+          const dd = steps[k], x = s.vx + sx * dd, y = s.vy + sy * dd;
+          let hh = 0, g = H, n = N;
+          let c = -1, r = -1;
+          if (F) { c = (x - fx0) / F.cell - 0.5; r = (fy0 - y) / F.cell - 0.5; g = F.h; n = fn; }
+          if (!(c >= 0 && r >= 0 && c < n - 1 && r < n - 1)) {
+            c = (x + HALF) / CELL - 0.5; r = (HALF - y) / CELL - 0.5; g = H; n = N;
+          }
+          if (c >= 0 && r >= 0 && c < n - 1 && r < n - 1) {
+            const c0 = c | 0, r0 = r | 0, fc = c - c0, fr = r - r0, i = r0 * n + c0;
+            hh = (g[i] * (1 - fc) + g[i + 1] * fc) * (1 - fr) + (g[i + n] * (1 - fc) + g[i + n + 1] * fc) * fr;
+          }
+          const v = (hh + lift[k]) / dd;
+          slope[o + k] = v;
+          if (hh <= 0) sea[o + k] = 1;
+          if (v > topSlope) topSlope = v;
+        }
+      }
+      const top = Math.max(sumAng, 0.2, Math.atan(topSlope) / rad);
+      // Vertical range: from just below the horizon to above the higher of Olympus and the skyline.
       const lo = -Math.max(0.25, Math.atan(Math.sqrt(2 * Math.max(s.h0, 1) / R_EFF)) / rad * 1.6);
       const hi = top + (top - lo) * 0.18;
       const img = ctx.createImageData(W, Hh);
-      const px = img.data;
+      const px = new Uint32Array(img.data.buffer);
       const row = (a: number) => Math.max(0, Math.min(Hh, Math.round(((hi - a) / (hi - lo)) * Hh)));
+      // Second pass, near to far: each step that rises above everything nearer paints the band
+      // between the two.
       const skyline = new Float32Array(W);              // the highest angle in each column
       for (let j = 0; j < W; j++) {
-        const { a, sea } = cols[j];
-        let amax = lo - 1;
-        for (let k = 0; k < steps.length; k++) {
-          if (a[k] <= amax) continue;
-          const r0 = row(a[k]), r1 = row(amax);
-          const t = Math.min(1, steps[k] / 150_000) ** 0.7;
-          let r = 77 + (204 - 77) * t, g = 84 + (214 - 84) * t, b = 92 + (230 - 92) * t;
-          if (sea[k]) { r = 158; g = 199; b = 230; }
-          for (let y = r0; y < r1; y++) {
-            const o = (y * W + j) * 4;
-            px[o] = r; px[o + 1] = g; px[o + 2] = b; px[o + 3] = 255;
+        const o = Math.min(WS - 1, Math.floor((j * WS) / W)) * NS;
+        let smax = -Infinity, amax = lo - 1, rmax = Hh;
+        for (let k = 0; k < NS; k++) {
+          const v = slope[o + k];
+          if (v <= smax) continue;
+          smax = v;
+          const a = Math.atan(v) / rad;
+          const r0 = row(a);
+          if (r0 < rmax) {
+            const c = sea[o + k] ? SEA : colour[k];
+            for (let y = r0; y < rmax; y++) px[y * W + j] = c;
+            rmax = r0;
           }
-          amax = a[k];
+          amax = a;
         }
         skyline[j] = amax;
       }
@@ -512,13 +543,15 @@ const { src, caption } = Astro.props;
     }
 
     // --- Update -----------------------------------------------------------------
-    // At most one redraw per frame, always at full resolution, dragging included.
-    let pending = false;
-    function update() {
+    // At most one redraw per frame; a quick one only if nothing asked for the full one.
+    let pending = false, quickNext = true;
+    function update(quick = false) {
+      quickNext = quickNext && quick;
       if (pending) return;
       pending = true;
       requestAnimationFrame(() => {
         pending = false;
+        const quick = quickNext; quickNext = true;
         // keep the viewer on the grid
         let ll = viewer.getLatLng();
         let [x, y] = toGrid(ll.lat, ll.lng);
@@ -552,7 +585,7 @@ const { src, caption } = Astro.props;
             ? `You would need to stand about ${fmt(s.needed)} m higher to see the summit.`
             : 'No realistic height would bring the summit into view.';
         }
-        drawPano(s, eye);
+        drawPano(s, eye, quick);
         drawProfile(s);
       });
     }
