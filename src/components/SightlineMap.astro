@@ -36,8 +36,9 @@ const { src, caption } = Astro.props;
       <div class="sight-ui__presets" role="group" aria-label="Places worth trying">
         <span>Try:</span>
         <button type="button" data-sight-preset="Thessaloniki">Thessaloniki</button>
-        <button type="button" data-sight-preset="Samothrace" data-sight-at="40.4304,25.66">Samothrace: the farthest</button>
-        <button type="button" data-sight-preset="Veykata" data-sight-at="41.2214,25.3063">Veykata, Bulgaria</button>
+        <button type="button" data-sight-preset="Papikio">Papikio: the farthest summit</button>
+        <button type="button" data-sight-preset="Farthest, 303 km">The farthest point, 303 km</button>
+        <button type="button" data-sight-preset="Fengari">Fengari, Samothrace</button>
         <button type="button" data-sight-preset="Kastoria hills" data-sight-at="40.5704,21.246">Near Kastoria: through a gap</button>
       </div>
       <div class="sight-ui__row">
@@ -227,6 +228,21 @@ const { src, caption } = Astro.props;
     // on the stretch between Olympus and Thessaloniki instead.
     map.setView([40.4, 22.7], 8);
     const summitIcon = L.divIcon({ className: 'sight-summit', html: '<span></span>', iconSize: [14, 12], iconAnchor: [7, 10] });
+    // The peaks the panorama names, named on the map too; redrawn only when the set changes.
+    const peakIcon = L.divIcon({ className: 'sight-peak', html: '<span></span>', iconSize: [10, 9], iconAnchor: [5, 8] });
+    const peakLayer = L.layerGroup().addTo(map);
+    let peaksShown = '';
+    function showPeaks(list: Place[]) {
+      const key = list.map((p) => p.name).sort().join('|');
+      if (key === peaksShown) return;
+      peaksShown = key;
+      peakLayer.clearLayers();
+      for (const p of list) {
+        L.marker([p.lat, p.lon], { icon: peakIcon, interactive: false, keyboard: false })
+          .bindTooltip(p.name, { permanent: true, direction: 'right', className: 'sight-tip', offset: [4, -4] })
+          .addTo(peakLayer);
+      }
+    }
     L.marker([meta.summit.lat, meta.summit.lon], { icon: summitIcon, interactive: false, keyboard: false })
       .bindTooltip('Mytikas, 2,918 m', { permanent: true, direction: 'right', className: 'sight-tip', offset: [6, -4] })
       .addTo(map);
@@ -473,6 +489,7 @@ const { src, caption } = Astro.props;
       // angle within 0.05 degrees of the highest there), as on the printed panorama. Highest
       // first; a label that would overlap one already placed is left out.
       const placed: [number, number][] = [[(W - 1) / 2 - 45 * scale, (W - 1) / 2 + 45 * scale]];   // Olympus's label
+      const labelled: Place[] = [];
       const peaks = meta.places
         .filter((p) => p.kind === 'peak')
         .map((p) => {
@@ -495,12 +512,13 @@ const { src, caption } = Astro.props;
         if (q.ang < top - 0.05) continue;                // behind a nearer ridge
         const half = ctx.measureText(q.p.name).width / 2 + 4 * scale;
         if (placed.some(([a, b]) => j + half > a && j - half < b)) continue;
-        placed.push([j - half, j + half]);
+        placed.push([j - half, j + half]); labelled.push(q.p);
         const y = row(q.ang);
         ctx.beginPath(); ctx.moveTo(j, y - 2 * scale); ctx.lineTo(j, y - 6 * scale); ctx.stroke();
         ctx.fillText(q.p.name, j, y - 9 * scale);
       }
       ctx.restore();
+      showPeaks(labelled);
       // Olympus: a red mark where the summit is, solid if seen, open if hidden.
       const jc = (W - 1) / 2, ys = row(sumAng);
       ctx.save();
@@ -740,6 +758,15 @@ const { src, caption } = Astro.props;
     border: 3px solid #fff;
     box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4), 0 1px 4px rgba(0, 0, 0, 0.35);
     cursor: grab;
+  }
+  .sight-peak span {
+    display: block;
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-bottom: 9px solid #333;
+    filter: drop-shadow(0 0 1px #fff);
   }
   .sight-summit span {
     display: block;

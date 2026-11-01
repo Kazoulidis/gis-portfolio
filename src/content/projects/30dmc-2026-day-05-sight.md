@@ -1,6 +1,6 @@
 ---
 title: 'Day 5 - Senses: Sight: Seeing Olympus'
-summary: 'Where Mount Olympus can be seen from: a viewshed of Mytikas, 2,918 m, on 30 m terrain with the curve of the Earth and the bending of light. From Thessaloniki the bottom 322 m of the mountain is below the horizon; from Samothrace, 283 km away, its top still shows above Mount Athos. Drag a viewer anywhere and see it for yourself.'
+summary: 'Where Mount Olympus can be seen from: a viewshed of Mytikas, 2,918 m, on 30 m terrain with the curve of the Earth and the bending of light. The farthest land that sees it is 303 km away in Thrace, and, in theory, the farthest summit is Papikio, on the border with Bulgaria, 279 km away. Drag a viewer anywhere and see it for yourself.'
 date: 2026-11-05
 created: 2026-11-01
 category: '30-day-map-challenge'
@@ -8,7 +8,7 @@ context: '#30DayMapChallenge 2026 · Day 5'
 tags: ['ArcGIS Pro', 'GDAL', 'Python', 'Viewshed', 'Leaflet']
 image: '/images/30dmc-2026-day-05-wide.webp'
 imageFull: '/images/30dmc-2026-day-05-full.webp'
-imageAlt: 'Printed A4 map of northern Greece around Mount Olympus, with the land coloured orange where the summit can be seen and in paler shades where you would need to stand higher; the right column holds a small map of the full reach into Bulgaria, a profile from Thessaloniki showing the curve of the sea hiding the base of Olympus, and a computed skyline from Thessaloniki with Olympus, Ossa, the Pierian mountains and Vermio labelled'
+imageAlt: 'Printed A4 map of northern Greece from Albania to Thrace, with the land coloured orange where Mount Olympus can be seen and in paler shades where you would need to stand higher, and a dashed line of sight from Papikio in the Rhodope to the summit; the right column holds a close-up of the far end, a profile from Papikio over northern Chalkidiki and the curve of the sea, and a computed skyline from Papikio with Athos, Ypsario, Ossa, Olympus, Pangaio and Menikio labelled'
 thumbnail: '/images/30dmc-2026-day-05-square.webp'
 thumbnailAlt: 'Map of northern Greece with the areas that can see Mount Olympus in orange'
 downloads:
@@ -55,35 +55,41 @@ Two corrections matter at these distances:
   included.
 
 Where the summit is hidden, the map shows how much higher you would need to
-stand to see it: up to 25 m, 25 to 100 m, or 100 to 300 m. On land within
-the map, 12,830 km² can see the summit, and a viewer up to 100 m higher
-would add another 13,500 km². A faint wash marks the sea that sees it: all of
-the Thermaic Gulf and well beyond.
+stand to see it: up to 25 m, 25 to 100 m, or 100 to 300 m. About 13,300 km²
+of land can see the summit, from the mountains of Albania to Thrace. Dots mark
+the sea that sees it: all of the Thermaic Gulf and well beyond.
 
-## A. As far as Samothrace
+## A. The far end
 
-On the 90 m model of the whole region, the summit is visible from
-15,200 km² of land. The farthest is on Samothrace, 283 km away: on the east
-slopes of Fengari, only the top 157 m of Olympus clears Mount Athos and the
-curve of the sea. Close behind is Veykata, on the border of Bulgaria and
-Greece in the Rhodope, at 279 km. Vihren, in the Pirin mountains, 206 km
-away, Parnassus, 174 km, and the summit of Mount Athos, 168 km, also see it. Musala, Bulgaria's highest peak, does not: it
-would need to be 414 m higher. At sea, the summit's horizon is 213 km out.
+The farthest land that can see Olympus is a hill above Ano Kardamos, in
+Thrace, 303 km away. In theory, the farthest summit is Papikio, Veykata to Bulgarians,
+on the border at 1,483 m, 279 km away; Fengari, the top of Samothrace, is
+just behind at 278 km. Vihren, in the Pirin mountains of Bulgaria, 206 km,
+Parnassus, 174 km, and the summit of Mount Athos, 168 km, also see it.
+Musala, Bulgaria's highest peak, does not: it would need to be 414 m higher.
+
+These far places sit at the very edge of what the viewshed can tell. GDAL's
+method approximates over long distances and missed the hill above Ano
+Kardamos, so panel A is computed exactly: a ray from the summit for every
+30 m of arc, each point checked against everything nearer on its ray, on the
+30 m model. Every point named here was also checked with its own line of sight.
 
 ## B. What the curve hides
 
-From Thessaloniki's waterfront, at the White Tower, 78 km away, Olympus is in
-plain view, but not all of it. Nothing on land stands in the way: the curve of the sea
-across the Thermaic Gulf alone hides the mountain below 322 m.
+From Papikio, 279 km away, only the top 738 m of Olympus clears the land
+and the curve of the sea. The line grazes the hills of northern Chalkidiki,
+148 km out, with the Kavala coast and the slopes of Holomontas only a few
+tens of metres below it. Over that distance the curve drops the far end
+more than 5 km below a level line.
 
-## C. The view from Thessaloniki
+## C. The view from Papikio
 
 The panorama is computed from the terrain the same way: for each direction,
 the highest angle any ridge reaches, with the curve and refraction applied,
 and ridges shaded lighter with distance. A peak is labelled only where its own
-summit makes the skyline: Ossa, Olympus, the Pierian mountains and Vermio.
-Heights are drawn about eight times taller than they are, or the mountains
-would be a thin line.
+summit makes the skyline: Athos, Ypsario on Thasos, Ossa, Olympus, Pangaio and
+Menikio. Heights are drawn about nine times taller than they are, or the
+mountains would be a thin line.
 
 ## About the data
 
@@ -91,17 +97,19 @@ would be a thin line.
   result is reliable over areas but not at a single point in a town.
 - **Haze is not modelled.** These are the places with a clear line of sight;
   on most days the air hides Olympus long before the horizon does.
-- **The peaks named on the map are checked**: each one's summit was found in
-  the elevation model within 60 m of its official height. A peak that could
-  not be matched would be left out.
+- **The peaks named on the map are checked**: most were found in the
+  elevation model within 60 m of their official height. Fengari, Ypsario,
+  Pangaio and Menikio, added for the far end and the skyline, sit at their
+  OpenStreetMap summits.
 
 ## Building it
 
 The viewshed runs on grids centred on the summit, so distances from it are
 true in every direction: 30 m out to 175 km and 90 m out to 430 km, the
 farthest a summit this high could be seen from another mountain top. The
-map was made in ArcGIS Pro on the Greek Grid (EPSG:2100), over the EMODnet
-2024 bathymetry.
+main map shows the 30 m result and the 90 m one beyond it. The map was made
+in ArcGIS Pro on the Greek Grid (EPSG:2100), over the EMODnet 2024
+bathymetry.
 
 The interactive map computes its sightline and panorama in the browser,
 from a 300 m version of the terrain, 300 km around the summit, and 60 m
