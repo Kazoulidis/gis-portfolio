@@ -47,7 +47,9 @@ draft: false
 
 Each point on this map is a permanent GNSS station: an antenna fixed to bedrock or a
 building that records satellite signals around the clock. Over years, its position
-shows how the ground beneath it moves. The arrows are the horizontal velocities of
+shows how the ground beneath it moves. The input is points: each station records its
+GPS position every day, and the arrow drawn from it is the velocity those points
+give. The arrows are the horizontal velocities of
 212 stations in and around Greece, relative to stable Europe, from the Nevada
 Geodetic Laboratory's MIDAS solution (stations with at least three years of data, to
 August 2024). They are drawn to scale: at 1:4,000,000, 1 mm/yr draws 2 km.
