@@ -87,6 +87,8 @@ const { src, caption } = Astro.props;
   interface Meta {
     summit: { lat: number; lon: number; elev: number };
     grid: { size: number; half: number; cell: number; radius: number };
+    /** A finer grid around Thessaloniki, centred on (x, y) in the same projection. */
+    fine?: { size: number; x: number; y: number; half: number; cell: number };
     overlay: [[number, number], [number, number]];
     places: Place[];
   }
@@ -115,36 +117,52 @@ const { src, caption } = Astro.props;
 
     let meta: Meta;
     let terrain: HTMLImageElement;
+    let fineImg: HTMLImageElement | null = null;
     try {
       const res = await fetch(src);
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
       meta = await res.json();
-      terrain = await loadImage(src.replace('-meta.json', '-terrain.png'));
+      [terrain, fineImg] = await Promise.all([
+        loadImage(src.replace('-meta.json', '-terrain.png')),
+        meta.fine ? loadImage(src.replace('-meta.json', '-terrain-fine.png')).catch(() => null) : Promise.resolve(null),
+      ]);
     } catch (err) {
       console.error(err);
       el.insertAdjacentHTML('beforeend', '<p class="map-error">This map’s data could not be loaded.</p>');
       return;
     }
 
-    // --- The grid: heights from the packed PNG ------------------------------
+    // --- The grids: heights from the packed PNGs -----------------------------
     const { size: N, half: HALF, cell: CELL, radius: RS } = meta.grid;
-    const H = new Float32Array(N * N);
-    {
+    function unpack(img: HTMLImageElement, n: number): Float32Array {
       const c = document.createElement('canvas');
-      c.width = c.height = N;
+      c.width = c.height = n;
       const ctx = c.getContext('2d', { willReadFrequently: true })!;
-      ctx.drawImage(terrain, 0, 0);
-      const px = ctx.getImageData(0, 0, N, N).data;
-      for (let i = 0; i < N * N; i++) H[i] = px[i * 4] * 256 + px[i * 4 + 1];
+      ctx.drawImage(img, 0, 0);
+      const px = ctx.getImageData(0, 0, n, n).data;
+      const out = new Float32Array(n * n);
+      for (let i = 0; i < n * n; i++) out[i] = px[i * 4] * 256 + px[i * 4 + 1];
+      return out;
     }
+    const H = unpack(terrain, N);
+    const F = meta.fine && fineImg ? { ...meta.fine, h: unpack(fineImg, meta.fine.size) } : null;
 
-    // Bilinear height at grid coordinates (metres from the summit, y north).
+    // Bilinear height on one grid, given its centre, half-width and cell; null off the grid.
+    function sample(g: Float32Array, n: number, cx: number, cy: number, half: number, cell: number, x: number, y: number) {
+      const c = (x - cx + half) / cell - 0.5;
+      const r = (cy + half - y) / cell - 0.5;
+      if (c < 0 || r < 0 || c >= n - 1 || r >= n - 1) return null;
+      const c0 = c | 0, r0 = r | 0, fc = c - c0, fr = r - r0, i = r0 * n + c0;
+      return (g[i] * (1 - fc) + g[i + 1] * fc) * (1 - fr) + (g[i + n] * (1 - fc) + g[i + n + 1] * fc) * fr;
+    }
+    // Height at grid coordinates (metres from the summit, y north): the 60 m grid around
+    // Thessaloniki where it reaches, the 300 m one elsewhere, sea level off both.
     function height(x: number, y: number): number {
-      const c = (x + HALF) / CELL - 0.5;
-      const r = (HALF - y) / CELL - 0.5;
-      if (c < 0 || r < 0 || c >= N - 1 || r >= N - 1) return 0;
-      const c0 = c | 0, r0 = r | 0, fc = c - c0, fr = r - r0, i = r0 * N + c0;
-      return (H[i] * (1 - fc) + H[i + 1] * fc) * (1 - fr) + (H[i + N] * (1 - fc) + H[i + N + 1] * fc) * fr;
+      if (F) {
+        const v = sample(F.h, F.size, F.x, F.y, F.half, F.cell, x, y);
+        if (v !== null) return v;
+      }
+      return sample(H, N, 0, 0, HALF, CELL, x, y) ?? 0;
     }
 
     // Azimuthal equidistant on a sphere, centred on the summit, as the grid is.
@@ -182,6 +200,26 @@ const { src, caption } = Astro.props;
     map.on('click', (e: L.LeafletMouseEvent) => { viewer.setLatLng(e.latlng); update(true); });
     viewer.on('drag', () => update(false));
     viewer.on('dragend', () => update(true));
+
+    // Recentre: frame the viewer and the summit together, after the map has been panned away.
+    const recentre = new L.Control({ position: 'topleft' });
+    recentre.onAdd = () => {
+      const bar = L.DomUtil.create('div', 'leaflet-bar sight-recentre');
+      const btn = L.DomUtil.create('a', '', bar) as HTMLAnchorElement;
+      btn.href = '#';
+      btn.role = 'button';
+      btn.title = 'Recentre on you and Olympus';
+      btn.setAttribute('aria-label', 'Recentre the map on you and Olympus');
+      btn.innerHTML = '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="1.6" fill="currentColor"/><path d="M8 0.5v3M8 12.5v3M0.5 8h3M12.5 8h3" stroke="currentColor" stroke-width="1.5"/></svg>';
+      L.DomEvent.disableClickPropagation(bar);
+      L.DomEvent.on(btn, 'click', (e: Event) => {
+        L.DomEvent.preventDefault(e);
+        const b = L.latLngBounds([viewer.getLatLng(), L.latLng(meta.summit.lat, meta.summit.lon)]);
+        map.fitBounds(b.pad(0.3), { maxZoom: 10 });
+      });
+      return bar;
+    };
+    recentre.addTo(map);
 
     // Legend: the printed map's classes
     const legend = new L.Control({ position: 'topright' });
@@ -248,13 +286,19 @@ const { src, caption } = Astro.props;
       // seen and what blocks it; only the ground short of the massif (15 km out)
       // decides how much of the mountain is below the horizon, or its own slopes
       // would count as hiding it.
+      // A grid cannot judge the ground right beside you: a cell half a metre above the eye 200 m
+      // away would hide hundreds of metres of the mountain, and on a summit the averaged cell
+      // next door outranks the one you stand on. So nothing within two cells of the viewer counts
+      // as an obstacle: 120 m on the fine grid around Thessaloniki, 600 m elsewhere.
+      const onFine = F !== null && sample(F.h, F.size, F.x, F.y, F.half, F.cell, vx, vy) !== null;
+      const near = 2 * (onFine ? F!.cell : CELL);
       let best = -Infinity, bi = -1, fore = -Infinity, need = -Infinity;
       for (let i = 0; i < n; i++) {
         const t = (i + 1) / (n + 1);
         d[i] = t * D;
         h[i] = height(vx * (1 - t), vy * (1 - t));
         // the last 1.5 km is the summit's own slope, not an obstacle
-        if (d[i] > D - 1500) continue;
+        if (d[i] > D - 1500 || d[i] < near) continue;
         const a = h[i] - (d[i] * d[i]) / (2 * R_EFF);
         const ang = (a - h0) / d[i];
         if (ang > best) { best = ang; bi = i; }
@@ -311,6 +355,7 @@ const { src, caption } = Astro.props;
       const img = ctx.createImageData(W, Hh);
       const px = img.data;
       const row = (a: number) => Math.max(0, Math.min(Hh, Math.round(((hi - a) / (hi - lo)) * Hh)));
+      const skyline = new Float32Array(W);              // the highest angle in each column
       for (let j = 0; j < W; j++) {
         const { a, sea } = cols[j];
         let amax = lo - 1;
@@ -326,8 +371,41 @@ const { src, caption } = Astro.props;
           }
           amax = a[k];
         }
+        skyline[j] = amax;
       }
       ctx.putImageData(img, 0, 0);
+      // Other peaks, labelled only where the summit itself makes the skyline from here (its
+      // angle within 0.05 degrees of the highest there), as on the printed panorama. Highest
+      // first; a label that would overlap one already placed is left out.
+      const placed: [number, number][] = [[(W - 1) / 2 - 45 * scale, (W - 1) / 2 + 45 * scale]];   // Olympus's label
+      const peaks = meta.places
+        .filter((p) => p.kind === 'peak')
+        .map((p) => {
+          const [px, py] = toGrid(p.lat, p.lon);
+          const dx = px - s.vx, dy = py - s.vy, dd = Math.hypot(dx, dy);
+          let off = (Math.atan2(dx, dy) - az0) / rad;
+          off = ((off + 540) % 360) - 180;
+          const ang = Math.atan((p.elev - (dd * dd) / (2 * R_EFF) - s.h0) / dd) / rad;
+          return { p, off, ang, dd };
+        })
+        .filter((q) => q.dd > 1500 && Math.abs(q.off) < FOV / 2 - 1)
+        .sort((x, y) => y.ang - x.ang);
+      ctx.save();
+      ctx.font = `${10 * scale}px Georgia, serif`; ctx.textAlign = 'center'; ctx.fillStyle = '#333'; ctx.strokeStyle = '#555';
+      ctx.lineWidth = Math.max(1, scale * 0.8);
+      for (const q of peaks) {
+        const j = Math.round((q.off / FOV + 0.5) * (W - 1));
+        let top = -Infinity;
+        for (let k = Math.max(0, j - 3); k <= Math.min(W - 1, j + 3); k++) top = Math.max(top, skyline[k]);
+        if (q.ang < top - 0.05) continue;                // behind a nearer ridge
+        const half = ctx.measureText(q.p.name).width / 2 + 4 * scale;
+        if (placed.some(([a, b]) => j + half > a && j - half < b)) continue;
+        placed.push([j - half, j + half]);
+        const y = row(q.ang);
+        ctx.beginPath(); ctx.moveTo(j, y - 2 * scale); ctx.lineTo(j, y - 6 * scale); ctx.stroke();
+        ctx.fillText(q.p.name, j, y - 9 * scale);
+      }
+      ctx.restore();
       // Olympus: a red mark where the summit is, solid if seen, open if hidden.
       const jc = (W - 1) / 2, ys = row(sumAng);
       ctx.save();
@@ -516,6 +594,12 @@ const { src, caption } = Astro.props;
   .sight-ui__pano { height: 150px; }
   .sight-ui__profile { height: 130px; }
 
+  .sight-recentre a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #333;
+  }
   .sight-viewer span {
     display: block;
     width: 20px;

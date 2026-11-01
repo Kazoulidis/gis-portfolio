@@ -8,7 +8,7 @@ context: '#30DayMapChallenge 2026 · Day 5'
 tags: ['ArcGIS Pro', 'GDAL', 'Python', 'Viewshed', 'Leaflet']
 image: '/images/30dmc-2026-day-05-wide.webp'
 imageFull: '/images/30dmc-2026-day-05-full.webp'
-imageAlt: 'Printed A4 map of northern Greece around Mount Olympus, with the land coloured orange where the summit can be seen and in paler shades where you would need to stand higher; the right column holds a small map of the full reach into Bulgaria, a profile from the White Tower of Thessaloniki showing the curve of the sea hiding the base of Olympus, and a computed skyline from Thessaloniki with Olympus and Ossa labelled'
+imageAlt: 'Printed A4 map of northern Greece around Mount Olympus, with the land coloured orange where the summit can be seen and in paler shades where you would need to stand higher; the right column holds a small map of the full reach into Bulgaria, a profile from Thessaloniki showing the curve of the sea hiding the base of Olympus, and a computed skyline from Thessaloniki with Olympus, Ossa, the Pierian mountains and Vermio labelled'
 thumbnail: '/images/30dmc-2026-day-05-square.webp'
 thumbnailAlt: 'Map of northern Greece with the areas that can see Mount Olympus in orange'
 downloads:
@@ -57,7 +57,8 @@ Two corrections matter at these distances:
 Where the summit is hidden, the map shows how much higher you would need to
 stand to see it: up to 25 m, 25 to 100 m, or 100 to 300 m. On land within
 the map, 12,830 km² can see the summit, and a viewer up to 100 m higher
-would add another 13,500 km².
+would add another 13,500 km². A faint wash marks the sea that sees it: all of
+the Thermaic Gulf and well beyond.
 
 ## A. As far as Bulgaria
 
@@ -69,16 +70,18 @@ would need to be 414 m higher. At sea, the summit's horizon is 213 km out.
 
 ## B. What the curve hides
 
-From the White Tower of Thessaloniki, 78 km away, Olympus is in plain view,
-but not all of it. Nothing on land stands in the way: the curve of the sea
+From Thessaloniki's waterfront, at the White Tower, 78 km away, Olympus is in
+plain view, but not all of it. Nothing on land stands in the way: the curve of the sea
 across the Thermaic Gulf alone hides the mountain below 322 m.
 
-## C. The view from the White Tower
+## C. The view from Thessaloniki
 
 The panorama is computed from the terrain the same way: for each direction,
 the highest angle any ridge reaches, with the curve and refraction applied,
-and ridges shaded lighter with distance. Heights are drawn about eight times
-taller than they are, or the mountains would be a thin line.
+and ridges shaded lighter with distance. A peak is labelled only where its own
+summit makes the skyline: Ossa, Olympus, the Pierian mountains and Vermio.
+Heights are drawn about eight times taller than they are, or the mountains
+would be a thin line.
 
 ## About the data
 
@@ -87,8 +90,8 @@ taller than they are, or the mountains would be a thin line.
 - **Haze is not modelled.** These are the places with a clear line of sight;
   on most days the air hides Olympus long before the horizon does.
 - **The peaks named on the map are checked**: each one's summit was found in
-  the elevation model within 60 m of its official height. Four peaks that
-  could not be matched were left out.
+  the elevation model within 60 m of its official height. A peak that could
+  not be matched would be left out.
 
 ## Building it
 
@@ -99,5 +102,6 @@ map was made in ArcGIS Pro on the Greek Grid (EPSG:2100), over the EMODnet
 2024 bathymetry.
 
 The interactive map computes its sightline and panorama in the browser,
-from a 300 m version of the terrain stored as a PNG image, with each
+from a 300 m version of the terrain, 60 m within 25 km of Thessaloniki,
+stored as PNG images, with each
 height packed into two of its colour channels.
