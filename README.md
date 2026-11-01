@@ -1,4 +1,4 @@
-# Antonios Kazoulidis - GIS portfolio
+# Antonis Kazoulidis - GIS portfolio
 
 The source of my portfolio at **[portfolio.kazoulidis.com](https://portfolio.kazoulidis.com)**.
 

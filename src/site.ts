@@ -4,7 +4,7 @@
  * read from it.
  */
 export const site = {
-  name: 'Antonios Kazoulidis',
+  name: 'Antonis Kazoulidis',
   role: 'GIS Specialist | Spatial Planning and Development Engineer',
   // One or two sentences. This is the meta description and the line under your
   // name on the About page. Recruiters read this and nothing else, sometimes.
