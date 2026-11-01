@@ -3,7 +3,7 @@
  * "Stand anywhere": drag a viewer around the map and see Olympus from there.
  *
  * Everything is computed in the browser from a coarse elevation grid (300 m,
- * 260 km around the summit), so it updates while the viewer is dragged:
+ * 300 km around the summit), so it updates while the viewer is dragged:
  *   - the sightline to Mytikas, with the curve of the Earth and refraction:
  *     whether the summit is seen, how much of the mountain sits below the
  *     horizon, how much higher you would need to stand, and what is in the way
@@ -36,7 +36,8 @@ const { src, caption } = Astro.props;
       <div class="sight-ui__presets" role="group" aria-label="Places worth trying">
         <span>Try:</span>
         <button type="button" data-sight-preset="Thessaloniki">Thessaloniki</button>
-        <button type="button" data-sight-preset="Vihren">Vihren, Bulgaria: the farthest</button>
+        <button type="button" data-sight-preset="Samothrace" data-sight-at="40.4304,25.66">Samothrace: the farthest</button>
+        <button type="button" data-sight-preset="Veykata" data-sight-at="41.2214,25.3063">Veykata, Bulgaria</button>
         <button type="button" data-sight-preset="Kastoria hills" data-sight-at="40.5704,21.246">Near Kastoria: through a gap</button>
       </div>
       <div class="sight-ui__row">
@@ -600,23 +601,25 @@ const { src, caption } = Astro.props;
         if (!s.seen && s.od > 0) obstacle.setLatLng(toLatLng(s.ox, s.oy)).addTo(map); else obstacle.remove();
 
         const km = s.D / 1000;
+        // The ground under the figure, the height the rest is reckoned from.
+        const here = s.ground < 1 ? 'You are at sea level. ' : `You stand at ${fmt(s.ground)} m. `;
         if (s.D < 1500) {
           verdictEl.innerHTML = '<strong>You are on the summit.</strong>';
           factsEl.textContent = 'Drag the figure away from Olympus.';
         } else if (s.seen) {
           verdictEl.innerHTML = `<strong>Olympus is in view</strong>, ${fmt(km)} km away.`;
-          factsEl.textContent = s.hidden > 1
+          factsEl.textContent = here + (s.hidden > 1
             ? `The lowest ${fmt(s.hidden)} m of the mountain are below your horizon.`
-            : 'You can see it down to its foot.';
+            : 'You can see it down to its foot.');
         } else {
           const p = nearest(s.ox, s.oy, 6000);
           const what = s.oh < 1
             ? 'the curve of the sea'
             : `high ground ${fmt(s.od / 1000)} km away, ${fmt(s.oh)} m${p ? `, near ${p.name}` : ''}`;
           verdictEl.innerHTML = `<strong>Olympus is hidden</strong>, ${fmt(km)} km away, by ${what}.`;
-          factsEl.textContent = s.needed < 3000
+          factsEl.textContent = here + (s.needed < 3000
             ? `You would need to stand about ${fmt(s.needed)} m higher to see the summit.`
-            : 'No realistic height would bring the summit into view.';
+            : 'No realistic height would bring the summit into view.');
         }
         drawPano(s, eye, quick);
         drawProfile(s);

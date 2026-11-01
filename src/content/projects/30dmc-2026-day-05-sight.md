@@ -1,6 +1,6 @@
 ---
 title: 'Day 5 - Senses: Sight: Seeing Olympus'
-summary: 'Where Mount Olympus can be seen from: a viewshed of Mytikas, 2,918 m, on 30 m terrain with the curve of the Earth and the bending of light. From Thessaloniki the bottom 322 m of the mountain is below the horizon; from Vihren in Bulgaria, 206 km away, the summit is still in view. Drag a viewer anywhere and see it for yourself.'
+summary: 'Where Mount Olympus can be seen from: a viewshed of Mytikas, 2,918 m, on 30 m terrain with the curve of the Earth and the bending of light. From Thessaloniki the bottom 322 m of the mountain is below the horizon; from Samothrace, 283 km away, its top still shows above Mount Athos. Drag a viewer anywhere and see it for yourself.'
 date: 2026-11-05
 created: 2026-11-01
 category: '30-day-map-challenge'
@@ -60,12 +60,14 @@ the map, 12,830 km² can see the summit, and a viewer up to 100 m higher
 would add another 13,500 km². A faint wash marks the sea that sees it: all of
 the Thermaic Gulf and well beyond.
 
-## A. As far as Bulgaria
+## A. As far as Samothrace
 
 On the 90 m model of the whole region, the summit is visible from
-15,200 km² of land. The farthest point is Vihren, in the Pirin mountains of
-Bulgaria, 206 km away. Parnassus, 174 km away, and the summit of Mount
-Athos, 168 km, also see it. Musala, Bulgaria's highest peak, does not: it
+15,200 km² of land. The farthest is on Samothrace, 283 km away: on the east
+slopes of Fengari, only the top 157 m of Olympus clears Mount Athos and the
+curve of the sea. Close behind is Veykata, on the border of Bulgaria and
+Greece in the Rhodope, at 279 km. Vihren, in the Pirin mountains, 206 km
+away, Parnassus, 174 km, and the summit of Mount Athos, 168 km, also see it. Musala, Bulgaria's highest peak, does not: it
 would need to be 414 m higher. At sea, the summit's horizon is 213 km out.
 
 ## B. What the curve hides
@@ -102,6 +104,8 @@ map was made in ArcGIS Pro on the Greek Grid (EPSG:2100), over the EMODnet
 2024 bathymetry.
 
 The interactive map computes its sightline and panorama in the browser,
-from a 300 m version of the terrain, 60 m within 25 km of Thessaloniki,
-stored as PNG images, with each
-height packed into two of its colour channels.
+from a 300 m version of the terrain, 300 km around the summit, and 60 m
+within 25 km of Thessaloniki. The ground you stand on comes from 90 m tiles,
+loaded only where you are, since a 300 m cell would average a hilltop down
+by as much as 250 m. All of it is stored as PNG images, with each height
+packed into two of their colour channels.
