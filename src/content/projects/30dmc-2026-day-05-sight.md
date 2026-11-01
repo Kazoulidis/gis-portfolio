@@ -14,10 +14,10 @@ thumbnailAlt: 'Map of northern Greece with the areas that can see Mount Olympus 
 downloads:
   - label: 'Full-resolution map'
     href: '/downloads/30dmc-2026-day-05-map.jpg'
-    note: 'JPEG · 7016 × 4961 · 8.4 MB'
+    note: 'JPEG · 7016 × 4961 · 7.9 MB'
   - label: 'Square version'
     href: '/downloads/30dmc-2026-day-05-map-square.jpg'
-    note: 'JPEG · 4724 × 4724 · 6.9 MB'
+    note: 'JPEG · 4724 × 4724 · 6.4 MB'
 map: '/data/30dmc-2026-day-05-meta.json'
 mapComponent: 'olympus-sightline'
 mapCaption: 'Drag the figure, click the map or pick a place. The view and the sightline are computed in your browser from a 300 m terrain model, with the ground under you at 90 m, so they are coarser than the coloured layer, which comes from the 30 m model of the printed map; near the edge of a coloured patch the two can disagree.'
