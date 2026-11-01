@@ -16,6 +16,9 @@
  *   *-terrain.png      heights packed as R * 256 + G metres, on a summit-centred
  *                      azimuthal equidistant grid of a sphere
  *   *-visibility.png   the overlay, in Web Mercator
+ *   *-t90/{row}_{col}.png  the same grid at 90 m in tiles (Day_05/prep/web_tiles.py),
+ *                      loaded around the viewer for the ground it stands on: a 300 m
+ *                      cell averages a ridge or an island hill down by up to 250 m
  */
 interface Props {
   src: string;
@@ -97,6 +100,8 @@ const { src, caption } = Astro.props;
     fine?: { size: number; x: number; y: number; half: number; cell: number };
     overlay: [[number, number], [number, number]];
     places: Place[];
+    /** The 90 m tiles: cell, cells per tile, the grid's half-width, and the tiles that exist (all-sea ones do not). */
+    t90?: { cell: number; tile: number; half: number; tiles: string[] };
   }
 
   const rad = Math.PI / 180;
@@ -140,18 +145,44 @@ const { src, caption } = Astro.props;
 
     // --- The grids: heights from the packed PNGs -----------------------------
     const { size: N, half: HALF, cell: CELL, radius: RS } = meta.grid;
-    function unpack(img: HTMLImageElement, n: number): Float32Array {
+    function unpack(img: HTMLImageElement): Float32Array {
+      const w = img.naturalWidth, h = img.naturalHeight;
       const c = document.createElement('canvas');
-      c.width = c.height = n;
+      c.width = w; c.height = h;
       const ctx = c.getContext('2d', { willReadFrequently: true })!;
       ctx.drawImage(img, 0, 0);
-      const px = ctx.getImageData(0, 0, n, n).data;
-      const out = new Float32Array(n * n);
-      for (let i = 0; i < n * n; i++) out[i] = px[i * 4] * 256 + px[i * 4 + 1];
+      const px = ctx.getImageData(0, 0, w, h).data;
+      const out = new Float32Array(w * h);
+      for (let i = 0; i < w * h; i++) out[i] = px[i * 4] * 256 + px[i * 4 + 1];
       return out;
     }
-    const H = unpack(terrain, N);
-    const F = meta.fine && fineImg ? { ...meta.fine, h: unpack(fineImg, meta.fine.size) } : null;
+    const H = unpack(terrain);
+
+    // The 90 m tiles, fetched as the viewer reaches them; null while one is loading.
+    const T = meta.t90;
+    const tileSet = new Set(T?.tiles ?? []);
+    const tiles = new Map<string, { h: Float32Array; w: number } | null>();
+    const tileBase = src.replace('-meta.json', '-t90/');
+    // The ground at grid coordinates on the 90 m tiles, or null until its tile has loaded.
+    function ground90(x: number, y: number): number | null {
+      if (!T) return null;
+      const c = (x + T.half) / T.cell - 0.5, r = (T.half - y) / T.cell - 0.5;
+      if (c < 0 || r < 0) return null;
+      const c0 = c | 0, r0 = r | 0, key = `${Math.floor(r0 / T.tile)}_${Math.floor(c0 / T.tile)}`;
+      if (!tileSet.has(key)) return 0;                     // all sea
+      const t = tiles.get(key);
+      if (t === undefined) {
+        tiles.set(key, null);
+        loadImage(tileBase + key + '.png')
+          .then((img) => { tiles.set(key, { h: unpack(img), w: img.naturalWidth }); update(); })
+          .catch(() => tiles.delete(key));
+        return null;
+      }
+      if (t === null) return null;
+      const lc = c0 % T.tile, lr = r0 % T.tile, fc = c - c0, fr = r - r0, i = lr * t.w + lc, w = t.w;
+      return (t.h[i] * (1 - fc) + t.h[i + 1] * fc) * (1 - fr) + (t.h[i + w] * (1 - fc) + t.h[i + w + 1] * fc) * fr;
+    }
+    const F = meta.fine && fineImg ? { ...meta.fine, h: unpack(fineImg) } : null;
 
     // Bilinear height on one grid, given its centre, half-width and cell; null off the grid.
     function sample(g: Float32Array, n: number, cx: number, cy: number, half: number, cell: number, x: number, y: number) {
@@ -309,7 +340,10 @@ const { src, caption } = Astro.props;
       // the viewer below the next ridge; standing on a named place, take its known height.
       // Dropped by hand within 500 m of a named summit counts as standing on it.
       const peak = atPlace ?? meta.places.find((p) => p.kind === 'peak' && Math.hypot(...toGrid(p.lat, p.lon).map((c, k) => c - (k ? vy : vx))) < 500);
-      const ground = Math.max(height(vx, vy), peak?.elev ?? -Infinity);
+      // Off the fine grid around Thessaloniki, the ground comes from the 90 m tiles once loaded.
+      const fineHere = F !== null && sample(F.h, F.size, F.x, F.y, F.half, F.cell, vx, vy) !== null;
+      const g90 = fineHere ? null : ground90(vx, vy);
+      const ground = Math.max(g90 ?? height(vx, vy), peak?.elev ?? -Infinity);
       const h0 = ground + eye;
       const S = meta.summit.elev - (D * D) / (2 * R_EFF);    // the summit, lowered by the curve
       const n = Math.max(50, Math.min(1200, Math.round(D / 100)));
@@ -322,8 +356,7 @@ const { src, caption } = Astro.props;
       // away would hide hundreds of metres of the mountain, and on a summit the averaged cell
       // next door outranks the one you stand on. So nothing within two cells of the viewer counts
       // as an obstacle: 120 m on the fine grid around Thessaloniki, 600 m elsewhere.
-      const onFine = F !== null && sample(F.h, F.size, F.x, F.y, F.half, F.cell, vx, vy) !== null;
-      const near = 2 * (onFine ? F!.cell : CELL);
+      const near = 2 * (fineHere ? F!.cell : CELL);
       let best = -Infinity, bi = -1, fore = -Infinity, need = -Infinity;
       for (let i = 0; i < n; i++) {
         const t = (i + 1) / (n + 1);

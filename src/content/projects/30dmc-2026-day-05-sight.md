@@ -20,7 +20,7 @@ downloads:
     note: 'JPEG · 4724 × 4724 · 6.9 MB'
 map: '/data/30dmc-2026-day-05-meta.json'
 mapComponent: 'olympus-sightline'
-mapCaption: 'Drag the figure, click the map or pick a place. The view and the sightline are computed in your browser from a 300 m terrain model, so they are coarser than the coloured layer, which comes from the 30 m model of the printed map.'
+mapCaption: 'Drag the figure, click the map or pick a place. The view and the sightline are computed in your browser from a 300 m terrain model, with the ground under you at 90 m, so they are coarser than the coloured layer, which comes from the 30 m model of the printed map; near the edge of a coloured patch the two can disagree.'
 dataSource:
   - label: 'Copernicus DEM GLO-30 and GLO-90 - elevation (© DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018, provided under COPERNICUS by the European Union and ESA)'
     href: 'https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM'
