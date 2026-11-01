@@ -32,9 +32,9 @@ const { src, caption } = Astro.props;
     <div class="sight-ui" data-sight-ui hidden>
       <div class="sight-ui__presets" role="group" aria-label="Places worth trying">
         <span>Try:</span>
-        <button type="button" data-sight-preset="Thessaloniki">Thessaloniki, the classic view</button>
+        <button type="button" data-sight-preset="Thessaloniki">Thessaloniki</button>
         <button type="button" data-sight-preset="Vihren">Vihren, Bulgaria: the farthest</button>
-        <button type="button" data-sight-preset="Veria">Veria, just hidden</button>
+        <button type="button" data-sight-preset="Kastoria hills" data-sight-at="40.5704,21.246">Near Kastoria: through a gap</button>
       </div>
       <div class="sight-ui__row">
         <p class="sight-ui__verdict" data-sight-verdict aria-live="polite">&nbsp;</p>
@@ -203,9 +203,12 @@ const { src, caption } = Astro.props;
     const viewerIcon = L.divIcon({ className: 'sight-viewer', html: '<span></span>', iconSize: [20, 20], iconAnchor: [10, 10] });
     const start = meta.places.find((p) => p.name === START) ?? meta.places[0];
     const viewer = L.marker([start.lat, start.lon], { icon: viewerIcon, draggable: true, autoPan: true, keyboard: true, title: 'Drag me' }).addTo(map);
-    map.on('click', (e: L.LeafletMouseEvent) => { viewer.setLatLng(e.latlng); update(true); });
-    viewer.on('drag', () => update(false));
-    viewer.on('dragend', () => update(true));
+    // The place the viewer was put on from the list or a preset, until it is moved by hand.
+    let atPlace: Place | null = null;
+    map.on('click', (e: L.LeafletMouseEvent) => { atPlace = null; viewer.setLatLng(e.latlng); update(); });
+    viewer.on('dragstart', () => { atPlace = null; });
+    viewer.on('drag', () => update());
+    viewer.on('dragend', () => update());
 
     // Recentre: frame the viewer and the summit together, after the map has been panned away.
     const recentre = new L.Control({ position: 'topleft' });
@@ -256,21 +259,26 @@ const { src, caption } = Astro.props;
     placeSel.addEventListener('change', () => {
       const p = sorted[Number(placeSel.value)];
       if (!p) return;
+      atPlace = p;
       viewer.setLatLng([p.lat, p.lon]);
       if (!map.getBounds().contains([p.lat, p.lon])) map.panTo([p.lat, p.lon]);
-      update(true);
+      update();
     });
-    eyeSel.addEventListener('change', () => update(true));
+    eyeSel.addEventListener('change', () => update());
 
-    // Presets: a place by name, framed with the summit so the whole sightline is on screen.
+    // Presets: a place by name, or a spot of its own (data-sight-at="lat,lon"), framed with
+    // the summit so the whole sightline is on screen.
     for (const btn of root.querySelectorAll<HTMLButtonElement>('[data-sight-preset]')) {
-      const p = meta.places.find((q) => q.name === btn.dataset.sightPreset);
-      if (!p) { btn.hidden = true; continue; }
+      const at = btn.dataset.sightAt?.split(',').map(Number);
+      const p = at ? null : meta.places.find((q) => q.name === btn.dataset.sightPreset);
+      if (!at && !p) { btn.hidden = true; continue; }
+      const [lat, lon] = at ?? [p!.lat, p!.lon];
       btn.addEventListener('click', () => {
-        viewer.setLatLng([p.lat, p.lon]);
-        placeSel.value = String(sorted.indexOf(p));
-        map.fitBounds(L.latLngBounds([[p.lat, p.lon], [meta.summit.lat, meta.summit.lon]]).pad(0.3), { maxZoom: 10 });
-        update(true);
+        atPlace = p ?? null;
+        viewer.setLatLng([lat, lon]);
+        placeSel.value = p ? String(sorted.indexOf(p)) : '';
+        map.fitBounds(L.latLngBounds([[lat, lon], [meta.summit.lat, meta.summit.lon]]).pad(0.3), { maxZoom: 10 });
+        update();
       });
     }
 
@@ -295,7 +303,11 @@ const { src, caption } = Astro.props;
     function sightline(lat: number, lon: number, eye: number): Sight {
       const [vx, vy] = toGrid(lat, lon);
       const D = Math.hypot(vx, vy);
-      const ground = height(vx, vy);
+      // A 300 m cell averages a summit down by a hundred metres or more, enough to sink
+      // the viewer below the next ridge; standing on a named place, take its known height.
+      // Dropped by hand within 500 m of a named summit counts as standing on it.
+      const peak = atPlace ?? meta.places.find((p) => p.kind === 'peak' && Math.hypot(...toGrid(p.lat, p.lon).map((c, k) => c - (k ? vy : vx))) < 500);
+      const ground = Math.max(height(vx, vy), peak?.elev ?? -Infinity);
       const h0 = ground + eye;
       const S = meta.summit.elev - (D * D) / (2 * R_EFF);    // the summit, lowered by the curve
       const n = Math.max(50, Math.min(1200, Math.round(D / 100)));
@@ -337,11 +349,11 @@ const { src, caption } = Astro.props;
     }
 
     // --- Panorama -------------------------------------------------------------
-    function drawPano(s: Sight, eye: number, fine: boolean) {
+    function drawPano(s: Sight, eye: number) {
       const dpr = window.devicePixelRatio || 1;
       const cssW = pano.clientWidth, cssH = pano.clientHeight;
-      const scale = fine ? dpr : Math.min(dpr, 1) * 0.5;
-      const W = Math.max(100, Math.round(cssW * scale)), Hh = Math.max(60, Math.round(cssH * scale));
+      const scale = dpr;
+      const W = Math.max(100, Math.round(cssW * dpr)), Hh = Math.max(60, Math.round(cssH * dpr));
       pano.width = W; pano.height = Hh;
       const ctx = pano.getContext('2d')!;
       const az0 = Math.atan2(-s.vx, -s.vy);                 // toward the summit, in the grid's plane
@@ -441,8 +453,8 @@ const { src, caption } = Astro.props;
     }
 
     // --- Profile ----------------------------------------------------------------
-    function drawProfile(s: Sight, fine: boolean) {
-      const dpr = fine ? window.devicePixelRatio || 1 : 1;
+    function drawProfile(s: Sight) {
+      const dpr = window.devicePixelRatio || 1;
       const cssW = prof.clientWidth, cssH = prof.clientHeight;
       const W = Math.round(cssW * dpr), Hh = Math.round(cssH * dpr);
       prof.width = W; prof.height = Hh;
@@ -500,14 +512,13 @@ const { src, caption } = Astro.props;
     }
 
     // --- Update -----------------------------------------------------------------
-    let pending = false, fineNext = false;
-    function update(fine: boolean) {
-      fineNext = fineNext || fine;
+    // At most one redraw per frame, always at full resolution, dragging included.
+    let pending = false;
+    function update() {
       if (pending) return;
       pending = true;
       requestAnimationFrame(() => {
         pending = false;
-        const f = fineNext; fineNext = false;
         // keep the viewer on the grid
         let ll = viewer.getLatLng();
         let [x, y] = toGrid(ll.lat, ll.lng);
@@ -541,12 +552,12 @@ const { src, caption } = Astro.props;
             ? `You would need to stand about ${fmt(s.needed)} m higher to see the summit.`
             : 'No realistic height would bring the summit into view.';
         }
-        drawPano(s, eye, f);
-        drawProfile(s, f);
+        drawPano(s, eye);
+        drawProfile(s);
       });
     }
-    update(true);
-    window.addEventListener('resize', () => update(true));
+    update();
+    window.addEventListener('resize', () => update());
   }
 
   document.querySelectorAll<HTMLElement>('[data-sightmap]').forEach((el) => whenNear(el, () => initMap(el)));
@@ -635,8 +646,15 @@ const { src, caption } = Astro.props;
     border-radius: var(--radius);
     background: #fff;
   }
-  .sight-ui__pano { height: 150px; }
-  .sight-ui__profile { height: 130px; }
+  .sight-ui__pano { height: 130px; }
+  .sight-ui__profile { height: 110px; }
+
+  /* Shorter than the other maps: the view and the sightline below it carry
+     as much as the map does. */
+  .sight .map { height: 360px; }
+  @media (max-width: 40rem) {
+    .sight .map { height: 280px; }
+  }
 
   .sight-recentre a {
     display: flex;

@@ -10,6 +10,9 @@
  * swapped for the full one once it arrives; both have the same aspect, so the
  * swap does not move anything.
  *
+ * The figure sits in an open <details>, so a reader who has seen the print
+ * can fold it away and reach the interactive map and the text sooner.
+ *
  *   <ZoomableImage src="/images/map-wide.webp" full="/images/map-full.webp" alt="..." />
  */
 interface Props {
@@ -21,7 +24,9 @@ interface Props {
 const { src, full, alt } = Astro.props;
 ---
 
-<figure class="project-image" data-zoomable data-full={full ?? src}>
+<details class="project-image" open>
+<summary class="project-image__toggle">Printed map</summary>
+<figure class="project-image__figure" data-zoomable data-full={full ?? src}>
   <button type="button" class="zoomable__open" aria-label="Open the map full screen to zoom in">
     <img src={src} alt={alt} loading="eager" decoding="async" />
   </button>
@@ -39,6 +44,7 @@ const { src, full, alt } = Astro.props;
     <p class="zoomable__status" aria-live="polite"></p>
   </dialog>
 </figure>
+</details>
 
 <script>
   const MAX_SCALE = 10;
@@ -227,6 +233,47 @@ const { src, full, alt } = Astro.props;
   .project-image {
     margin: 2rem 0;
     max-width: none;
+  }
+
+  .project-image__figure {
+    margin: 0.5rem 0 0;
+    max-width: none;
+  }
+
+  .project-image__toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-family: var(--font-sans);
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+  }
+
+  .project-image__toggle::-webkit-details-marker {
+    display: none;
+  }
+
+  .project-image__toggle::before {
+    content: '';
+    width: 0.4rem;
+    height: 0.4rem;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(-45deg);
+    transition: transform 0.15s;
+  }
+
+  .project-image[open] > .project-image__toggle::before {
+    transform: rotate(45deg) translate(-0.1rem, -0.1rem);
+  }
+
+  .project-image__toggle:hover {
+    color: var(--accent);
   }
 
   .zoomable__open {
