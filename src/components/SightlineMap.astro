@@ -30,6 +30,12 @@ const { src, caption } = Astro.props;
     <div class="map map--tall" data-sightmap data-src={src} role="application" aria-label={caption ?? 'Map: drag the viewer to see Olympus from anywhere'}></div>
 
     <div class="sight-ui" data-sight-ui hidden>
+      <div class="sight-ui__presets" role="group" aria-label="Places worth trying">
+        <span>Try:</span>
+        <button type="button" data-sight-preset="Thessaloniki">Thessaloniki, the classic view</button>
+        <button type="button" data-sight-preset="Vihren">Vihren, Bulgaria: the farthest</button>
+        <button type="button" data-sight-preset="Veria">Veria, just hidden</button>
+      </div>
       <div class="sight-ui__row">
         <p class="sight-ui__verdict" data-sight-verdict aria-live="polite">&nbsp;</p>
         <div class="sight-ui__controls">
@@ -256,6 +262,18 @@ const { src, caption } = Astro.props;
     });
     eyeSel.addEventListener('change', () => update(true));
 
+    // Presets: a place by name, framed with the summit so the whole sightline is on screen.
+    for (const btn of root.querySelectorAll<HTMLButtonElement>('[data-sight-preset]')) {
+      const p = meta.places.find((q) => q.name === btn.dataset.sightPreset);
+      if (!p) { btn.hidden = true; continue; }
+      btn.addEventListener('click', () => {
+        viewer.setLatLng([p.lat, p.lon]);
+        placeSel.value = String(sorted.indexOf(p));
+        map.fitBounds(L.latLngBounds([[p.lat, p.lon], [meta.summit.lat, meta.summit.lon]]).pad(0.3), { maxZoom: 10 });
+        update(true);
+      });
+    }
+
     // Places near a point, for naming what is in the way.
     function nearest(x: number, y: number, within: number): Place | null {
       let best: Place | null = null, bd = within;
@@ -430,7 +448,8 @@ const { src, caption } = Astro.props;
       prof.width = W; prof.height = Hh;
       const ctx = prof.getContext('2d')!;
       ctx.scale(dpr, dpr);
-      const m = { l: 44, r: 10, t: 10, b: 24 };
+      // Edge to edge, like the panorama above it, so the two read as one width.
+      const m = { l: 0, r: 0, t: 10, b: 24 };
       const w = cssW - m.l - m.r, hgt = cssH - m.t - m.b;
       const drop = (x: number) => (x * x) / (2 * R_EFF);
       // Heights relative to the eye's level plane; the range shows the low part well.
@@ -465,12 +484,15 @@ const { src, caption } = Astro.props;
       ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'center';
       ctx.beginPath(); ctx.moveTo(m.l, m.t + hgt); ctx.lineTo(m.l + w, m.t + hgt); ctx.stroke();
       const km = s.D / 1000, stepKm = km > 120 ? 50 : km > 50 ? 20 : km > 20 ? 10 : 5;
-      for (let k = 0; k <= km; k += stepKm) {
+      // Ticks short of the end, which carries the distance itself; the first label sits inside
+      // the left edge.
+      for (let k = 0; k <= km - stepKm * 0.4; k += stepKm) {
         ctx.beginPath(); ctx.moveTo(X(k * 1000), m.t + hgt); ctx.lineTo(X(k * 1000), m.t + hgt + 3); ctx.stroke();
-        ctx.fillText(String(k), X(k * 1000), m.t + hgt + 14);
+        ctx.textAlign = k === 0 ? 'left' : 'center';
+        ctx.fillText(String(k), X(k * 1000) + (k === 0 ? 2 : 0), m.t + hgt + 14);
       }
       ctx.textAlign = 'right';
-      ctx.fillText(`${fmt(km)} km`, m.l + w, m.t + hgt + 14 + 0.01);
+      ctx.fillText(`${fmt(km)} km`, m.l + w - 2, m.t + hgt + 14);
       ctx.textAlign = 'left';
       ctx.fillText('you', m.l + 3, Y(0) - 4);
       ctx.textAlign = 'right';
@@ -537,6 +559,28 @@ const { src, caption } = Astro.props;
     border: 1px solid var(--rule);
     border-radius: var(--radius);
     background: var(--bg-surface);
+  }
+  .sight-ui__presets {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+    margin-bottom: 0.55rem;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+  }
+  .sight-ui__presets button {
+    font: inherit;
+    padding: 0.2rem 0.6rem;
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    background: var(--bg);
+    color: var(--text);
+    cursor: pointer;
+  }
+  .sight-ui__presets button:hover {
+    border-color: var(--accent);
+    color: var(--accent);
   }
   .sight-ui__row {
     display: flex;
