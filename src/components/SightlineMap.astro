@@ -104,6 +104,8 @@ const { src, caption } = Astro.props;
     places: Place[];
     /** The 90 m tiles: cell, cells per tile, the grid's half-width, and the tiles that exist (all-sea ones do not). */
     t90?: { cell: number; tile: number; half: number; tiles: string[] };
+    /** Landmark summits from OpenStreetMap, for labels only (Day_05/prep/web_peaks.py). */
+    peaks?: { name: string; lat: number; lon: number; elev: number }[];
   }
 
   const rad = Math.PI / 180;
@@ -224,10 +226,19 @@ const { src, caption } = Astro.props;
 
     // --- Map layers ----------------------------------------------------------
     L.imageOverlay(src.replace('-meta.json', '-visibility.png'), meta.overlay, { opacity: 0.6, interactive: false }).addTo(map);
+    // The sea that sees the summit: the printed map's dot matrix, drawn through a mask on the
+    // overlay's grid, so the dots keep their size on screen at every zoom.
+    const sea = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    sea.setAttribute('class', 'sight-sea');
+    const seaMask = `url(${src.replace('-meta.json', '-sea.png')})`;
+    sea.style.setProperty('mask-image', seaMask); sea.style.setProperty('-webkit-mask-image', seaMask);
+    L.svgOverlay(sea, meta.overlay, { interactive: false }).addTo(map);
     // Fitting the overlay rounds down to a zoom that shows half the Balkans; open
     // on the stretch between Olympus and Thessaloniki instead.
     map.setView([40.4, 22.7], 8);
     const summitIcon = L.divIcon({ className: 'sight-summit', html: '<span></span>', iconSize: [14, 12], iconAnchor: [7, 10] });
+    // Every summit the panorama may name: the printed map's peaks, then the landmarks.
+    const landmarks: Place[] = (meta.peaks ?? []).map((p) => ({ ...p, kind: 'peak' }));
     // The peaks the panorama names, named on the map too; redrawn only when the set changes.
     const peakIcon = L.divIcon({ className: 'sight-peak', html: '<span></span>', iconSize: [10, 9], iconAnchor: [5, 8] });
     const peakLayer = L.layerGroup().addTo(map);
@@ -288,6 +299,7 @@ const { src, caption } = Astro.props;
       box.innerHTML =
         '<div class="sight-legend__title">How much higher you would need to stand</div>' +
         CLASSES.map((c) => `<div class="sight-legend__row"><span style="background:rgb(${c.rgb})"></span>${c.label}</div>`).join('') +
+        '<div class="sight-legend__row"><span class="sight-legend__sea"></span>Sea in view</div>' +
         '<div class="sight-legend__note">From the 30 m model of the printed map. Drag the figure, or click the map.</div>';
       return box;
     };
@@ -490,8 +502,7 @@ const { src, caption } = Astro.props;
       // first; a label that would overlap one already placed is left out.
       const placed: [number, number][] = [[(W - 1) / 2 - 45 * scale, (W - 1) / 2 + 45 * scale]];   // Olympus's label
       const labelled: Place[] = [];
-      const peaks = meta.places
-        .filter((p) => p.kind === 'peak')
+      const peaks = [...meta.places.filter((p) => p.kind === 'peak'), ...landmarks]
         .map((p) => {
           const [px, py] = toGrid(p.lat, p.lon);
           const dx = px - s.vx, dy = py - s.vy, dd = Math.hypot(dx, dy);
@@ -811,6 +822,20 @@ const { src, caption } = Astro.props;
     height: 0.9rem;
     border-radius: 2px;
     border: 1px solid rgba(0, 0, 0, 0.2);
+  }
+  .sight-sea,
+  .sight-legend__row .sight-legend__sea {
+    background-image: radial-gradient(circle, rgba(205, 85, 30, 0.85) 0.9px, transparent 1.3px);
+    background-size: 7px 7px;
+  }
+  .sight-sea {
+    mask-size: 100% 100%;
+    -webkit-mask-size: 100% 100%;
+    mask-repeat: no-repeat;
+    -webkit-mask-repeat: no-repeat;
+  }
+  .sight-legend__row .sight-legend__sea {
+    background-color: #fff;
   }
   .sight-legend__note {
     margin-top: 0.35rem;
