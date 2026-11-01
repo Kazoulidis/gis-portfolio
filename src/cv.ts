@@ -10,7 +10,7 @@
 
 /** The summary paragraph at the top of the CV. */
 export const summary =
-  "Spatial Planning and Development Engineer (5-year integrated master's degree from Aristotle University of Thessaloniki, equivalent to MSc) with experience in the preparation, processing, and quality control of geospatial data (raster and vector) using Python and QGIS / ArcGIS Pro. Experienced in the spatial downscaling of grid emissions data to the road network level using datasets from 120+ countries, as well as in documenting deliverables for European research projects. Skilled in utilizing Docker and Linux for reproducible workflows. Native Greek speaker, fluent in English (C2) and basic knowledge of German (A2).";
+  "Spatial Planning and Development Engineer (5-year integrated master's degree from Aristotle University of Thessaloniki, equivalent to MSc) with experience in the preparation, processing and quality control of raster and vector geospatial data using Python, QGIS and ArcGIS Pro. Experienced in the spatial downscaling of gridded emissions data to the road network level, with datasets from 120+ countries, and in documenting deliverables for European research projects. Uses Docker and Linux for reproducible workflows. Native Greek speaker, fluent in English (C2) and basic knowledge of German (A2).";
 
 /** Newest first. */
 export const roles = [
@@ -92,10 +92,9 @@ export const skills = [
       'GDAL/OGR',
       'Leaflet',
       'Coordinate Reference Systems (CRS)',
-      'Raster and Vector Data Processing',
+      'Raster and vector data processing',
+      'Viewshed and terrain analysis',
       'WMS/WFS',
-      'GeoJSON, Shapefile, GeoTIFF, KML',
-      'Spatial Joins, Clipping, Buffering',
       'AutoCAD',
     ],
   },
@@ -105,7 +104,7 @@ export const skills = [
   },
   {
     heading: 'Automation & Scripting',
-    items: ['Python (geopandas, shapely, pyproj, osmnx, arcpy)', 'Data Quality Control', 'Claude Code'],
+    items: ['Python (NumPy, geopandas, shapely, pyproj, GDAL, scikit-learn, osmnx, arcpy)', 'Data quality control'],
   },
   {
     heading: 'IT & Databases',
