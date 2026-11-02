@@ -20,7 +20,7 @@ const { category, years, current } = Astro.props;
   {
     years.map((year) => (
       <a
-        href={yearHref(category, year, years[0])}
+        href={yearHref(category, year)}
         data-astro-prefetch="load"
         aria-current={year === current ? 'page' : undefined}
       >

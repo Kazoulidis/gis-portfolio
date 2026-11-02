@@ -35,9 +35,9 @@ export const sortForCategory = (projects: Project[], category: ProjectCategory) 
   );
 
 /**
- * Where a year of a by-year category lives. The newest year is the category's
- * own page, so /projects/<category> always opens on the current challenge;
- * earlier years get /projects/<category>/<year>.
+ * Where a year of a by-year category lives: /projects/<category>/<year>, the
+ * address that stays put. /projects/<category> also opens on the newest year,
+ * but next year it moves on, so the year tabs link to the year pages.
  */
-export const yearHref = (category: ProjectCategory, year: number, newest: number) =>
-  year === newest ? `/projects/${category.slug}` : `/projects/${category.slug}/${year}`;
+export const yearHref = (category: ProjectCategory, year: number) =>
+  `/projects/${category.slug}/${year}`;
