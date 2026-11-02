@@ -18,9 +18,9 @@ downloads:
   - label: 'Square version'
     href: '/downloads/30dmc-2026-day-02-map-square.jpg'
     note: 'JPEG · 4724 × 4724 · 4.8 MB'
-map: '/data/30dmc-2026-day-02-rulers.json'
+map: '/data/30dmc-2026-day-02-coast.json'
 mapComponent: 'coast-rulers'
-mapCaption: 'Drag the slider, or press Play, to walk the coast with a shorter and shorter ruler. These are the walks of the printed map, on the EU-Hydro coastline; the dots are the ruler''s steps, shown down to 10 km.'
+mapCaption: 'Drag the slider, or press Play, to walk the coast with a ruler of any length from 100 km down to 200 m. The walk is run in your browser on the EU-Hydro coastline of the printed map, simplified to 5 m; the dots are the ruler''s steps, shown down to 10 km.'
 dataSource:
   - label: 'Copernicus Land Monitoring Service - EU-Hydro Coastline v1.3 (EEA)'
     href: 'https://doi.org/10.2909/393359a7-7ebd-4a52-80ac-1a18d5f3db9c'

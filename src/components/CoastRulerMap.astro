@@ -1,18 +1,20 @@
 ---
 /**
- * The coastline paradox, by hand: a slider walks the Greek coast with a shorter
- * and shorter ruler, and the measured length keeps rising.
+ * The coastline paradox, by hand: a slider walks the Greek coast with a ruler of
+ * any length from 100 km down to 200 m, and the measured length keeps rising.
  *
- * The walks are the printed map's (Day_02/prep/coastline_dividers.py): each
- * ruler steps along every piece of the EU-Hydro coastline, and its steps are
- * drawn as straight chords. Long rulers cut across gulfs and miss small
- * islands; short ones follow the bays. A chart beside the map plots length
- * against ruler, with the full coastline (every vertex) as the ceiling.
+ * The walk is the printed map's (Day_02/prep/coastline_dividers.py, walk()),
+ * done here in the browser on the same EU-Hydro coast: each piece is stepped
+ * along with a fixed straight ruler, and the steps are drawn as chords. Long
+ * rulers cut across gulfs and miss small islands; short ones follow the bays.
+ * A chart plots length against ruler: a curve filled in from walks run in the
+ * background, the printed map's rulers as dots, and the full coastline (every
+ * vertex) as the ceiling.
  *
- * File (see Day_02/prep/web_rulers.py):
- *   *-rulers.json   full_km, and per ruler (longest first) km, length_km,
- *                   pieces and lines: integer [lat, lon] x 100,000, the first
- *                   point absolute and the rest as differences
+ * File (see Day_02/prep/web_coast.py):
+ *   *-coast.json   full_km; printed, the map's [ruler km, length km]; pieces,
+ *                  each [closed, x0, y0, dx, dy, ...] in metres on the Greek
+ *                  Grid (EPSG:2100), simplified to 5 m
  */
 interface Props {
   src: string;
@@ -20,11 +22,17 @@ interface Props {
 }
 
 const { src, caption } = Astro.props;
+const TICKS_KM = [100, 50, 20, 10, 5, 2, 1, 0.5, 0.2];
+// Too close to the ends to label on a phone: they would run into 100 km and 200 m.
+const PHONE_HIDDEN = [50, 0.5];
+const KM_MAX = 100, KM_MIN = 0.2;
+const pos = (km: number) => (100 * Math.log(KM_MAX / km)) / Math.log(KM_MAX / KM_MIN);
+const label = (km: number) => (km >= 1 ? `${km} km` : `${km * 1000} m`);
 ---
 
 <figure class="map-figure">
   <div class="ruler">
-    <div class="map map--tall" data-rulermap data-src={src} role="application" aria-label={caption ?? 'Map of the Greek coast walked with rulers of different lengths'}></div>
+    <div class="map map--tall" data-rulermap data-src={src} role="application" aria-label={caption ?? 'Map of the Greek coast walked with a ruler of any length'}></div>
 
     <div class="ruler-ui" data-ruler-ui hidden>
       <div class="ruler-ui__row">
@@ -36,9 +44,13 @@ const { src, caption } = Astro.props;
       </div>
       <label class="ruler-ui__slider">
         <span>Ruler length</span>
-        <input type="range" min="0" max="8" step="1" value="0" data-ruler-slider aria-label="Ruler length" />
+        <input type="range" min="0" max="1000" step="1" value="0" data-ruler-slider aria-label="Ruler length" />
       </label>
-      <div class="ruler-ui__ticks" data-ruler-ticks aria-hidden="true"></div>
+      <div class="ruler-ui__ticks" aria-hidden="true">
+        {TICKS_KM.map((km) => (
+          <span class={PHONE_HIDDEN.includes(km) ? 'is-minor' : undefined} style={`left:${pos(km).toFixed(2)}%`}>{label(km)}</span>
+        ))}
+      </div>
       <div class="ruler-ui__chart">
         <div class="ruler-ui__label">Measured length against ruler length</div>
         <svg data-ruler-chart viewBox="0 0 640 200" role="img" aria-label="Chart of coast length rising as the ruler gets shorter"></svg>
@@ -57,19 +69,23 @@ const { src, caption } = Astro.props;
   const ATTRIBUTION =
     'Tiles &copy; <a href="https://www.esri.com/">Esri</a> - Esri, HERE, Garmin, ' +
     '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
-  // The printed map's rulers: 100 km yellow, 20 km orange, 5 km dark red; the
-  // rest in between, darker as the ruler shortens.
+  const KM_MAX = 100, KM_MIN = 0.2;
+  // The printed map's rulers: 100 km yellow, 20 km orange, 5 km dark red; any
+  // ruler in between gets the colour between, darker as it shortens.
   const RAMP: [number, number[]][] = [[100, [235, 185, 30]], [20, [230, 120, 40]], [5, [160, 30, 30]], [0.2, [90, 10, 30]]];
   // Divider points are drawn for rulers this long and longer; below it they
   // would be a solid line of dots.
   const DOTS_FROM_KM = 10;
-  const STEP_MS = 1100;
+  const PLAY_MS = 9000;           // 100 km down to 200 m
+  const CURVE_RULERS = 32;        // walks run in the background for the chart's curve
 
-  interface Ruler { km: number; length_km: number; pieces: number; lines: number[][][] }
-  interface Data { full_km: number; rulers: Ruler[] }
+  interface Data { full_km: number; printed: [number, number][]; pieces: number[][] }
+  interface Piece { xy: Float64Array; closed: boolean }
 
   const fmt = (n: number) => Math.round(n).toLocaleString('en-GB');
-  const kmLabel = (km: number) => (km >= 1 ? `${km} km` : `${Math.round(km * 1000)} m`);
+  const kmLabel = (km: number) =>
+    km >= 10 ? `${Math.round(km)} km` : km >= 1 ? `${km.toFixed(1).replace(/\.0$/, '')} km` : `${Math.round(km * 100) * 10} m`;
+  const sliderKm = (v: number) => Math.exp(Math.log(KM_MAX) + (v / 1000) * Math.log(KM_MIN / KM_MAX));
 
   function colour(km: number): string {
     for (let i = 0; i < RAMP.length - 1; i++) {
@@ -79,15 +95,79 @@ const { src, caption } = Astro.props;
         return `rgb(${c0.map((v, j) => Math.round(v + (c1[j] - v) * t)).join(',')})`;
       }
     }
-    return `rgb(${RAMP[RAMP.length - 1][1].join(',')})`;
+    return `rgb(${RAMP[km > RAMP[0][0] ? 0 : RAMP.length - 1][1].join(',')})`;
   }
 
-  function decode(line: number[][]): L.LatLng[] {
-    let la = 0, lo = 0;
-    return line.map(([a, b], i) => {
-      if (i === 0) { la = a; lo = b; } else { la += a; lo += b; }
-      return L.latLng(la / 1e5, lo / 1e5);
-    });
+  /**
+   * The divider walk of coastline_dividers.py, step for step: from the last
+   * divider, the next is where the line first gets r away, found on the segment
+   * that crosses that circle. A piece that never reaches r from its start is too
+   * small for the ruler. The length is the whole steps plus the straight gap to
+   * the end (back to the start on a closed ring).
+   */
+  function walk(p: Piece, r: number): { pts: number[]; len: number } | null {
+    const v = p.xy, n = v.length / 2;
+    let px = v[0], py = v[1];
+    const pts = [px, py];
+    let j = 1, t0 = 0;
+    while (j < n) {
+      const x0 = v[2 * j - 2], y0 = v[2 * j - 1], x1 = v[2 * j], y1 = v[2 * j + 1];
+      const ax = x0 + t0 * (x1 - x0), ay = y0 + t0 * (y1 - y0);
+      if (Math.hypot(x1 - px, y1 - py) < r) { j++; t0 = 0; continue; }
+      const dx = x1 - ax, dy = y1 - ay, fx = ax - px, fy = ay - py;
+      const A = dx * dx + dy * dy, B = 2 * (fx * dx + fy * dy), C = fx * fx + fy * fy - r * r;
+      const s = (-B + Math.sqrt(Math.max(B * B - 4 * A * C, 0))) / (2 * A);
+      const qx = ax + s * dx, qy = ay + s * dy;
+      pts.push(qx, qy); px = qx; py = qy;
+      const sx = x1 - x0, sy = y1 - y0, L2 = sx * sx + sy * sy;
+      t0 = L2 ? ((qx - x0) * sx + (qy - y0) * sy) / L2 : 1;
+    }
+    if (pts.length === 2) return null;
+    const ex = p.closed ? v[0] : v[2 * n - 2], ey = p.closed ? v[1] : v[2 * n - 1];
+    pts.push(ex, ey);
+    const k = pts.length;
+    return { pts, len: (k / 2 - 2) * r + Math.hypot(pts[k - 2] - pts[k - 4], pts[k - 1] - pts[k - 3]) };
+  }
+
+  function walkAll(pieces: Piece[], r: number) {
+    let total = 0, seen = 0;
+    const lines: number[][] = [];
+    for (const p of pieces) {
+      const w = walk(p, r);
+      if (!w) continue;
+      total += w.len; seen++; lines.push(w.pts);
+    }
+    return { km: total / 1000, seen, lines };
+  }
+
+  /**
+   * Greek Grid (EPSG:2100) to WGS84 latitude and longitude: the inverse
+   * transverse Mercator on GRS80 (central meridian 24 degrees, scale 0.9996,
+   * false easting 500,000 m), then GGRS87's shift to WGS84 (EPSG:1272) through
+   * earth-centred coordinates.
+   */
+  const RAD = Math.PI / 180;
+  const A_ = 6378137, F_ = 1 / 298.257222101, E2 = F_ * (2 - F_), EP2 = E2 / (1 - E2), K0 = 0.9996, LON0 = 24 * RAD;
+  const E1 = (1 - Math.sqrt(1 - E2)) / (1 + Math.sqrt(1 - E2));
+  const SHIFT = [-199.87, 74.79, 246.62];
+  function toLatLng(x: number, y: number): [number, number] {
+    const M = y / K0;
+    const mu = M / (A_ * (1 - E2 / 4 - (3 * E2 * E2) / 64 - (5 * E2 ** 3) / 256));
+    const p1 = mu + (1.5 * E1 - (27 / 32) * E1 ** 3) * Math.sin(2 * mu) + ((21 / 16) * E1 * E1 - (55 / 32) * E1 ** 4) * Math.sin(4 * mu)
+      + ((151 / 96) * E1 ** 3) * Math.sin(6 * mu) + ((1097 / 512) * E1 ** 4) * Math.sin(8 * mu);
+    const s1 = Math.sin(p1), c1 = Math.cos(p1), t1 = Math.tan(p1);
+    const N1 = A_ / Math.sqrt(1 - E2 * s1 * s1), R1 = (A_ * (1 - E2)) / (1 - E2 * s1 * s1) ** 1.5;
+    const C1 = EP2 * c1 * c1, T1 = t1 * t1, D = (x - 500000) / (N1 * K0);
+    const lat = p1 - ((N1 * t1) / R1) * (D * D / 2 - ((5 + 3 * T1 + 10 * C1 - 4 * C1 * C1 - 9 * EP2) * D ** 4) / 24
+      + ((61 + 90 * T1 + 298 * C1 + 45 * T1 * T1 - 252 * EP2 - 3 * C1 * C1) * D ** 6) / 720);
+    const lon = LON0 + (D - ((1 + 2 * T1 + C1) * D ** 3) / 6 + ((5 - 2 * C1 + 28 * T1 - 3 * C1 * C1 + 8 * EP2 + 24 * T1 * T1) * D ** 5) / 120) / c1;
+    // GGRS87 (GRS80) to WGS84: through x, y, z; the ellipsoids differ by 0.1 mm.
+    const sl = Math.sin(lat), N = A_ / Math.sqrt(1 - E2 * sl * sl);
+    const X = N * Math.cos(lat) * Math.cos(lon) + SHIFT[0], Y = N * Math.cos(lat) * Math.sin(lon) + SHIFT[1], Z = N * (1 - E2) * sl + SHIFT[2];
+    const pr = Math.hypot(X, Y);
+    let la = Math.atan2(Z, pr * (1 - E2));
+    for (let i = 0; i < 3; i++) { const s = Math.sin(la); la = Math.atan2(Z + E2 * (A_ / Math.sqrt(1 - E2 * s * s)) * s, pr); }
+    return [la / RAD, Math.atan2(Y, X) / RAD];
   }
 
   async function initMap(el: HTMLElement) {
@@ -113,31 +193,28 @@ const { src, caption } = Astro.props;
       el.insertAdjacentHTML('beforeend', '<p class="map-error">This map’s data could not be loaded.</p>');
       return;
     }
-    const rulers = data.rulers;
-    // Decoded once, on first use.
-    const decoded: (L.LatLng[][] | undefined)[] = [];
-    const lines = (i: number) => (decoded[i] ??= rulers[i].lines.map(decode));
+    const pieces: Piece[] = data.pieces.map((f) => {
+      const xy = new Float64Array(f.length - 1);
+      xy[0] = f[1]; xy[1] = f[2];
+      for (let i = 3; i < f.length; i += 2) { xy[i - 1] = xy[i - 3] + f[i]; xy[i] = xy[i - 2] + f[i + 1]; }
+      return { xy, closed: f[0] === 1 };
+    });
+    const base = walkAll(pieces, KM_MAX * 1000).km;     // the 100 km ruler, the yardstick in the readout
 
     const renderer = L.canvas({ padding: 0.3 });
     let layer: L.LayerGroup | null = null;
-
     const lengthEl = root.querySelector('[data-ruler-length]') as HTMLElement;
     const detailEl = root.querySelector('[data-ruler-detail]') as HTMLElement;
     const slider = root.querySelector('[data-ruler-slider]') as HTMLInputElement;
     const playBtn = root.querySelector('[data-ruler-play]') as HTMLButtonElement;
-    const ticks = root.querySelector('[data-ruler-ticks]') as HTMLElement;
     const chart = root.querySelector('[data-ruler-chart]') as SVGSVGElement;
-    slider.max = String(rulers.length - 1);
-    ticks.innerHTML = rulers.map((r) => `<span>${kmLabel(r.km)}</span>`).join('');
     ui.hidden = false;
 
-    // --- The chart: length against ruler, ruler on a log scale, longest left --
+    // --- The chart: length against ruler, ruler on a log scale, longest left ----
     const W = 640, H = 200, m = { l: 52, r: 14, t: 12, b: 26 };
-    const lx0 = Math.log(rulers[0].km), lx1 = Math.log(rulers[rulers.length - 1].km);
-    const X = (km: number) => m.l + ((lx0 - Math.log(km)) / (lx0 - lx1)) * (W - m.l - m.r);
+    const X = (km: number) => m.l + (Math.log(KM_MAX / km) / Math.log(KM_MAX / KM_MIN)) * (W - m.l - m.r);
     const yMax = Math.ceil(data.full_km / 2000) * 2000;
     const Y = (len: number) => m.t + (1 - len / yMax) * (H - m.t - m.b);
-    const pathD = rulers.map((r, i) => `${i ? 'L' : 'M'}${X(r.km).toFixed(1)},${Y(r.length_km).toFixed(1)}`).join('');
     let svg = '';
     for (let v = 0; v <= yMax; v += 4000) {
       svg += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}" class="ruler-chart__grid"/>` +
@@ -145,55 +222,79 @@ const { src, caption } = Astro.props;
     }
     svg += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(data.full_km)}" y2="${Y(data.full_km)}" class="ruler-chart__full"/>` +
       `<text x="${W - m.r}" y="${Y(data.full_km) - 5}" text-anchor="end" class="ruler-chart__note">every point of the coastline, ${fmt(data.full_km)} km</text>`;
-    svg += rulers.map((r) => `<text x="${X(r.km)}" y="${H - 8}" text-anchor="middle" class="ruler-chart__tick">${kmLabel(r.km)}</text>`).join('');
-    svg += `<path d="${pathD}" class="ruler-chart__line"/>`;
-    svg += rulers.map((r, i) => `<circle cx="${X(r.km)}" cy="${Y(r.length_km)}" r="3.5" fill="${colour(r.km)}" data-i="${i}" class="ruler-chart__pt"/>`).join('');
+    svg += data.printed.map(([km]) => `<text x="${X(km)}" y="${H - 8}" text-anchor="middle" class="ruler-chart__tick">${kmLabel(km)}</text>`).join('');
+    svg += `<path class="ruler-chart__line" data-ruler-curve d="${data.printed.map(([km, len], i) => `${i ? 'L' : 'M'}${X(km).toFixed(1)},${Y(len).toFixed(1)}`).join('')}"/>`;
+    svg += data.printed.map(([km, len]) => `<circle cx="${X(km)}" cy="${Y(len)}" r="3.5" fill="${colour(km)}" data-km="${km}" class="ruler-chart__pt"><title>Printed map, ${kmLabel(km)} ruler: ${fmt(len)} km</title></circle>`).join('');
     svg += `<circle r="7" class="ruler-chart__now" data-ruler-now/>`;
     chart.innerHTML = svg;
     const now = chart.querySelector('[data-ruler-now]') as SVGCircleElement;
+    const curve = chart.querySelector('[data-ruler-curve]') as SVGPathElement;
+    const toSlider = (km: number) => Math.round((1000 * Math.log(KM_MAX / km)) / Math.log(KM_MAX / KM_MIN));
     chart.querySelectorAll<SVGCircleElement>('.ruler-chart__pt').forEach((c) =>
-      c.addEventListener('click', () => { stop(); show(Number(c.dataset.i)); }));
+      c.addEventListener('click', () => { stop(); slider.value = String(toSlider(Number(c.dataset.km))); request(); }));
 
-    // --- Showing one ruler ------------------------------------------------------
-    function show(i: number) {
-      const r = rulers[i];
-      slider.value = String(i);
-      const col = colour(r.km);
+    // The curve between the printed rulers, walked a few at a time so the page stays responsive.
+    const curvePts: [number, number][] = [];
+    let ci = 0;
+    const more = () => {
+      for (let k = 0; k < 3 && ci <= CURVE_RULERS; k++, ci++) {
+        const km = Math.exp(Math.log(KM_MAX) + (ci / CURVE_RULERS) * Math.log(KM_MIN / KM_MAX));
+        curvePts.push([km, walkAll(pieces, km * 1000).km]);
+      }
+      curve.setAttribute('d', curvePts.map(([km, len], i) => `${i ? 'L' : 'M'}${X(km).toFixed(1)},${Y(len).toFixed(1)}`).join(''));
+      if (ci <= CURVE_RULERS) setTimeout(more, 30);
+    };
+
+    // --- Showing one ruler: walk, then draw -----------------------------------------
+    function show(km: number) {
+      const w = walkAll(pieces, km * 1000);
+      const col = colour(km);
       const group = L.layerGroup();
-      for (const ll of lines(i)) {
-        L.polyline(ll, { renderer, color: col, weight: r.km >= 1 ? 2 : 1.4, interactive: false }).addTo(group);
-        if (r.km >= DOTS_FROM_KM) {
-          for (const p of ll) L.circleMarker(p, { renderer, radius: 2.5, color: col, weight: 1, fillColor: '#fff', fillOpacity: 1, interactive: false }).addTo(group);
-        }
+      const dots = km >= DOTS_FROM_KM;
+      for (const pts of w.lines) {
+        const ll: L.LatLngExpression[] = [];
+        for (let i = 0; i < pts.length; i += 2) ll.push(toLatLng(pts[i], pts[i + 1]));
+        L.polyline(ll, { renderer, color: col, weight: km >= 1 ? 2 : 1.4, interactive: false }).addTo(group);
+        if (dots) for (const p of ll) L.circleMarker(p, { renderer, radius: 2.5, color: col, weight: 1, fillColor: '#fff', fillOpacity: 1, interactive: false }).addTo(group);
       }
       group.addTo(map);
       layer?.remove();
       layer = group;
-      const vs = rulers[0];
-      lengthEl.textContent = `${fmt(r.length_km)} km of coast`;
-      detailEl.textContent = `with a ${kmLabel(r.km)} ruler, over ${fmt(r.pieces)} pieces of coast` +
-        (i ? `: ${(r.length_km / vs.length_km).toFixed(1)} times the ${kmLabel(vs.km)} ruler's` : '');
-      now.setAttribute('cx', String(X(r.km)));
-      now.setAttribute('cy', String(Y(r.length_km)));
+      lengthEl.textContent = `${fmt(w.km)} km of coast`;
+      detailEl.textContent = `with a ${kmLabel(km)} ruler, over ${fmt(w.seen)} pieces of coast` +
+        (km < KM_MAX * 0.995 ? `: ${(w.km / base).toFixed(1)} times the ${kmLabel(KM_MAX)} ruler's` : '');
+      now.setAttribute('cx', String(X(km)));
+      now.setAttribute('cy', String(Y(w.km)));
       now.setAttribute('stroke', col);
     }
+    // One walk per frame however fast the slider moves.
+    let pending = false;
+    function request() {
+      if (pending) return;
+      pending = true;
+      requestAnimationFrame(() => { pending = false; show(sliderKm(Number(slider.value))); });
+    }
 
-    // --- Play: down through the rulers, one step at a time -----------------------
-    let timer = 0;
-    function stop() { clearInterval(timer); timer = 0; playBtn.textContent = 'Play'; }
+    // --- Play: a sweep from 100 km down to 200 m --------------------------------------
+    let anim = 0, t0 = 0;
+    function stop() { cancelAnimationFrame(anim); anim = 0; playBtn.textContent = 'Play'; }
+    function frame(t: number) {
+      const k = Math.min(1, (t - t0) / PLAY_MS);
+      slider.value = String(Math.round(k * 1000));
+      show(sliderKm(Number(slider.value)));
+      if (k < 1) anim = requestAnimationFrame(frame); else stop();
+    }
     playBtn.addEventListener('click', () => {
-      if (timer) { stop(); return; }
-      if (Number(slider.value) >= rulers.length - 1) show(0);
+      if (anim) { stop(); return; }
+      const start = Number(slider.value) >= 1000 ? 0 : Number(slider.value);
+      t0 = performance.now() - (start / 1000) * PLAY_MS;
       playBtn.textContent = 'Pause';
-      timer = window.setInterval(() => {
-        const i = Number(slider.value) + 1;
-        if (i >= rulers.length) { stop(); return; }
-        show(i);
-      }, STEP_MS);
+      anim = requestAnimationFrame(frame);
     });
-    slider.addEventListener('input', () => { stop(); show(Number(slider.value)); });
+    slider.addEventListener('input', () => { stop(); request(); });
 
-    show(0);
+    show(KM_MAX);
+    setTimeout(more, 200);
   }
 
   document.querySelectorAll<HTMLElement>('[data-rulermap]').forEach((el) => whenNear(el, () => initMap(el)));
@@ -248,11 +349,23 @@ const { src, caption } = Astro.props;
   }
   .ruler-ui__slider input { width: 100%; accent-color: var(--accent); }
   .ruler-ui__ticks {
-    display: flex;
-    justify-content: space-between;
+    position: relative;
+    height: 1.1rem;
+    margin: 0 8px;           /* the slider thumb's half-width, so a label sits under its stop */
     font-size: 0.7rem;
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
+  }
+  .ruler-ui__ticks span {
+    position: absolute;
+    top: 0;
+    transform: translateX(-50%);
+    white-space: nowrap;
+  }
+  .ruler-ui__ticks span:first-child { transform: none; }
+  .ruler-ui__ticks span:last-child { transform: translateX(-100%); }
+  @media (max-width: 40rem) {
+    .ruler-ui__ticks .is-minor { display: none; }
   }
   .ruler-ui__chart { margin-top: 0.7rem; }
   .ruler-ui__label {
