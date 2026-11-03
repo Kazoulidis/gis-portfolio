@@ -2,7 +2,8 @@
 /**
  * Two sheets of the same place, one over the other, with a handle to swipe between them: the Day 6
  * chart in the manner of 1850 on top, the present-day map underneath. The two were made with the same
- * map frame and extent, so every coast and town lines up as the handle moves.
+ * map frame and extent, so every coast and town lines up as the handle moves. The handle sweeps once
+ * when the picture is first in view, to show that it moves, unless the reader asks for reduced motion.
  *
  * File (`src`, under public/):
  *   *-swipe.json   { before: {src, label, alt}, after: {src, label, alt}, width, height }
@@ -24,8 +25,8 @@ const data: Swipe = JSON.parse(readFileSync(join(process.cwd(), 'public', src), 
 
 <figure class="map-figure">
   <div class="swipe" data-swipe style={`aspect-ratio: ${data.width} / ${data.height}`}>
-    <img class="swipe__img" src={data.after.src} alt={data.after.alt} width={data.width} height={data.height} loading="lazy" decoding="async" />
-    <img class="swipe__img swipe__before" src={data.before.src} alt={data.before.alt} width={data.width} height={data.height} loading="lazy" decoding="async" />
+    <img class="swipe__img" src={data.after.src} alt={data.after.alt} width={data.width} height={data.height} decoding="async" />
+    <img class="swipe__img swipe__before" src={data.before.src} alt={data.before.alt} width={data.width} height={data.height} fetchpriority="high" decoding="async" />
     <div class="swipe__line" aria-hidden="true"><span class="swipe__grip"></span></div>
     <span class="swipe__tag swipe__tag--left" aria-hidden="true">{data.before.label}</span>
     <span class="swipe__tag swipe__tag--right" aria-hidden="true">{data.after.label}</span>
@@ -38,11 +39,42 @@ const data: Swipe = JSON.parse(readFileSync(join(process.cwd(), 'public', src), 
 </figure>
 
 <script>
+  const SWEEP_MS = 2400;
+  const SWEEP_REACH = 22; // percent either side of the middle
+
   for (const box of document.querySelectorAll<HTMLElement>('[data-swipe]')) {
     const range = box.querySelector<HTMLInputElement>('[data-swipe-range]')!;
     const set = () => box.style.setProperty('--pos', `${range.value}%`);
     range.addEventListener('input', set);
     set();
+
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) continue;
+
+    // Right, left and back to the middle, starting and ending gently. Any touch of the handle ends it.
+    let stopped = false;
+    for (const type of ['pointerdown', 'keydown', 'input']) {
+      range.addEventListener(type, () => (stopped = true), { once: true });
+    }
+    const sweep = () => {
+      const start = performance.now();
+      const step = (now: number) => {
+        if (stopped) return;
+        const t = Math.min((now - start) / SWEEP_MS, 1);
+        const eased = t * t * (3 - 2 * t);
+        range.value = String(50 + SWEEP_REACH * Math.sin(2 * Math.PI * eased));
+        set();
+        if (t < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    };
+
+    // Once both sheets can be drawn and the reader can see them.
+    const ready = Promise.all([...box.querySelectorAll('img')].map((img) => img.decode().catch(() => {})));
+    new IntersectionObserver((entries, observer) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      observer.disconnect();
+      ready.then(() => setTimeout(sweep, 400));
+    }, { threshold: 0.5 }).observe(box);
   }
 </script>
 

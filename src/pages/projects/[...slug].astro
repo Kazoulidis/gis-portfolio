@@ -134,8 +134,11 @@ const formattedDate = date.toLocaleDateString('en-GB', {
       )
     }
 
+    {/* The swipe already shows the printed map, so it would only repeat here. */}
     {
-      image && <ZoomableImage src={image} full={project.data.imageFull} alt={imageAlt ?? ''} />
+      image && mapComponent !== 'chart-swipe' && (
+        <ZoomableImage src={image} full={project.data.imageFull} alt={imageAlt ?? ''} />
+      )
     }
 
     {
