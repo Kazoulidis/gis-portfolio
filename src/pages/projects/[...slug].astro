@@ -19,6 +19,7 @@ import SightlineMap from '../../components/SightlineMap.astro';
 import CoastRulerMap from '../../components/CoastRulerMap.astro';
 import ChartSwipe from '../../components/ChartSwipe.astro';
 import { projectCategories } from '../../site';
+import { isPublic } from '../../projects';
 import { plainTitle } from '../../cv';
 import { cardSource } from '../../og';
 
@@ -108,7 +109,7 @@ const formattedDate = date.toLocaleDateString('en-GB', {
   image={cardSource(project.data) ? `/og/${project.id}.jpg` : undefined}
   imageAlt={imageAlt ?? project.data.thumbnailAlt}
   type="article"
-  noindex={project.data.draft}
+  noindex={!isPublic(project)}
 >
   <article>
     <p class="eyebrow">
@@ -116,7 +117,7 @@ const formattedDate = date.toLocaleDateString('en-GB', {
       {context && <> &middot; {context}</>}
       {/* Marked on the dev server only; on the live site a draft reads as a
           finished page to anyone given its link. */}
-      {import.meta.env.DEV && project.data.draft && (
+      {import.meta.env.DEV && !isPublic(project) && (
         <span class="draft-flag">Draft - unlisted on the live site</span>
       )}
     </p>

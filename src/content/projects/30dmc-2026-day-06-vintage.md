@@ -23,7 +23,7 @@ downloads:
     note: 'JPEG · 7016 × 4961 · 3.0 MB'
   - label: 'Present-day map, square'
     href: '/downloads/30dmc-2026-day-06-map-modern-square.jpg'
-    note: 'JPEG · 4724 × 4724 · 1.7 MB'
+    note: 'JPEG · 4724 × 4724 · 1.8 MB'
 map: '/data/30dmc-2026-day-06-swipe.json'
 mapComponent: 'chart-swipe'
 mapCaption: 'Drag across the map, or use the arrow keys, to swipe between the chart and the present-day map. Both are drawn on the same Mercator frame, so the coasts line up.'

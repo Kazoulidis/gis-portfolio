@@ -11,6 +11,14 @@
 # A push that only touches the README builds nothing. A build can also be
 # started by hand from the Actions tab.
 #
+# Challenge pages publish themselves at 10:00 Athens time on their date. The
+# site is static, so that takes a new build: on a morning when a draft is due,
+# a scheduled run builds before 10:00, counting that page as public (see
+# isPublic in src/projects.ts), and the server's watchtower container switches
+# to the new image at 10:00 sharp. The second run is a spare, as GitHub can
+# start scheduled runs late. The times are UTC and suit winter time, so
+# November: in summer they would fall after 10:00 and the page would wait a day.
+#
 # Only for arm64, the Oracle Ampere box it runs on. The final stage of the
 # Dockerfile only copies files, so no emulation (QEMU) is needed.
 
@@ -21,13 +29,33 @@ on:
     branches: [main]
     paths-ignore: ['README.md']
   workflow_dispatch:
+  schedule:
+    - cron: '5 7 * * *'
+    - cron: '35 7 * * *'
 
 permissions:
   contents: read
   packages: write
 
 jobs:
+  # A scheduled run only goes on if a draft is dated today.
+  due:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    outputs:
+      pages: ${{ steps.drafts.outputs.pages }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: drafts
+        run: |
+          today=$(TZ=Europe/Athens date +%F)
+          pages=$(grep -l '^draft: true' src/content/projects/*.md | xargs -r grep -l "^date: $today" | wc -l)
+          echo "pages=$pages" >> "$GITHUB_OUTPUT"
+
   image:
+    needs: due
+    if: ${{ !cancelled() && (github.event_name != 'schedule' || needs.due.outputs.pages != '0') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
