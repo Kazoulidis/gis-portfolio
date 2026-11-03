@@ -17,6 +17,7 @@ import MunicipalityShapes from '../../components/MunicipalityShapes.astro';
 import QuakeTimelineMap from '../../components/QuakeTimelineMap.astro';
 import SightlineMap from '../../components/SightlineMap.astro';
 import CoastRulerMap from '../../components/CoastRulerMap.astro';
+import ChartSwipe from '../../components/ChartSwipe.astro';
 import { projectCategories } from '../../site';
 import { plainTitle } from '../../cv';
 import { cardSource } from '../../og';
@@ -40,6 +41,7 @@ const CUSTOM_MAPS: Record<string, typeof ProjectMap> = {
   'quake-timeline': QuakeTimelineMap,
   'olympus-sightline': SightlineMap,
   'coast-rulers': CoastRulerMap,
+  'chart-swipe': ChartSwipe,
 };
 
 // Every project gets its page, drafts included: a draft is unlisted, reachable

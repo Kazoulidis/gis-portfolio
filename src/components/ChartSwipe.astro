@@ -1,0 +1,129 @@
+---
+/**
+ * Two sheets of the same place, one over the other, with a handle to swipe between them: the Day 6
+ * chart in the manner of 1850 on top, the present-day map underneath. The two were made with the same
+ * map frame and extent, so every coast and town lines up as the handle moves.
+ *
+ * File (`src`, under public/):
+ *   *-swipe.json   { before: {src, label, alt}, after: {src, label, alt}, width, height }
+ *                  `before` is drawn on the left of the handle, `after` on the right
+ */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+interface Props {
+  src: string;
+  caption?: string;
+}
+interface Side { src: string; label: string; alt: string }
+interface Swipe { before: Side; after: Side; width: number; height: number }
+
+const { src, caption } = Astro.props;
+const data: Swipe = JSON.parse(readFileSync(join(process.cwd(), 'public', src), 'utf-8'));
+---
+
+<figure class="map-figure">
+  <div class="swipe" data-swipe style={`aspect-ratio: ${data.width} / ${data.height}`}>
+    <img class="swipe__img" src={data.after.src} alt={data.after.alt} width={data.width} height={data.height} loading="lazy" decoding="async" />
+    <img class="swipe__img swipe__before" src={data.before.src} alt={data.before.alt} width={data.width} height={data.height} loading="lazy" decoding="async" />
+    <div class="swipe__line" aria-hidden="true"><span class="swipe__grip"></span></div>
+    <span class="swipe__tag swipe__tag--left" aria-hidden="true">{data.before.label}</span>
+    <span class="swipe__tag swipe__tag--right" aria-hidden="true">{data.after.label}</span>
+    <!-- The range input covers the whole picture: a drag anywhere moves the handle, and the keyboard
+         (arrows, Home, End) works through it too. -->
+    <input class="swipe__range" type="range" min="0" max="100" step="0.1" value="50"
+           aria-label={`Swipe between ${data.before.label} and ${data.after.label}`} data-swipe-range />
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<script>
+  for (const box of document.querySelectorAll<HTMLElement>('[data-swipe]')) {
+    const range = box.querySelector<HTMLInputElement>('[data-swipe-range]')!;
+    const set = () => box.style.setProperty('--pos', `${range.value}%`);
+    range.addEventListener('input', set);
+    set();
+  }
+</script>
+
+<style>
+  .swipe {
+    --pos: 50%;
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    background: var(--bg-subtle);
+    user-select: none;
+  }
+  .swipe__img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .swipe__before {
+    clip-path: inset(0 calc(100% - var(--pos)) 0 0);
+  }
+  .swipe__line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: var(--pos);
+    width: 2px;
+    margin-left: -1px;
+    background: #fff;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+    pointer-events: none;
+  }
+  .swipe__grip {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 30px;
+    height: 30px;
+    margin: -15px 0 0 -15px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  }
+  .swipe__grip::before,
+  .swipe__grip::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    margin-top: -5px;
+    border: 5px solid transparent;
+  }
+  .swipe__grip::before { left: 3px; border-right-color: #444; }
+  .swipe__grip::after { right: 3px; border-left-color: #444; }
+  .swipe__tag {
+    position: absolute;
+    top: 0.6rem;
+    padding: 0.15rem 0.5rem;
+    font-size: 0.78rem;
+    color: #fff;
+    background: rgba(30, 30, 30, 0.7);
+    border-radius: var(--radius);
+    pointer-events: none;
+  }
+  .swipe__tag--left { left: 0.6rem; }
+  .swipe__tag--right { right: 0.6rem; }
+  .swipe__range {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: ew-resize;
+    touch-action: pan-y;
+  }
+  .swipe__range:focus-visible + * { outline: none; }
+  .swipe:has(.swipe__range:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+</style>
