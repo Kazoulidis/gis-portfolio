@@ -14,16 +14,16 @@
 import { getCollection } from 'astro:content';
 import CategoryPage from '../../components/CategoryPage.astro';
 import { projectCategories } from '../../site';
-import { isListed, projectYear, sortForCategory, yearsOf } from '../../projects';
+import { isInList, isListed, projectYear, sortForCategory, yearsOf } from '../../projects';
 
 export async function getStaticPaths() {
-  const all = await getCollection('projects', isListed);
+  const all = await getCollection('projects', isInList);
 
   // A category with nothing published gets no page, and CategoryTabs drops its
   // tab to match - an empty "Nothing here yet" page is a placeholder by another
   // name. It comes back on its own once a project lands in it.
   const populated = projectCategories.filter((category) =>
-    all.some((project) => project.data.category === category.slug),
+    all.some((project) => isListed(project) && project.data.category === category.slug),
   );
 
   return populated.map((category) => {
@@ -31,7 +31,7 @@ export async function getStaticPaths() {
     if (!category.byYear) {
       return { params: { category: category.slug }, props: { category, projects: sortForCategory(inCategory, category) } };
     }
-    const years = yearsOf(inCategory);
+    const years = yearsOf(inCategory.filter(isListed));
     const newest = inCategory.filter((project) => projectYear(project) === years[0]);
     return {
       params: { category: category.slug },

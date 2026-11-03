@@ -4,6 +4,7 @@
  * so the two can never drift apart.
  */
 import type { CollectionEntry } from 'astro:content';
+import { untilPublic } from '../projects';
 
 interface Props {
   projects: CollectionEntry<'projects'>[];
@@ -20,7 +21,7 @@ const { projects, emptyMessage = 'No projects published yet.' } = Astro.props;
   ) : (
     <ul class="project-list">
       {projects.map((project) => (
-        <li class="project-item">
+        <li class="project-item" {...untilPublic(project)}>
           <div>
             {project.data.thumbnail ? (
               <a href={`/projects/${project.id}`}>

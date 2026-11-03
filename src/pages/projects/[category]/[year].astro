@@ -8,15 +8,15 @@
 import { getCollection } from 'astro:content';
 import CategoryPage from '../../../components/CategoryPage.astro';
 import { projectCategories } from '../../../site';
-import { isListed, projectYear, sortForCategory, yearsOf } from '../../../projects';
+import { isInList, isListed, projectYear, sortForCategory, yearsOf } from '../../../projects';
 
 export async function getStaticPaths() {
-  const all = await getCollection('projects', isListed);
+  const all = await getCollection('projects', isInList);
   return projectCategories
     .filter((category) => category.byYear)
     .flatMap((category) => {
       const inCategory = all.filter((project) => project.data.category === category.slug);
-      const years = yearsOf(inCategory);
+      const years = yearsOf(inCategory.filter(isListed));
       return years.map((year) => ({
         params: { category: category.slug, year: String(year) },
         props: {

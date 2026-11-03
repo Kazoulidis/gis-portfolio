@@ -8,24 +8,36 @@ type Project = CollectionEntry<'projects'>;
 
 type Publishable = { data: { draft: boolean; category: string; date: Date } };
 
-/**
- * How far ahead a build looks. The scheduled build runs before 10:00 and the
- * server switches to it at 10:00 sharp, so it must already count that day's
- * page as public (see .github/workflows/release.yml).
- */
-const BUILD_AHEAD_MS = 60 * 60 * 1000;
+/** 10:00 Athens time on a date, as a timestamp. Swedish dates parse as ISO. */
+const tenInAthens = (date: Date) => {
+  const utc = new Date(`${date.toISOString().slice(0, 10)}T10:00:00Z`);
+  const athens = utc.toLocaleString('sv-SE', { timeZone: 'Europe/Athens' }).replace(' ', 'T');
+  return 2 * utc.valueOf() - Date.parse(`${athens}Z`);
+};
 
 /**
- * Whether a project is public. A challenge draft becomes public by itself at
- * 10:00 Athens time on its date. Any other draft (the thesis) waits for
- * `draft: false`. The site is static, so this is decided when it is built.
+ * Whether a project was public when the site was built. A challenge draft
+ * becomes public by itself at 10:00 Athens time on its date. Any other draft
+ * (the thesis) waits for `draft: false`.
  */
-export const isPublic = ({ data }: Publishable) => {
-  if (!data.draft) return true;
-  if (data.category !== '30-day-map-challenge') return false;
-  // Swedish dates sort as text: '2026-11-06 09:05:00'.
-  const athens = new Date(Date.now() + BUILD_AHEAD_MS).toLocaleString('sv-SE', { timeZone: 'Europe/Athens' });
-  return athens >= `${data.date.toISOString().slice(0, 10)} 10:00`;
+export const isPublic = ({ data }: Publishable) =>
+  !data.draft || (data.category === '30-day-map-challenge' && Date.now() >= tenInAthens(data.date));
+
+/**
+ * When a project still to come goes public, or undefined for any other. Lists
+ * carry these projects hidden, with this time, and the script at the end of
+ * BaseLayout shows them once it has passed, so no new build is needed. The
+ * sitemap and the page's noindex only catch up at the next build.
+ */
+export const publicAt = (project: Publishable) =>
+  !import.meta.env.DEV && project.data.draft && project.data.category === '30-day-map-challenge' && !isPublic(project)
+    ? tenInAthens(project.data.date)
+    : undefined;
+
+/** The attributes that hide a listed project until it goes public. */
+export const untilPublic = (project: Publishable) => {
+  const at = publicAt(project);
+  return at === undefined ? {} : { hidden: true, 'data-public-at': at };
 };
 
 /**
@@ -40,6 +52,10 @@ export const isPublic = ({ data }: Publishable) => {
  */
 export const isListed = (project: Publishable) =>
   import.meta.env.DEV || isPublic(project);
+
+/** What a list's markup holds: the listed projects and, hidden, those to come. */
+export const isInList = (project: Publishable) =>
+  isListed(project) || publicAt(project) !== undefined;
 
 /** The year a project belongs to. UTC: frontmatter dates parse as UTC midnight. */
 export const projectYear = (project: Project) => project.data.date.getUTCFullYear();

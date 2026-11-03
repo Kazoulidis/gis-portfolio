@@ -405,6 +405,12 @@ hr {
   max-width: none;
 }
 
+/* A project still to come stays hidden whatever its own display says, also
+   without JavaScript (see publicAt in src/projects.ts). */
+[data-public-at][hidden] {
+  display: none !important;
+}
+
 .project-item {
   display: grid;
   grid-template-columns: 13rem minmax(0, 1fr);

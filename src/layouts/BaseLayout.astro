@@ -158,6 +158,16 @@ const isHome = path === '/';
       </div>
     </footer>
 
+    {/* Projects to come sit in the lists, hidden, until their time (see
+        publicAt in src/projects.ts). Runs before the page's own scripts, so the
+        carousel only ever sees what is really shown. */}
+    <script is:inline>
+      for (const el of document.querySelectorAll('[data-public-at]')) {
+        if (Date.now() >= Number(el.dataset.publicAt)) el.hidden = false;
+        else el.remove();
+      }
+    </script>
+
     <style>
       .skip-link {
         position: absolute;

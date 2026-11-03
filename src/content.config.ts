@@ -121,7 +121,7 @@ const projects = defineCollection({
       .default([]),
     // Set true to unlist a project: its page is built and reachable by link,
     // but no list, tab or sitemap shows it (see isListed in src/projects.ts). A
-    // challenge draft becomes public by itself on its date (see isPublic there).
+    // challenge draft becomes public by itself on its date (see publicAt there).
     draft: z.boolean().default(false),
   })
     .refine((data) => !(data.map && data.layers), {

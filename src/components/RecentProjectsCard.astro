@@ -10,6 +10,7 @@
  */
 import type { CollectionEntry } from 'astro:content';
 import { plainTitle } from '../cv';
+import { untilPublic } from '../projects';
 
 interface Props {
   projects: CollectionEntry<'projects'>[];
@@ -32,6 +33,7 @@ const { projects, heading = 'Check out my recent projects' } = Astro.props;
             tabindex={i === 0 ? undefined : -1}
             data-umami-event="recent-card"
             data-umami-event-project={project.id}
+            {...untilPublic(project)}
           >
             <img
               src={project.data.thumbnail}
@@ -57,7 +59,7 @@ const { projects, heading = 'Check out my recent projects' } = Astro.props;
               class="recent-card__dot"
               aria-label={`Show ${plainTitle(project.data.title)}`}
               aria-current={i === 0 ? 'true' : undefined}
-              data-index={i}
+              {...untilPublic(project)}
             />
           ))}
           <button type="button" class="recent-card__arrow" aria-label="Next project" data-step="1">
@@ -71,10 +73,13 @@ const { projects, heading = 'Check out my recent projects' } = Astro.props;
 
 <script>
   const INTERVAL = 3000;
+  const SHOWN = 5;
 
   for (const card of document.querySelectorAll<HTMLElement>('[data-recent-card]')) {
     const slides = [...card.querySelectorAll<HTMLElement>('.recent-card__slide')];
     const dots = [...card.querySelectorAll<HTMLButtonElement>('.recent-card__dot')];
+    // More than SHOWN only when projects to come are in the markup.
+    for (const extra of [...slides.splice(SHOWN), ...dots.splice(SHOWN)]) extra.remove();
     if (slides.length < 2) continue;
 
     let current = 0;
@@ -104,9 +109,9 @@ const { projects, heading = 'Check out my recent projects' } = Astro.props;
       if (!reduced && !paused && !document.hidden) timer = window.setInterval(() => show(current + 1), INTERVAL);
     };
 
-    dots.forEach((dot) =>
+    dots.forEach((dot, i) =>
       dot.addEventListener('click', () => {
-        show(Number(dot.dataset.index));
+        show(i);
         start();
       }),
     );
@@ -168,7 +173,7 @@ const { projects, heading = 'Check out my recent projects' } = Astro.props;
   }
 
   /* Without JavaScript only the first project shows. */
-  .recent-card:not(.is-enhanced) .recent-card__slide:not(:first-child) {
+  .recent-card:not(.is-enhanced) .recent-card__slide:not([hidden]) ~ .recent-card__slide {
     display: none;
   }
 

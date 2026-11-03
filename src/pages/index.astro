@@ -14,7 +14,7 @@ import {
   plainTitle,
 } from '../cv';
 import { getCollection } from 'astro:content';
-import { isListed } from '../projects';
+import { isInList, isListed } from '../projects';
 
 // The newest work, whatever it happens to be - not a hand-picked list, so this
 // stays current on its own as projects are added. Categories opt in via the
@@ -33,15 +33,17 @@ const homepageCategories = projectCategories
 const madeOn = (entry: { data: { created?: Date; date: Date } }) =>
   entry.data.created ?? entry.data.date;
 
-const recent = (
+// The five newest listed, plus any still to come: the card keeps five of what is
+// public when the page is opened.
+const candidates = (
   await getCollection(
     'projects',
     ({ data }) =>
-      isListed({ data }) && Boolean(data.thumbnail) && homepageCategories.includes(data.category),
+      isInList({ data }) && Boolean(data.thumbnail) && homepageCategories.includes(data.category),
   )
-)
-  .sort((a, b) => madeOn(b).valueOf() - madeOn(a).valueOf())
-  .slice(0, 5);
+).sort((a, b) => madeOn(b).valueOf() - madeOn(a).valueOf());
+const newestListed = new Set(candidates.filter(isListed).slice(0, 5));
+const recent = candidates.filter((entry) => newestListed.has(entry) || !isListed(entry));
 
 // Day included: several of these fall in the same month, and "Aug 2026" four
 // times over says nothing.
