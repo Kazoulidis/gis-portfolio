@@ -27,11 +27,12 @@ const homepageCategories = projectCategories
   .filter((category) => category.homepage)
   .map((category) => category.slug);
 
-// `date` is the challenge day, so every entry would read "Nov 2025" and the
+// `date` is the challenge day, so every 2025 entry would read "Nov 2025" and the
 // order would follow the prompt number rather than what was made most recently.
-// `created` is when the map was actually produced; fall back where it is absent.
-const madeOn = (entry: { data: { created?: Date; date: Date } }) =>
-  entry.data.created ?? entry.data.date;
+// `created` is when the map was actually produced. A map made ahead of its day
+// counts from that day, when it goes public, so this year's days run in order.
+const madeOn = ({ data }: { data: { created?: Date; date: Date } }) =>
+  data.created && data.created > data.date ? data.created : data.date;
 
 // The five newest listed, plus any still to come: the card keeps five of what is
 // public when the page is opened.

@@ -20,7 +20,7 @@ downloads:
     note: 'JPEG · 4724 × 4724 · 4.7 MB'
 map: '/data/30dmc-2026-day-04-earthquakes.json'
 mapComponent: 'quake-timeline'
-mapCaption: 'Opens on the whole record. Press play to run it day by day: each quake flashes on its day and fades over the next month. Switch to By month or By year for separate frames, use the arrows next to the timeline to jump to the next day a cluster began, or pick a sequence to zoom to it and watch it unfold.'
+mapCaption: 'Opens on the whole record. Press play to run it day by day: each quake flashes on its day and fades over the next month. Switch to By month or By year for separate frames, use the arrows next to the timeline to jump to the next day a cluster began, or pick a sequence to zoom to it and watch it unfold. Export video saves the run as an MP4 of the current view.'
 dataSource:
   - label: 'National Observatory of Athens, Institute of Geodynamics (NOA-IG) - earthquake catalogue, via its FDSN event service'
     href: 'https://eida.gein.noa.gr/'
