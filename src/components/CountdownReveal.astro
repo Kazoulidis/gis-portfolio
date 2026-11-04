@@ -1,0 +1,165 @@
+---
+/**
+ * The Day 7 map under its own clock: drag across the picture and the map is drawn from west to east as
+ * far as the handle, with the clock reading the time left. The clock's bar stays in view throughout. The
+ * countdown plays once when the picture is first in view, unless the reader asks for reduced motion, in
+ * which case the whole map is simply there.
+ *
+ * File (`src`, under public/):
+ *   *-countdown.json   { src, alt, width, height, start, end, bar }
+ *                      `start` and `end` are the percent across the picture where the clock reads 10:00
+ *                      and 00:00; `bar` is the height of the clock's bar, in percent, from the top
+ */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+interface Props {
+  src: string;
+  caption?: string;
+}
+interface Countdown { src: string; alt: string; width: number; height: number; start: number; end: number; bar: number }
+
+const { src, caption } = Astro.props;
+const data: Countdown = JSON.parse(readFileSync(join(process.cwd(), 'public', src), 'utf-8'));
+---
+
+<figure class="map-figure">
+  <div class="count" data-countdown data-start={data.start} data-end={data.end}
+       style={`aspect-ratio: ${data.width} / ${data.height}; --bar: ${data.bar}%; --end: ${data.end}%`}>
+    <img class="count__img count__map" src={data.src} alt={data.alt} width={data.width} height={data.height} fetchpriority="high" decoding="async" />
+    <img class="count__img count__clock" src={data.src} alt="" width={data.width} height={data.height} decoding="async" />
+    <div class="count__line" aria-hidden="true"><span class="count__grip"></span></div>
+    <output class="count__time" data-countdown-time>TIME'S UP</output>
+    <input class="count__range" type="range" min="0" max="100" step="0.1" value="100"
+           aria-label="Time left on the clock" data-countdown-range />
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<script>
+  const PLAY_MS = 9000;
+
+  for (const box of document.querySelectorAll<HTMLElement>('[data-countdown]')) {
+    const range = box.querySelector<HTMLInputElement>('[data-countdown-range]')!;
+    const time = box.querySelector<HTMLOutputElement>('[data-countdown-time]')!;
+    const start = Number(box.dataset.start);
+    const end = Number(box.dataset.end);
+
+    const set = () => {
+      const pos = Number(range.value);
+      box.style.setProperty('--pos', `${pos}%`);
+      let label = "TIME'S UP";
+      if (pos < end) {
+        const seconds = Math.ceil(600 * (1 - Math.max(0, pos - start) / (end - start)));
+        label = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+      }
+      time.textContent = label;
+      range.setAttribute('aria-valuetext', label);
+    };
+    range.addEventListener('input', set);
+    set();
+
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) continue;
+
+    // From 10:00 to the end of the sheet, once. Any touch of the handle ends it and leaves the reader in charge.
+    let stopped = false;
+    for (const type of ['pointerdown', 'keydown', 'input']) {
+      range.addEventListener(type, () => (stopped = true), { once: true });
+    }
+    const play = () => {
+      const from = performance.now();
+      const step = (now: number) => {
+        if (stopped) return;
+        const t = Math.min((now - from) / PLAY_MS, 1);
+        range.value = String(100 * t);
+        set();
+        if (t < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    };
+
+    const ready = box.querySelector('img')!.decode().catch(() => {});
+    new IntersectionObserver((entries, observer) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      observer.disconnect();
+      ready.then(() => setTimeout(play, 400));
+    }, { threshold: 0.5 }).observe(box);
+  }
+</script>
+
+<style>
+  .count {
+    --pos: 100%;
+    position: relative;
+    width: 100%;
+    /* Square: small enough to see the clock at the top and the time at the foot together. */
+    max-width: calc(100vh - 5rem);
+    margin-inline: auto;
+    overflow: hidden;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    background: #fff;
+    user-select: none;
+  }
+  .count__img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .count__map {
+    clip-path: inset(0 calc(100% - var(--pos)) 0 0);
+  }
+  /* The whole clock from the start, but not the TIME'S UP written after it. */
+  .count__clock {
+    clip-path: inset(0 calc(100% - var(--end)) calc(100% - var(--bar)) 0);
+  }
+  .count__line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: var(--pos);
+    width: 2px;
+    margin-left: -1px;
+    background: #d22332;
+    pointer-events: none;
+  }
+  .count__grip {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 16px;
+    height: 16px;
+    margin: -8px 0 0 -8px;
+    border-radius: 50%;
+    background: #d22332;
+    box-shadow: 0 0 0 2px #fff;
+  }
+  .count__time {
+    position: absolute;
+    left: 0.6rem;
+    bottom: 0.6rem;
+    padding: 0.15rem 0.5rem;
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+    color: #fff;
+    background: rgba(30, 30, 30, 0.75);
+    border-radius: var(--radius);
+    pointer-events: none;
+  }
+  .count__range {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: ew-resize;
+    touch-action: pan-y;
+  }
+  .count:has(.count__range:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+</style>

@@ -18,6 +18,7 @@ import QuakeTimelineMap from '../../components/QuakeTimelineMap.astro';
 import SightlineMap from '../../components/SightlineMap.astro';
 import CoastRulerMap from '../../components/CoastRulerMap.astro';
 import ChartSwipe from '../../components/ChartSwipe.astro';
+import CountdownReveal from '../../components/CountdownReveal.astro';
 import { projectCategories } from '../../site';
 import { isPublic } from '../../projects';
 import { plainTitle } from '../../cv';
@@ -43,6 +44,7 @@ const CUSTOM_MAPS: Record<string, typeof ProjectMap> = {
   'olympus-sightline': SightlineMap,
   'coast-rulers': CoastRulerMap,
   'chart-swipe': ChartSwipe,
+  'countdown-reveal': CountdownReveal,
 };
 
 // Every project gets its page, drafts included: a draft is unlisted, reachable
