@@ -50,10 +50,14 @@ jobs:
             type=raw,value=latest
             type=sha,format=short,prefix={{date 'YYYY-MM-DD' tz='Europe/Athens'}}-
 
+      # Timestamps are rewritten so that a layer whose files did not change comes
+      # out byte for byte the same, and the server does not fetch it again.
       - uses: docker/build-push-action@v6
+        env:
+          SOURCE_DATE_EPOCH: 0
         with:
           context: .
           platforms: linux/arm64
-          push: true
+          outputs: type=image,push=true,rewrite-timestamp=true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
