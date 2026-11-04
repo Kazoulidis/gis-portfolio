@@ -19,6 +19,7 @@ import SightlineMap from '../../components/SightlineMap.astro';
 import CoastRulerMap from '../../components/CoastRulerMap.astro';
 import ChartSwipe from '../../components/ChartSwipe.astro';
 import CountdownReveal from '../../components/CountdownReveal.astro';
+import RuleMap from '../../components/RuleMap.astro';
 import { projectCategories } from '../../site';
 import { isPublic } from '../../projects';
 import { plainTitle } from '../../cv';
@@ -45,6 +46,7 @@ const CUSTOM_MAPS: Record<string, typeof ProjectMap> = {
   'coast-rulers': CoastRulerMap,
   'chart-swipe': ChartSwipe,
   'countdown-reveal': CountdownReveal,
+  'plato-rules': RuleMap,
 };
 
 // Every project gets its page, drafts included: a draft is unlisted, reachable

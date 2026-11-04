@@ -1,0 +1,50 @@
+{
+ "rules": "/data/30dmc-2026-day-08-rules.png",
+ "picture": "/images/30dmc-2026-day-08-score.webp",
+ "width": 2660,
+ "height": 980,
+ "kmPerPixel": 0.1,
+ "alt": "Map of Crete shaded by how many of the seven rules each place meets, palest for few and darkest red for all seven, which is reached only in small patches of the Dikti mountains.",
+ "places": [
+  {
+   "name": "Lasithi: the city on the sheet",
+   "x": 1883,
+   "y": 628
+  },
+  {
+   "name": "Above Kritsa",
+   "x": 1913,
+   "y": 661
+  },
+  {
+   "name": "Gortyn",
+   "x": 1362,
+   "y": 758
+  },
+  {
+   "name": "Phaistos",
+   "x": 1240,
+   "y": 772
+  },
+  {
+   "name": "Knossos",
+   "x": 1555,
+   "y": 495
+  },
+  {
+   "name": "Lyttos",
+   "x": 1744,
+   "y": 595
+  },
+  {
+   "name": "Aptera",
+   "x": 627,
+   "y": 318
+  },
+  {
+   "name": "Eleutherna",
+   "x": 1107,
+   "y": 463
+  }
+ ]
+}
