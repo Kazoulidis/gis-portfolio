@@ -1,0 +1,42 @@
+{
+ "data": "/data/30dmc-2026-day-09-veins-data.json",
+ "picture": "/images/30dmc-2026-day-09-frame.webp",
+ "alt": "Map of Greece with every settlement joined by thin lines that thicken towards Athens, in red, and Thessaloniki, in blue, like two trees of veins on a faint grey relief.",
+ "size": 8000,
+ "width": 1600,
+ "height": 1600,
+ "places": [
+  {
+   "label": "Agkathia, panel A",
+   "i": 5268
+  },
+  {
+   "label": "Corfu",
+   "i": 87
+  },
+  {
+   "label": "Ioannina",
+   "i": 23
+  },
+  {
+   "label": "Patras",
+   "i": 2
+  },
+  {
+   "label": "Chania",
+   "i": 39
+  },
+  {
+   "label": "Rhodes",
+   "i": 38
+  },
+  {
+   "label": "Mytilene",
+   "i": 63
+  },
+  {
+   "label": "Kastellorizo, off the map",
+   "i": 1586
+  }
+ ]
+}

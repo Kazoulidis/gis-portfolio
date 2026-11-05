@@ -1,0 +1,231 @@
+---
+/**
+ * Day 9: every settlement in Greece with the next one on its way to Athens or Thessaloniki. Click the map, search or pick a
+ * place, and the page walks that chain and draws it. The picture is the sheet's map frame, and positions are hundreds of
+ * metres from its top left, so distances come straight from them. The settlements load when the map comes near.
+ *
+ * Files (`src`, under public/):
+ *   *-veins.json       { data, picture, alt, size, width, height, places: [{label, i}] }
+ *   *-veins-data.json  { names, x, y, parent, pop, flow }, one entry a settlement; parent is -1 at the two cities
+ */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+interface Props {
+  src: string;
+  caption?: string;
+}
+interface Place { label: string; i: number }
+interface Meta { data: string; picture: string; alt: string; size: number; width: number; height: number; places: Place[] }
+
+const { src, caption } = Astro.props;
+const meta: Meta = JSON.parse(readFileSync(join(process.cwd(), 'public', src), 'utf-8'));
+---
+
+<figure class="map-figure">
+  <div class="veins" data-veins data-src={meta.data} data-size={meta.size} data-start={meta.places[0].i}>
+    <div class="veins__map" data-veins-map>
+      <img src={meta.picture} alt={meta.alt} width={meta.width} height={meta.height} loading="lazy" decoding="async" />
+      <svg viewBox={`0 0 ${meta.size} ${meta.size}`} aria-hidden="true">
+        <polyline data-veins-halo fill="none" stroke="#fff" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" style="stroke-width: 5px" />
+        <polyline data-veins-route fill="none" stroke="#111" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" style="stroke-width: 2px" />
+        <circle data-veins-point r="50" fill="#111" stroke="#fff" stroke-width="20" visibility="hidden" />
+      </svg>
+    </div>
+    <div class="veins__places">
+      {meta.places.map((p) => <button type="button" data-i={p.i}>{p.label}</button>)}
+    </div>
+    <label class="veins__search">
+      <span>Find a settlement</span>
+      <input type="search" data-veins-search autocomplete="off" spellcheck="false" placeholder="Latin letters, as ELSTAT spells them" disabled />
+    </label>
+    <div class="veins__results" data-veins-results></div>
+    <div class="veins__answer" aria-live="polite">
+      <p class="veins__head" data-veins-head>Loading the settlements...</p>
+      <p data-veins-line></p>
+      <p data-veins-via></p>
+    </div>
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<script>
+  interface Data { names: string[]; x: number[]; y: number[]; parent: number[]; pop: number[]; flow: number[] }
+  const fmt = (v: number) => v.toLocaleString('en-GB');
+  const count = (v: number, one: string, many: string) => `${fmt(v)} ${v === 1 ? one : many}`;
+
+  for (const box of document.querySelectorAll<HTMLElement>('[data-veins]')) {
+    const map = box.querySelector<HTMLElement>('[data-veins-map]')!;
+    const route = box.querySelector<SVGPolylineElement>('[data-veins-route]')!;
+    const halo = box.querySelector<SVGPolylineElement>('[data-veins-halo]')!;
+    const point = box.querySelector<SVGCircleElement>('[data-veins-point]')!;
+    const head = box.querySelector<HTMLElement>('[data-veins-head]')!;
+    const line = box.querySelector<HTMLElement>('[data-veins-line]')!;
+    const via = box.querySelector<HTMLElement>('[data-veins-via]')!;
+    const input = box.querySelector<HTMLInputElement>('[data-veins-search]')!;
+    const results = box.querySelector<HTMLElement>('[data-veins-results]')!;
+    const size = Number(box.dataset.size);
+    let d: Data | null = null;
+
+    const cityName = (i: number) => (d!.names[i] === 'Athinai' ? 'Athens' : 'Thessaloniki');
+
+    // Same-named villages are many, so each one says which large place it is nearest. A large place needs no such help.
+    const label = (i: number) => {
+      if (d!.pop[i] >= 10000) return d!.names[i];
+      let best = -1;
+      let bestDistance = Infinity;
+      d!.pop.forEach((p, k) => {
+        if (p < 10000 || k === i) return;
+        const distance = (d!.x[k] - d!.x[i]) ** 2 + (d!.y[k] - d!.y[i]) ** 2;
+        if (distance < bestDistance) { bestDistance = distance; best = k; }
+      });
+      return `${d!.names[i]}, near ${d!.names[best]}`;
+    };
+
+    const show = (i: number) => {
+      if (!d) return;
+      const chain = [i];
+      while (d.parent[chain[chain.length - 1]] >= 0) chain.push(d.parent[chain[chain.length - 1]]);
+      const points = chain.map((k) => `${d!.x[k]},${d!.y[k]}`).join(' ');
+      route.setAttribute('points', points);
+      halo.setAttribute('points', points);
+      point.setAttribute('cx', String(d.x[i]));
+      point.setAttribute('cy', String(d.y[i]));
+      point.setAttribute('visibility', 'visible');
+      const city = chain[chain.length - 1];
+      if (i === city) {
+        head.textContent = `${cityName(i)}: ${fmt(d.pop[i])} residents in 2021`;
+        line.textContent = `Every line in this tree ends here, bringing the total to ${fmt(d.flow[i])} people.`;
+        via.textContent = '';
+        return;
+      }
+      let km = 0;
+      for (let k = 0; k < chain.length - 1; k++) {
+        km += Math.hypot(d.x[chain[k]] - d.x[chain[k + 1]], d.y[chain[k]] - d.y[chain[k + 1]]) / 10;
+      }
+      const residents = d.pop[i] ? `${count(d.pop[i], 'resident', 'residents')} in 2021` : 'no residents in 2021';
+      head.textContent = `${label(i)}: ${residents}`;
+      line.textContent = `To ${cityName(city)}: ${count(chain.length - 1, 'link', 'links')}, ${fmt(Math.round(km))} km. Its line carries ${count(d.flow[i], 'person', 'people')} as it leaves.`;
+      const stops = chain.slice(1, -1).sort((a, b) => d!.pop[b] - d!.pop[a]).slice(0, 5).sort((a, b) => chain.indexOf(a) - chain.indexOf(b));
+      via.textContent = stops.length ? `Largest places on the way: ${stops.map((k) => d!.names[k]).join(', ')}.` : 'It joins the city directly.';
+    };
+
+    map.addEventListener('click', (event) => {
+      if (!d) return;
+      const r = map.getBoundingClientRect();
+      const x = ((event.clientX - r.left) / r.width) * size;
+      const y = ((event.clientY - r.top) / r.height) * size;
+      let best = 0;
+      let bestDistance = Infinity;
+      for (let k = 0; k < d.x.length; k++) {
+        const distance = (d.x[k] - x) ** 2 + (d.y[k] - y) ** 2;
+        if (distance < bestDistance) { bestDistance = distance; best = k; }
+      }
+      show(best);
+    });
+    box.querySelectorAll<HTMLButtonElement>('.veins__places button').forEach((b) => {
+      b.addEventListener('click', () => show(Number(b.dataset.i)));
+    });
+
+    input.addEventListener('input', () => {
+      results.replaceChildren();
+      const q = input.value.trim().toLowerCase();
+      if (!d || q.length < 2) return;
+      const hits: number[] = [];
+      d.names.forEach((name, k) => { if (name.toLowerCase().includes(q)) hits.push(k); });
+      const rank = (k: number) => (d!.names[k].toLowerCase().startsWith(q) ? 0 : 1);
+      hits.sort((a, b) => rank(a) - rank(b) || d!.pop[b] - d!.pop[a]);
+      if (!hits.length) {
+        const none = document.createElement('p');
+        none.textContent = 'No settlement by that spelling.';
+        results.append(none);
+      }
+      for (const k of hits.slice(0, 8)) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = `${label(k)} (${fmt(d.pop[k])})`;
+        b.addEventListener('click', () => { show(k); results.replaceChildren(); input.value = d!.names[k]; });
+        results.append(b);
+      }
+    });
+
+    new IntersectionObserver((entries, observer) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      observer.disconnect();
+      fetch(box.dataset.src!)
+        .then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+        .then((data: Data) => {
+          d = data;
+          input.disabled = false;
+          show(Number(box.dataset.start));
+        })
+        .catch(() => { head.textContent = 'The settlements could not be loaded.'; });
+    }, { rootMargin: '400px' }).observe(box);
+  }
+</script>
+
+<style>
+  .veins__map {
+    position: relative;
+    width: 100%;
+    max-width: 44rem;
+    aspect-ratio: 1;
+    margin-inline: auto;
+    overflow: hidden;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    background: #fff;
+    cursor: crosshair;
+  }
+  .veins__map img,
+  .veins__map svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .veins__places,
+  .veins__results {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.6rem;
+  }
+  .veins button {
+    font: inherit;
+    font-size: 0.85rem;
+    padding: 0.2rem 0.6rem;
+    color: var(--text, inherit);
+    background: var(--bg-subtle);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    cursor: pointer;
+  }
+  .veins button:hover { border-color: var(--accent); }
+  .veins button:focus-visible,
+  .veins input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .veins__results p { margin: 0; font-size: 0.9rem; }
+  .veins__search {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.8rem;
+    font-size: 0.92rem;
+  }
+  .veins__search input {
+    flex: 1 1 14rem;
+    min-width: 0;
+    max-width: 24rem;
+    font: inherit;
+    padding: 0.25rem 0.5rem;
+    color: inherit;
+    background: transparent;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+  }
+  .veins__answer { margin-top: 0.8rem; font-size: 0.95rem; min-height: 6.5rem; }
+  .veins__answer p { margin: 0 0 0.25rem; }
+  .veins__head { font-weight: 600; }
+</style>
