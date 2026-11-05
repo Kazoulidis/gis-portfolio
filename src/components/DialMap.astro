@@ -1,0 +1,349 @@
+---
+/**
+ * Day 11: click a prefecture and its FM dial is swept from 87.5 to 108 MHz: static between stations, a burst of signal at each
+ * real frequency, the station's name on the display. The sound is generated in the browser; it is not a broadcast. A lossless PNG says
+ * which prefecture is where (R: its number in `names`, 0 elsewhere), and the stations load when the map comes near.
+ *
+ * Files (`src`, under public/):
+ *   *-dial.json   { picture, ids, data, alt, width, height, grid, names, start, presets }
+ *   *-dials.json  [{ name, n, r, p, s: [[mhz, station], ...] }], in the order of `names`
+ */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+interface Props {
+  src: string;
+  caption?: string;
+}
+interface Meta { picture: string; ids: string; data: string; alt: string; width: number; height: number; grid: number; names: string[]; start: string; presets: string[] }
+
+const { src, caption } = Astro.props;
+const meta: Meta = JSON.parse(readFileSync(join(process.cwd(), 'public', src), 'utf-8'));
+---
+
+<figure class="map-figure">
+  <div class="dial" data-dial data-ids={meta.ids} data-src={meta.data} data-grid={meta.grid} data-start={meta.start}>
+    <div class="dial__map" data-dial-map>
+      <img src={meta.picture} alt={meta.alt} width={meta.width} height={meta.height} loading="lazy" decoding="async" />
+      <canvas data-dial-mark width={meta.grid} height={meta.grid} aria-hidden="true"></canvas>
+    </div>
+    <div class="dial__places">
+      {meta.presets.map((name) => <button type="button" data-name={name}>{name}</button>)}
+      <label>
+        <span class="dial__hidden">Choose a prefecture</span>
+        <select data-dial-select>
+          <option value="">All 51 prefectures</option>
+          {meta.names.map((name) => <option value={name}>{name}</option>)}
+        </select>
+      </label>
+    </div>
+    <div class="dial__radio">
+      <div class="dial__display" aria-live="off"><span data-dial-mhz>87.5</span> MHz <span data-dial-station></span></div>
+      <svg viewBox="0 0 1000 70" role="img" aria-label="The FM dial from 87.5 to 108 MHz" data-dial-svg>
+        <rect width="1000" height="70" fill="#1b1d22" />
+        <g data-dial-ticks stroke="#ffb648" stroke-width="3"></g>
+        <line data-dial-needle x1="0" x2="0" y1="0" y2="70" stroke="#fff" stroke-width="3" />
+      </svg>
+      <div class="dial__scale" aria-hidden="true"><span>88</span><span>92</span><span>96</span><span>100</span><span>104</span><span>108</span></div>
+      <div class="dial__controls">
+        <button type="button" data-dial-play disabled>Loading...</button>
+        <p aria-live="polite" data-dial-head></p>
+      </div>
+    </div>
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<script>
+  type Station = [number, string];
+  interface Prefecture { name: string; n: number; r: number; p: number; s: Station[] }
+  const LOW = 87.5;
+  const WIDE = 20.5;
+  const SWEEP = 16000;                 // ms for the whole band
+  const CATCH = 0.14;                  // MHz either side of a station at which its signal is heard
+  const fmt = (v: number) => v.toLocaleString('en-GB');
+
+  for (const box of document.querySelectorAll<HTMLElement>('[data-dial]')) {
+    const map = box.querySelector<HTMLElement>('[data-dial-map]')!;
+    const mark = box.querySelector<HTMLCanvasElement>('[data-dial-mark]')!;
+    const ticks = box.querySelector<SVGGElement>('[data-dial-ticks]')!;
+    const needle = box.querySelector<SVGLineElement>('[data-dial-needle]')!;
+    const mhz = box.querySelector<HTMLElement>('[data-dial-mhz]')!;
+    const station = box.querySelector<HTMLElement>('[data-dial-station]')!;
+    const play = box.querySelector<HTMLButtonElement>('[data-dial-play]')!;
+    const head = box.querySelector<HTMLElement>('[data-dial-head]')!;
+    const select = box.querySelector<HTMLSelectElement>('[data-dial-select]')!;
+    const grid = Number(box.dataset.grid);
+    let all: Prefecture[] = [];
+    let cells: Uint8ClampedArray | null = null;
+    let now: Prefecture | null = null;
+    let timer = 0;
+    let started = 0;
+
+    // The radio: looped noise for static; two detuned oscillators with a slow pulse for a signal.
+    let ctx: AudioContext | null = null;
+    let hiss: GainNode, voice: GainNode, a: OscillatorNode, b: OscillatorNode;
+    const radio = () => {
+      if (ctx) return;
+      ctx = new AudioContext();
+      const buffer = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+      const noise = ctx.createBufferSource();
+      noise.buffer = buffer;
+      noise.loop = true;
+      const band = ctx.createBiquadFilter();
+      band.type = 'bandpass';
+      band.frequency.value = 2600;
+      band.Q.value = 0.5;
+      hiss = ctx.createGain();
+      hiss.gain.value = 0;
+      noise.connect(band).connect(hiss).connect(ctx.destination);
+      noise.start();
+      a = ctx.createOscillator();
+      b = ctx.createOscillator();
+      a.type = 'sawtooth';
+      b.type = 'square';
+      const low = ctx.createBiquadFilter();
+      low.type = 'lowpass';
+      low.frequency.value = 1400;
+      const pulse = ctx.createGain();
+      pulse.gain.value = 0.7;
+      const beat = ctx.createOscillator();
+      beat.frequency.value = 4.5;
+      const depth = ctx.createGain();
+      depth.gain.value = 0.3;
+      beat.connect(depth).connect(pulse.gain);
+      voice = ctx.createGain();
+      voice.gain.value = 0;
+      a.connect(low);
+      b.connect(low);
+      low.connect(pulse).connect(voice).connect(ctx.destination);
+      a.start();
+      b.start();
+      beat.start();
+    };
+
+    const finish = (done: boolean) => {
+      clearInterval(timer);
+      timer = 0;
+      if (ctx) {
+        const t = ctx.currentTime;
+        hiss.gain.setTargetAtTime(0, t, 0.05);
+        voice.gain.setTargetAtTime(0, t, 0.05);
+      }
+      play.textContent = done ? 'Sweep again' : 'Sweep the dial';
+      box.dataset.state = 'stopped';
+    };
+
+    const tune = (f: number, list: Station[]) => {
+      mhz.textContent = f.toFixed(1);
+      needle.setAttribute('x1', String(((f - LOW) / WIDE) * 1000));
+      needle.setAttribute('x2', String(((f - LOW) / WIDE) * 1000));
+      let best: Station | null = null;
+      let gap = Infinity;
+      for (const s of list) {
+        const d = Math.abs(s[0] - f);
+        if (d < gap) { gap = d; best = s; }
+      }
+      const on = gap < CATCH && best ? 1 - gap / CATCH : 0;
+      station.textContent = on && best ? best[1] : '';
+      box.dataset.tuned = on && best ? String(best[0]) : '';
+      if (ctx && best) {
+        const t = ctx.currentTime;
+        hiss.gain.setTargetAtTime(0.09 * (1 - 0.85 * on), t, 0.02);
+        voice.gain.setTargetAtTime(0.1 * on, t, 0.02);
+        const pitch = 90 + ((best[0] * 10) % 19) * 7;       // each station keeps its own voice
+        a.frequency.setTargetAtTime(pitch, t, 0.01);
+        b.frequency.setTargetAtTime(pitch * 1.503, t, 0.01);
+      }
+    };
+
+    const sweep = () => {
+      if (!now) return;
+      radio();
+      void ctx!.resume();
+      const list = now.s;
+      clearInterval(timer);
+      started = performance.now();
+      play.textContent = 'Stop';
+      box.dataset.state = 'playing';
+      timer = window.setInterval(() => {
+        const k = (performance.now() - started) / SWEEP;
+        if (k >= 1) {
+          tune(LOW + WIDE, list);
+          finish(true);
+          return;
+        }
+        tune(LOW + WIDE * k, list);
+      }, 30);
+    };
+
+    const show = (p: Prefecture, go: boolean) => {
+      now = p;
+      select.value = p.name;
+      ticks.replaceChildren();
+      for (const [f] of p.s) {
+        const l = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        const x = String(((f - LOW) / WIDE) * 1000);
+        l.setAttribute('x1', x);
+        l.setAttribute('x2', x);
+        l.setAttribute('y1', '8');
+        l.setAttribute('y2', '62');
+        ticks.append(l);
+      }
+      head.textContent = `${p.name}: ${p.n === 1 ? '1 station' : `${p.n} stations`} on air, ${p.p.toFixed(1)} for every 100,000 of its ${fmt(p.r)} residents.`;
+      play.disabled = false;
+      if (cells) {
+        const g = mark.getContext('2d')!;
+        const image = g.createImageData(grid, grid);
+        const id = all.indexOf(p) + 1;
+        for (let i = 0; i < grid * grid; i++) {
+          if (cells[i * 4] === id) {
+            image.data[i * 4] = 255;
+            image.data[i * 4 + 1] = 182;
+            image.data[i * 4 + 2] = 72;
+            image.data[i * 4 + 3] = 150;
+          }
+        }
+        g.putImageData(image, 0, 0);
+      }
+      tune(LOW, p.s);
+      station.textContent = '';
+      if (go) sweep();
+      else finish(false);
+    };
+
+    map.addEventListener('click', (event) => {
+      if (!cells) return;
+      const r = map.getBoundingClientRect();
+      const x = Math.min(grid - 1, Math.floor(((event.clientX - r.left) / r.width) * grid));
+      const y = Math.min(grid - 1, Math.floor(((event.clientY - r.top) / r.height) * grid));
+      const id = cells[(y * grid + x) * 4];
+      if (!id) {
+        head.textContent = 'No prefecture there. Click on land in Greece.';
+        return;
+      }
+      show(all[id - 1], true);
+    });
+    box.querySelectorAll<HTMLButtonElement>('.dial__places button').forEach((button) => {
+      button.addEventListener('click', () => {
+        const p = all.find((q) => q.name === button.dataset.name);
+        if (p) show(p, true);
+      });
+    });
+    select.addEventListener('change', () => {
+      const p = all.find((q) => q.name === select.value);
+      if (p) show(p, true);
+    });
+    play.addEventListener('click', () => {
+      if (timer) finish(false);
+      else sweep();
+    });
+
+    new IntersectionObserver((entries, observer) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      observer.disconnect();
+      const picture = new Image();
+      const idsReady = new Promise<void>((ok, no) => {
+        picture.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = grid;
+          canvas.height = grid;
+          const g = canvas.getContext('2d', { colorSpace: 'srgb', willReadFrequently: true })!;
+          g.drawImage(picture, 0, 0);
+          cells = g.getImageData(0, 0, grid, grid).data;
+          ok();
+        };
+        picture.onerror = () => no(new Error('ids'));
+        picture.src = box.dataset.ids!;
+      });
+      const dataReady = fetch(box.dataset.src!).then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); });
+      Promise.all([dataReady, idsReady]).then(([data]) => {
+        all = data;
+        const first = all.find((q) => q.name === box.dataset.start);
+        if (first) show(first, false);
+      }).catch(() => { head.textContent = 'The dials could not be loaded.'; play.textContent = 'Not available'; });
+    }, { rootMargin: '400px' }).observe(box);
+  }
+</script>
+
+<style>
+  .dial__map {
+    position: relative;
+    width: 100%;
+    max-width: 44rem;
+    aspect-ratio: 1;
+    margin-inline: auto;
+    overflow: hidden;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    background: #fff;
+    cursor: pointer;
+  }
+  .dial__map img,
+  .dial__map canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .dial__map canvas { pointer-events: none; }
+  .dial__places {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.6rem;
+  }
+  .dial button,
+  .dial select {
+    font: inherit;
+    font-size: 0.85rem;
+    padding: 0.2rem 0.6rem;
+    color: var(--text, inherit);
+    background: var(--bg-subtle);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+  }
+  .dial button { cursor: pointer; }
+  .dial button:disabled { cursor: default; opacity: 0.6; }
+  .dial button:hover:not(:disabled) { border-color: var(--accent); }
+  .dial button:focus-visible,
+  .dial select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .dial__hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .dial__radio { margin-top: 0.8rem; }
+  .dial__display {
+    min-height: 2.2rem;
+    padding: 0.35rem 0.6rem;
+    font-size: 0.95rem;
+    font-variant-numeric: tabular-nums;
+    color: #ffb648;
+    background: #1b1d22;
+    border-radius: var(--radius) var(--radius) 0 0;
+  }
+  .dial__display span:last-child { margin-left: 0.7rem; color: #fff; }
+  .dial__radio svg { display: block; width: 100%; height: auto; }
+  .dial__scale {
+    display: flex;
+    justify-content: space-between;
+    padding-left: 2.4%;
+    font-size: 0.78rem;
+  }
+  .dial__controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.7rem;
+    margin-top: 0.5rem;
+    min-height: 3.2rem;
+  }
+  .dial__controls p { flex: 1 1 16rem; margin: 0; font-size: 0.95rem; }
+</style>
