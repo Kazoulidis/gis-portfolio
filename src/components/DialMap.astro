@@ -2,11 +2,12 @@
 /**
  * Day 11: click a prefecture and turn the knob along its FM dial, from 87.5 to 108 MHz. Between stations you hear static, generated in
  * the browser. On a station with an online stream you hear that station's own live stream, for at most 15 seconds a station on each
- * visit. Nothing is recorded or passes through this site: the browser plays the station's public address. A lossless PNG says which
- * prefecture is where (R: its number in `names`, 0 elsewhere), and the stations load when the map comes near.
+ * visit. Nothing is recorded or passes through this site: the browser plays the station's public address. Turning the knob near a
+ * station snaps to it, so it is easy to find. The map is Leaflet, on the same basemap as the other maps.
  *
  * Files (`src`, under public/):
- *   *-dial.json   { picture, ids, data, alt, width, height, grid, names, start, presets }
+ *   *-dial.json   { geo, data, names, start, presets }
+ *   *-prefectures.geojson  name, n (stations on air), p (per 100,000)
  *   *-dials.json  [{ name, n, r, p, s: [[mhz, station, stream?, site?], ...] }], in the order of `names`
  */
 import { readFileSync } from 'node:fs';
@@ -16,7 +17,7 @@ interface Props {
   src: string;
   caption?: string;
 }
-interface Meta { picture: string; ids: string; data: string; alt: string; width: number; height: number; grid: number; names: string[]; start: string; presets: string[] }
+interface Meta { geo: string; data: string; names: string[]; start: string; presets: string[] }
 
 const { src, caption } = Astro.props;
 const meta: Meta = JSON.parse(readFileSync(join(process.cwd(), 'public', src), 'utf-8'));
@@ -24,11 +25,8 @@ const GRIP = Array.from({ length: 28 }, (_, i) => (i * 360) / 28);
 ---
 
 <figure class="map-figure">
-  <div class="dial" data-dial data-ids={meta.ids} data-src={meta.data} data-grid={meta.grid} data-start={meta.start}>
-    <div class="dial__map" data-dial-map>
-      <img src={meta.picture} alt={meta.alt} width={meta.width} height={meta.height} loading="lazy" decoding="async" />
-      <canvas data-dial-mark width={meta.grid} height={meta.grid} aria-hidden="true"></canvas>
-    </div>
+  <div class="dial" data-dial data-geo={meta.geo} data-src={meta.data} data-start={meta.start}>
+    <div class="map map--tall" data-dial-map role="application" aria-label="Map of Greece by prefecture: click one to load its dial"></div>
     <div class="dial__places">
       {meta.presets.map((name) => <button type="button" data-name={name}>{name}</button>)}
       <label>
@@ -80,20 +78,37 @@ const GRIP = Array.from({ length: 28 }, (_, i) => (i * 360) / 28);
 </figure>
 
 <script>
+  import * as L from 'leaflet';
+  import { whenNear } from '../lazy';
+  import 'leaflet/dist/leaflet.css';
+
+  const BASEMAP = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+  const ATTRIBUTION =
+    'Tiles &copy; <a href="https://www.esri.com/">Esri</a> - Esri, HERE, Garmin, ' +
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+  // The printed map's classes and colours, stations on air per 100,000 residents.
+  const CLASSES = [
+    { to: 5, label: 'Under 5', colour: '#f4efe4' },
+    { to: 10, label: '5 to 10', colour: '#e9d9b8' },
+    { to: 15, label: '10 to 15', colour: '#d9a86c' },
+    { to: 20, label: '15 to 20', colour: '#b96a3c' },
+    { to: Infinity, label: '20 and over', colour: '#7d3320' },
+  ];
+  const colourOf = (p: number) => CLASSES.find((c) => p < c.to)!.colour;
+
   type Station = [number, string, string?, string?];
   interface Prefecture { name: string; n: number; r: number; p: number; s: Station[] }
   const LOW = 87.5;
   const HIGH = 108;
   const TURN = 270;              // degrees of the knob for the whole band
-  const CATCH = 0.15;            // MHz either side of a station at which it is tuned in
+  const SNAP = 0.3;              // MHz either side of a station at which the dial snaps to it
   const LIMIT = 15000;           // ms of each station on one visit
   const WAIT = 9000;             // ms to wait for a stream to answer
   const fmt = (v: number) => v.toLocaleString('en-GB');
 
   for (const box of document.querySelectorAll<HTMLElement>('[data-dial]')) {
     const q = <T extends Element>(s: string) => box.querySelector<T>(s)!;
-    const map = q<HTMLElement>('[data-dial-map]');
-    const mark = q<HTMLCanvasElement>('[data-dial-mark]');
+    const mapEl = q<HTMLElement>('[data-dial-map]');
     const ticks = q<SVGGElement>('[data-dial-ticks]');
     const needle = q<SVGLineElement>('[data-dial-needle]');
     const band = q<SVGSVGElement>('[data-dial-band]');
@@ -106,10 +121,10 @@ const GRIP = Array.from({ length: 28 }, (_, i) => (i * 360) / 28);
     const site = q<HTMLAnchorElement>('[data-dial-site]');
     const power = q<HTMLButtonElement>('[data-dial-power]');
     const select = q<HTMLSelectElement>('[data-dial-select]');
-    const grid = Number(box.dataset.grid);
 
     let all: Prefecture[] = [];
-    let cells: Uint8ClampedArray | null = null;
+    let map: L.Map | null = null;
+    const shapes = new Map<string, L.Path>();
     let now: Prefecture | null = null;
     let value = LOW;
     let tuned: Station | null = null;
@@ -220,12 +235,15 @@ const GRIP = Array.from({ length: 28 }, (_, i) => (i * 360) / 28);
       }
     }, 200);
 
-    const nearest = (f: number, list: Station[]) => {
+    /** The station the dial snaps to at f: within reach, one that can be heard before one that cannot. `free` takes the nearest of any. */
+    const nearest = (f: number, list: Station[], free = false) => {
       let best: Station | null = null;
-      let gap = CATCH;
+      let gap = Infinity;
       for (const s of list) {
         const d = Math.abs(s[0] - f);
-        if (d < gap) { gap = d; best = s; }
+        if (d > SNAP) continue;
+        const better = free ? d < gap : (Boolean(s[2]) && !best?.[2]) || (Boolean(s[2]) === Boolean(best?.[2]) && d < gap);
+        if (better) { gap = d; best = s; }
       }
       return best;
     };
@@ -241,11 +259,12 @@ const GRIP = Array.from({ length: 28 }, (_, i) => (i * 360) / 28);
     };
 
     /** Tune to f. `settled` is true at the end of a gesture, when a stream may start at once. */
-    const tune = (f: number, settled: boolean) => {
-      value = Math.round(Math.min(HIGH, Math.max(LOW, f)) * 10) / 10;
+    const tune = (f: number, settled: boolean, free = false) => {
       if (!now) return;
       switchOn();
-      const s = nearest(value, now.s);
+      const wanted = Math.round(Math.min(HIGH, Math.max(LOW, f)) * 10) / 10;
+      const s = nearest(wanted, now.s, free);
+      value = s ? s[0] : wanted;
       if (s !== tuned) {
         tuned = s;
         stopStream();
@@ -311,20 +330,10 @@ const GRIP = Array.from({ length: 28 }, (_, i) => (i * 360) / 28);
       }
       const online = p.s.filter((s) => s[2]).length;
       head.textContent = `${p.name}: ${p.n === 1 ? '1 station' : `${p.n} stations`} on air, ${p.p.toFixed(1)} for every 100,000 of its ${fmt(p.r)} residents. ${online ? `${online} can be heard online.` : 'None found online.'}`;
-      if (cells) {
-        const g = mark.getContext('2d')!;
-        const image = g.createImageData(grid, grid);
-        const id = all.indexOf(p) + 1;
-        for (let i = 0; i < grid * grid; i++) {
-          if (cells[i * 4] === id) {
-            image.data[i * 4] = 255;
-            image.data[i * 4 + 1] = 182;
-            image.data[i * 4 + 2] = 72;
-            image.data[i * 4 + 3] = 150;
-          }
-        }
-        g.putImageData(image, 0, 0);
-      }
+      shapes.forEach((shape, name) => {
+        shape.setStyle(name === p.name ? { color: '#111', weight: 2.5 } : { color: '#5a5a5a', weight: 0.7 });
+        if (name === p.name) shape.bringToFront();
+      });
       stationName.textContent = '';
       site.hidden = true;
       box.dataset.tuned = '';
@@ -371,15 +380,13 @@ const GRIP = Array.from({ length: 28 }, (_, i) => (i * 360) / 28);
     knob.addEventListener('keydown', (event) => {
       const list = (now?.s ?? []).map((s) => s[0]);
       let f: number | undefined;
-      if (event.key === 'ArrowRight' || event.key === 'ArrowUp') f = value + 0.1;
-      else if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') f = value - 0.1;
-      else if (event.key === 'PageUp') f = list.find((m) => m > value + 0.05) ?? value;
-      else if (event.key === 'PageDown') f = [...list].reverse().find((m) => m < value - 0.05) ?? value;
+      if (['ArrowRight', 'ArrowUp', 'PageUp'].includes(event.key)) f = list.find((m) => m > value + 0.05) ?? value;
+      else if (['ArrowLeft', 'ArrowDown', 'PageDown'].includes(event.key)) f = [...list].reverse().find((m) => m < value - 0.05) ?? value;
       else if (event.key === 'Home') f = LOW;
       else if (event.key === 'End') f = HIGH;
       if (f === undefined) return;
       event.preventDefault();
-      tune(f, true);
+      tune(f, true, true);
     });
 
     // The band can also be pressed directly.
@@ -388,78 +395,77 @@ const GRIP = Array.from({ length: 28 }, (_, i) => (i * 360) / 28);
       tune(LOW + ((event.clientX - r.left) / r.width) * (HIGH - LOW), true);
     });
 
-    map.addEventListener('click', (event) => {
-      if (!cells) return;
-      const r = map.getBoundingClientRect();
-      const x = Math.min(grid - 1, Math.floor(((event.clientX - r.left) / r.width) * grid));
-      const y = Math.min(grid - 1, Math.floor(((event.clientY - r.top) / r.height) * grid));
-      const id = cells[(y * grid + x) * 4];
-      if (!id) {
-        head.textContent = 'No prefecture there. Click on land in Greece.';
-        return;
-      }
-      show(all[id - 1]);
-    });
+    const focus = (p: Prefecture) => {
+      const shape = shapes.get(p.name) as unknown as L.Polyline | undefined;
+      if (map && shape) map.flyToBounds(shape.getBounds(), { maxZoom: 9, padding: [30, 30], duration: 0.6 });
+    };
+
     box.querySelectorAll<HTMLButtonElement>('.dial__places button').forEach((button) => {
       button.addEventListener('click', () => {
         const p = all.find((c) => c.name === button.dataset.name);
-        if (p) show(p);
+        if (p) { show(p); focus(p); }
       });
     });
     select.addEventListener('change', () => {
       const p = all.find((c) => c.name === select.value);
-      if (p) show(p);
+      if (p) { show(p); focus(p); }
     });
 
-    new IntersectionObserver((entries, observer) => {
-      if (!entries.some((entry) => entry.isIntersecting)) return;
-      observer.disconnect();
-      const picture = new Image();
-      const idsReady = new Promise<void>((ok, no) => {
-        picture.onload = () => {
-          const canvas = document.createElement('canvas');
-          canvas.width = grid;
-          canvas.height = grid;
-          const g = canvas.getContext('2d', { colorSpace: 'srgb', willReadFrequently: true })!;
-          g.drawImage(picture, 0, 0);
-          cells = g.getImageData(0, 0, grid, grid).data;
-          ok();
-        };
-        picture.onerror = () => no(new Error('ids'));
-        picture.src = box.dataset.ids!;
-      });
-      const dataReady = fetch(box.dataset.src!).then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); });
-      Promise.all([dataReady, idsReady]).then(([data]) => {
+    const load = async () => {
+      map = L.map(mapEl, { scrollWheelZoom: true });
+      L.tileLayer(BASEMAP, { attribution: ATTRIBUTION, maxZoom: 19, maxNativeZoom: 16 }).addTo(map);
+      L.control.scale({ imperial: false }).addTo(map);
+      try {
+        const [geo, data] = await Promise.all([box.dataset.geo!, box.dataset.src!].map((url) => fetch(url).then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })));
         all = data;
+        const layer = L.geoJSON(geo, {
+          style: (f) => ({ color: '#5a5a5a', weight: 0.7, fillColor: colourOf(f?.properties.p), fillOpacity: 0.85 }),
+          onEachFeature: (f, shape) => {
+            const { name, n, p } = f.properties;
+            shapes.set(name, shape as L.Path);
+            shape.bindTooltip(`<strong>${name}</strong><br>${n === 1 ? '1 station' : `${n} stations`} on air, ${p.toFixed(1)} per 100,000`, { sticky: true });
+            shape.on('click', () => {
+              const prefecture = all.find((c) => c.name === name);
+              if (prefecture) show(prefecture);
+            });
+          },
+        }).addTo(map);
+        map.fitBounds(layer.getBounds(), { padding: [10, 10] });
+
+        const legend = new L.Control({ position: 'bottomright' });
+        legend.onAdd = () => {
+          const div = L.DomUtil.create('div', 'dial-legend');
+          div.innerHTML = '<strong>Stations on air per 100,000 residents</strong>' + CLASSES.map((c) => `<span><i style="background:${c.colour}"></i>${c.label}</span>`).join('');
+          return div;
+        };
+        legend.addTo(map);
+
         const first = all.find((c) => c.name === box.dataset.start);
         if (first) show(first);
-      }).catch(() => { head.textContent = 'The dials could not be loaded.'; });
-    }, { rootMargin: '400px' }).observe(box);
+      } catch {
+        mapEl.insertAdjacentHTML('beforeend', '<p class="map-error">This map’s data could not be loaded.</p>');
+        head.textContent = 'The dials could not be loaded.';
+      }
+    };
+    whenNear(box, () => { void load(); });
   }
 </script>
 
 <style>
-  .dial__map {
-    position: relative;
-    width: 100%;
-    max-width: 44rem;
-    aspect-ratio: 1;
-    margin-inline: auto;
-    overflow: hidden;
-    border: 1px solid var(--rule);
-    border-radius: var(--radius);
-    background: #fff;
-    cursor: pointer;
+  /* the selected prefecture has its own outline; the browser's box round a clicked path is not wanted */
+  .dial :global(path.leaflet-interactive:focus) { outline: none; }
+  .dial :global(.dial-legend) {
+    padding: 0.35rem 0.5rem;
+    font-size: 0.75rem;
+    line-height: 1.35;
+    color: #222;
+    background: rgba(255, 255, 255, 0.92);
+    border-radius: 3px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
   }
-  .dial__map img,
-  .dial__map canvas {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    display: block;
-  }
-  .dial__map canvas { pointer-events: none; }
+  .dial :global(.dial-legend strong) { display: block; max-width: 9rem; margin-bottom: 0.15rem; font-weight: 600; }
+  .dial :global(.dial-legend span) { display: block; }
+  .dial :global(.dial-legend i) { display: inline-block; width: 0.8rem; height: 0.6rem; margin-right: 0.35rem; border: 1px solid #777; }
   .dial__places {
     display: flex;
     flex-wrap: wrap;

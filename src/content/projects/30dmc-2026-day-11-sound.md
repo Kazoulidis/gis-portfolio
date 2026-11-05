@@ -20,7 +20,7 @@ downloads:
     note: 'JPEG · 4724 × 4724 · 3.5 MB'
 map: '/data/30dmc-2026-day-11-dial.json'
 mapComponent: 'fm-dial'
-mapCaption: 'Click a prefecture, then turn the knob. Between stations you hear static. On a bright tick you hear that station live, from its own public stream, for up to 15 seconds a visit. What plays is whatever is on air, and it is not chosen by me. Check your volume first.'
+mapCaption: 'Click a prefecture, then turn the knob. It snaps to a station as you get close. Between stations you hear static. On a bright tick you hear that station live, from its own public stream, for up to 15 seconds a visit. What plays is whatever is on air, and it is not chosen by me. Check your volume first.'
 dataSource:
   - label: 'National Council for Radio and Television (ESR) - operating radio stations by prefecture, retrieved 5 November 2026'
     href: 'https://www.esr.gr/%cf%81%ce%b1%ce%b4%ce%b9%cf%8c%cf%86%cf%89%ce%bd%ce%bf/'

@@ -1,11 +1,6 @@
 {
- "picture": "/images/30dmc-2026-day-11-frame.webp",
- "ids": "/data/30dmc-2026-day-11-prefectures.png",
+ "geo": "/data/30dmc-2026-day-11-prefectures.geojson",
  "data": "/data/30dmc-2026-day-11-dials.json",
- "alt": "Map of Greece with its 51 prefectures coloured from pale to dark by radio stations on air per 100,000 residents, each labelled with its name and its stations in brackets.",
- "width": 1600,
- "height": 1600,
- "grid": 800,
  "names": [
   "Achaea",
   "Aetolia-Acarnania",
