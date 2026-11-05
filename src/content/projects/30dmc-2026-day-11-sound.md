@@ -1,6 +1,6 @@
 ---
 title: 'Day 11 - Sound: The FM Dial'
-summary: "Greece's broadcasting regulator lists 825 radio stations on air. Bigger places have more of them, but far from in proportion: Attica and Heraklion have 45 each, though Attica has over 12 times the residents. Click a prefecture and sweep its dial."
+summary: "Greece's broadcasting regulator lists 825 radio stations on air. Bigger places have more of them, but far from in proportion: Attica and Heraklion have 45 each, though Attica has over 12 times the residents. Click a prefecture and turn the dial to hear its stations, live."
 date: 2026-11-11
 created: 2026-11-05
 category: '30-day-map-challenge'
@@ -20,10 +20,12 @@ downloads:
     note: 'JPEG · 4724 × 4724 · 3.5 MB'
 map: '/data/30dmc-2026-day-11-dial.json'
 mapComponent: 'fm-dial'
-mapCaption: 'Click a prefecture, or pick one, to sweep its dial. You hear static, with a burst of signal at each real frequency. The sound is generated in your browser and is not a broadcast. Check your volume first.'
+mapCaption: 'Click a prefecture, then turn the knob. Between stations you hear static. On a bright tick you hear that station live, from its own public stream, for up to 15 seconds a visit. What plays is whatever is on air, and it is not chosen by me. Check your volume first.'
 dataSource:
   - label: 'National Council for Radio and Television (ESR) - operating radio stations by prefecture, retrieved 5 November 2026'
     href: 'https://www.esr.gr/%cf%81%ce%b1%ce%b4%ce%b9%cf%8c%cf%86%cf%89%ce%bd%ce%bf/'
+  - label: 'Radio Browser - a community directory of station streams, matched to the list above and tested on 5 November 2026'
+    href: 'https://www.radio-browser.info/'
   - label: 'Hellenic Statistical Authority (ELSTAT) - 2021 census, residents by settlement'
     href: 'https://www.statistics.gr/en/2021-census-pop-hous'
   - label: 'Hellenic Statistical Authority (ELSTAT) - regional units and national boundary'
@@ -78,9 +80,11 @@ all, with 2 stations.
 - **It is what is licensed, not what you receive.** A station counts where it is
   listed. A mountain transmitter carries far past a prefecture's border, so the real
   dial in any one place can be fuller or emptier than this one.
-- **The sound is made up, the positions are not.** The static and signals are
-  generated in the browser, because a list of stations holds no audio. Only the place
-  of each burst on the dial comes from the data.
+- **Not every station can be heard.** ESR's list holds no audio, so I matched its
+  stations to a community directory of streams by name and frequency, and tested
+  that each one answered. 255 of the 824 stations with a frequency passed. Others may
+  have streams I could not match, and a match can still be wrong. A dim tick means
+  no stream was found, and streams can stop working at any time.
 - **The list is not perfect.** One station on air in Attica, ΣΤΥΛ FM, has no
   frequency, so Attica shows 44 ticks for 45 stations. Three stations mention a move
   without saying where to, and stay at their listed frequency. About 20 station
@@ -91,6 +95,9 @@ all, with 2 stations.
 ## Building it
 
 The list is read in Python, and the sheet is built in ArcGIS Pro on my house layout,
-with the sea, land and hillshades of Days 4 and 5. The sound uses the browser's Web
-Audio API. I used only each station's name, prefecture, frequency and status, and
+with the sea, land and hillshades of Days 4 and 5. Each station plays from its own
+public stream in your browser, for 15 seconds at most on each visit, with its name
+and a link to its site where one is known. Nothing is recorded or passes through this
+site, and only the static is generated. If you run one of these stations and would
+like it taken off the dial, please get in touch and I will remove it. I used only each station's name, prefecture, frequency and status, and
 none of the owner details in ESR's file.
