@@ -16,6 +16,15 @@
 # image is for arm64: the output is plain files, and emulating Node would make
 # the build several times slower for nothing.
 FROM --platform=$BUILDPLATFORM node:24-slim AS build
+# The slim image has no fonts, and the default link-preview card (src/og.ts) draws
+# its text at build time: without these every letter comes out as an empty box.
+# Liberation stands in for the card's Times New Roman and Arial. The check stops
+# the build rather than publishing a broken card.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends fontconfig fonts-liberation \
+ && rm -rf /var/lib/apt/lists/* \
+ && fc-match "Times New Roman" | grep -q Liberation \
+ && fc-match Arial | grep -q Liberation
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci

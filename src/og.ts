@@ -68,10 +68,10 @@ export async function defaultCard(name: string, role: string, url: string) {
     <svg width="${OG_WIDTH}" height="${OG_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
       <rect width="100%" height="100%" fill="#f7f5f1"/>
       <rect x="0" y="0" width="${OG_WIDTH}" height="10" fill="#1c5d5d"/>
-      <text x="500" y="270" font-family="Georgia, 'Times New Roman', serif" font-size="58" font-weight="600" fill="#23282d">${esc(name)}</text>
-      <text x="500" y="330" font-family="Segoe UI, Arial, sans-serif" font-size="30" fill="#1c5d5d">${esc(roleA)}</text>
-      ${roleB ? `<text x="500" y="372" font-family="Segoe UI, Arial, sans-serif" font-size="26" fill="#5f6b76">${esc(roleB)}</text>` : ''}
-      <text x="500" y="440" font-family="Segoe UI, Arial, sans-serif" font-size="24" fill="#5f6b76">${esc(url)}</text>
+      <text x="500" y="270" font-family="'Times New Roman', serif" font-size="58" font-weight="600" fill="#23282d">${esc(name)}</text>
+      <text x="500" y="330" font-family="Arial, sans-serif" font-size="30" fill="#1c5d5d">${esc(roleA)}</text>
+      ${roleB ? `<text x="500" y="372" font-family="Arial, sans-serif" font-size="26" fill="#5f6b76">${esc(roleB)}</text>` : ''}
+      <text x="500" y="440" font-family="Arial, sans-serif" font-size="24" fill="#5f6b76">${esc(url)}</text>
     </svg>`;
 
   return sharp(Buffer.from(text))

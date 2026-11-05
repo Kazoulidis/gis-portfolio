@@ -17,7 +17,7 @@ interface Props {
 const {
   title,
   description = site.tagline,
-  image = '/og/default.jpg',
+  image = '/og/default.jpg?v=2', // the number tells Facebook and others the card has changed
   imageAlt = `${site.name}, ${site.role}`,
   type = 'website',
   noindex = false,
