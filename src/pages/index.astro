@@ -14,7 +14,7 @@ import {
   plainTitle,
 } from '../cv';
 import { getCollection } from 'astro:content';
-import { isInList, isListed } from '../projects';
+import { isInList, isListed, untilPublic } from '../projects';
 
 // The newest work, whatever it happens to be - not a hand-picked list, so this
 // stays current on its own as projects are added. Categories opt in via the
@@ -142,7 +142,7 @@ const fullDate = (d: Date) =>
       <h2 class="section">Recent projects</h2>
       {
         recent.map((project) => (
-          <article class="entry">
+          <article class="entry" {...untilPublic(project)}>
             <div class="entry__date">{fullDate(madeOn(project))}</div>
             <div class="entry__body">
               <h3 class="entry__title">
