@@ -1,0 +1,819 @@
+---
+/**
+ * Day 14: Borges's map, counted. At 1:1, Greek land and the EEZ would fill 15.4 trillion sheets of 20 cm. This chart stacks them, with the Earth and the Moon, all to one scale.
+ * The stack runs from the land up through the sea, so that its place in the stack says where a sheet is from. The globes were rendered in ArcGIS Pro.
+ * Imagery is loaded by the visitor's browser as it is needed; nothing is stored or passes through this site.
+ */
+interface Props {
+  src?: string;
+  caption?: string;
+}
+const { caption } = Astro.props;
+// name, lat, lon, how finely a bundle frames it: an even number of cuts of the 46, each two halving its width (34 is 4,096 sheets, 13 m)
+const PLACES: [string, number, number, number][] = [
+  ['Parthenon', 37.97153, 23.72662, 28],
+  ['Panathenaic Stadium', 37.96842, 23.7411, 26],
+  ['Corinth Canal', 37.931, 22.9889, 24],
+  ['Delphi', 38.4824, 22.501, 28],
+  ['Epidaurus', 37.5962, 23.0793, 26],
+  ['Knossos', 35.298, 25.1631, 26],
+  ['White Tower', 40.6264, 22.9484, 30],
+  ['Rio-Antirrio Bridge', 38.3213, 21.77255, 24],
+  ['Oia, Santorini', 36.4615, 25.3757, 26],
+  ['Navagio shipwreck', 37.8595, 20.6248, 26],
+  ['Balos Lagoon', 35.5817, 23.5893, 22],
+  ['Spinalonga', 35.2975, 25.7386, 24],
+  ['Lindos', 36.0917, 28.0885, 26],
+  ['Summit of Olympus', 40.0857, 22.3586, 28],
+  ['Simonopetra, Mount Athos', 40.1904, 24.2472, 28],
+  ['Calypso Deep', 36.57, 21.13, 28],
+];
+---
+
+<figure class="map-figure">
+  <div class="exact" data-exact>
+    <canvas data-exact-canvas role="img" aria-label="Chart to scale: the Earth and the Moon as tiny dots, and a stack of paper from Greece. Greek land alone reaches 330,074 km, short of the Moon. With the sea it reaches 1,536,787 km, almost four times the distance to the Moon."></canvas>
+    <div class="exact__hud" aria-live="off">
+      <div><span>Height of the stack</span><strong data-exact-height></strong></div>
+      <div><span>Sheets in it</span><strong data-exact-count></strong></div>
+    </div>
+    <p class="exact__credit">Earth and Moon: NASA</p>
+  </div>
+  <div class="exact__toggle" role="group" aria-label="What the stack holds">
+    <button type="button" data-exact-mode="sea" aria-pressed="true">Land and sea</button>
+    <button type="button" data-exact-mode="land" aria-pressed="false">Land only</button>
+    <p data-exact-status aria-live="polite"></p>
+  </div>
+  <div class="exact__picker">
+    <p class="exact__lead">Open a bundle of sheets from somewhere worth seeing:</p>
+    <div class="exact__places">
+      {PLACES.map(([name, lat, lon, level]) => <button type="button" data-exact-place data-name={name} data-lat={lat} data-lon={lon} data-level={level} data-sea={name === 'Calypso Deep' ? '' : undefined}>{name}</button>)}
+    </div>
+    <div class="exact__pull">
+      <button type="button" data-exact-any>Any bundle at all</button>
+      <button type="button" data-exact-greek>Any bundle of land</button>
+    </div>
+    <div class="exact__result" data-exact-result hidden>
+      <div class="exact__wrap" data-exact-wrap>
+        <div class="exact__view" data-exact-view role="application" aria-label="Satellite view of the bundle you opened"></div>
+      </div>
+      <div class="exact__facts">
+        <h3 data-exact-number></h3>
+        <button type="button" class="exact__up" data-exact-up hidden>Back up a level</button>
+        <dl data-exact-facts></dl>
+        <p class="exact__note" data-exact-note></p>
+        <p><a data-exact-google target="_blank" rel="noopener noreferrer">Open this spot in Google Maps</a></p>
+      </div>
+    </div>
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<style>
+  .exact { position: relative; aspect-ratio: 16 / 10; overflow: hidden; background: #080c16; border-radius: 4px; }
+  .exact canvas { display: block; width: 100%; height: 100%; }
+  .exact canvas.is-over { cursor: pointer; }
+  .exact__hud { position: absolute; top: 0; left: 0; display: flex; gap: 1.4rem; padding: 0.7rem 0.9rem; color: #e8ecf4; pointer-events: none; font-family: 'Times New Roman', Times, serif; font-size: clamp(0.72rem, 1.5vw, 0.95rem); line-height: 1.25; }
+  .exact__hud span { display: block; opacity: 0.72; font-style: italic; }
+  .exact__hud strong { font-variant-numeric: tabular-nums; font-size: 1.2em; font-weight: 400; }
+  .exact__credit { position: absolute; left: 0.5rem; bottom: 0.25rem; margin: 0; color: #e8ecf4; opacity: 0.6; font-size: 0.68rem; pointer-events: none; }
+  .exact__toggle { display: flex; flex-wrap: wrap; align-items: center; gap: 0; margin-top: 0.6rem; }
+  .exact__toggle button { padding: 0.35rem 0.9rem; font: inherit; font-size: 0.92rem; font-weight: 600; color: inherit; background: none; border: 1px solid currentColor; cursor: pointer; transition: background 0.15s, color 0.15s; }
+  .exact__toggle button:first-of-type { border-radius: 3px 0 0 3px; }
+  .exact__toggle button:nth-of-type(2) { border-left: 0; border-radius: 0 3px 3px 0; }
+  .exact__toggle button[aria-pressed='true'] { color: #111; background: #ecb04e; border-color: #ecb04e; }
+  .exact__toggle p { flex: 1 1 16rem; margin: 0 0 0 0.9rem; font-size: 0.92rem; }
+  .exact__picker { margin-top: 0.9rem; }
+  .exact__lead { margin: 0 0 0.4rem; font-weight: 600; }
+  .exact__places { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.6rem; }
+  .exact__places button { padding: 0.25rem 0.6rem; font: inherit; font-size: 0.88rem; color: inherit; background: none; border: 1px solid currentColor; border-radius: 999px; cursor: pointer; transition: background 0.15s, color 0.15s; }
+  .exact__places button:hover, .exact__places button:focus-visible, .exact__places button[aria-pressed='true'] { color: #111; background: #ecb04e; border-color: #ecb04e; }
+  .exact__places button[hidden] { display: none; }
+  .exact__pull { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+  .exact__pull button { padding: 0.4rem 0.8rem; font: inherit; font-size: 0.95rem; font-weight: 600; color: inherit; background: none; border: 1px solid currentColor; border-radius: 3px; cursor: pointer; }
+  .exact__result { display: grid; grid-template-columns: 3fr 2fr; gap: 0.8rem; margin-top: 0.7rem; }
+  .exact__result[hidden] { display: none; }
+  .exact__wrap { position: relative; z-index: 5; width: 100%; box-shadow: 0 4px 12px rgb(0 0 0 / 0.25); aspect-ratio: 1; align-self: start; transform-origin: center; background: #f6f3ea; border-radius: 3px; }
+  .exact__view { position: absolute; inset: 0; background: #10131a; border-radius: 3px; }
+  .exact__deal { position: absolute; inset: 0; z-index: 1000; display: grid; grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(5, 1fr); pointer-events: none; }
+  .exact__deal i { display: block; background: #f6f3ea; outline: 0.5px solid rgb(60 60 70 / 0.35); will-change: transform, opacity; }
+  .exact__facts h3 { margin: 0 0 0.5rem; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+  .exact__facts dl { display: grid; grid-template-columns: auto 1fr; gap: 0.15rem 0.7rem; margin: 0 0 0.6rem; font-size: 0.92rem; }
+  .exact__facts dt { opacity: 0.7; }
+  .exact__facts dd { margin: 0; }
+  .exact__note { font-size: 0.88rem; opacity: 0.85; }
+  .exact__up { margin: 0 0 0.6rem; padding: 0.3rem 0.7rem; font: inherit; font-size: 0.9rem; font-weight: 600; color: inherit; background: none; border: 1px solid currentColor; border-radius: 3px; cursor: pointer; }
+  .exact__up[hidden] { display: none; }
+  @media (max-width: 720px) {
+    .exact__result { grid-template-columns: 1fr; }
+    .exact__toggle p { flex-basis: 100%; margin: 0.4rem 0 0; }
+  }
+</style>
+
+<script>
+  import * as L from 'leaflet';
+  import 'leaflet/dist/leaflet.css';
+
+  const root = document.querySelector<HTMLElement>('[data-exact]');
+  if (root) start(root);
+
+  function start(root: HTMLElement) {
+    const canvas = root.querySelector<HTMLCanvasElement>('[data-exact-canvas]')!;
+    const screen = canvas.getContext('2d')!;
+    let ctx = screen;                                                // the words and shapes below draw on whichever is current
+    const layer = document.createElement('canvas'), layerCtx = layer.getContext('2d')!;
+    let layerKey = '';
+    const $ = <T extends HTMLElement>(n: string) => document.querySelector<T>(`[data-exact-${n}]`)!;
+    const elHeight = $('height'), elCount = $('count'), elStatus = $('status');
+    const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // ---- the numbers: measured in eez_measure.py ----
+    const SHEETS = 15367874013300, LAND_SHEETS = 3300744308678;
+    const TOP_KM = 1536787, LAND_KM = 330074, MOON_KM = 384400, AXIS_KM = 4 * MOON_KM;
+    const LANDF = LAND_KM / TOP_KM, ZOOM_KM = MOON_KM * 1.14;           // with the land alone, the view closes in on the Moon's ring
+    const EARTH_KM = 12742, MOON_D_KM = 3474;
+
+    // ---- the grid behind the stack: Web Mercator metres; K turns true metres at 38 N into them ----
+    const R0 = 20037508.34;
+    const mx = (lon: number) => (lon / 180) * R0;
+    const my = (lat: number) => (Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360)) / Math.PI) * R0;
+    const K = 1 / Math.cos((38 * Math.PI) / 180);
+    const SIDE = 2 ** 23 * 0.2 * K, CX = mx(24.2), CY = my(37.2);
+    const S = { x0: CX - SIDE / 2, x1: CX + SIDE / 2, y0: CY - SIDE / 2, y1: CY + SIDE / 2 };
+    const LEVELS = 46;                                               // cuts of that square down to one sheet
+    const fmtN = (n: number) => Math.round(n).toLocaleString('en-GB');
+    const ease = (f: number) => { f = Math.min(1, Math.max(0, f)); return f * f * (3 - 2 * f); };
+    const rnd = (i: number) => { const v = Math.sin(i * 127.1 + 311.7) * 43758.5453; return v - Math.floor(v); };
+
+    // ---- imagery, fetched as it is seen ----
+    const GOOGLE = { url: (z: number, x: number, y: number) => `https://mt${(x + y) % 4}.google.com/vt/lyrs=s&x=${x}&y=${y}&z=${z}`, maxZ: 22, credit: 'Imagery © Google' };
+    let dirty = true;
+    type Tile = { img: HTMLImageElement; ok: boolean };
+    const tiles = new Map<string, Tile>();
+    function tile(z: number, x: number, y: number): Tile {
+      const key = `${z}/${x}/${y}`;
+      let t = tiles.get(key);
+      if (!t) {
+        const made: Tile = { img: new Image(), ok: false };
+        made.img.onload = () => { made.ok = true; dirty = true; };
+        made.img.src = GOOGLE.url(z, x, y);
+        tiles.set(key, made);
+        if (tiles.size > 300) tiles.delete(tiles.keys().next().value as string);
+        t = made;
+      }
+      return t;
+    }
+    const earthImg = new Image(), moonImg = new Image();
+    earthImg.onload = moonImg.onload = () => { dirty = true; };
+    earthImg.src = '/images/30dmc-2026-day-14-earth.webp';
+    moonImg.src = '/images/30dmc-2026-day-14-moon.webp';
+
+    // ---- the chart ----
+    let W = 1, H = 1, DPR = 1;
+    const FS = () => Math.max(10.5, W / 74);
+    const SERIF = '"Times New Roman", Times, serif';
+    const SKY = '#080c16', INK = 'rgba(232,236,244,', LAND = '#ecb04e', SEA = '#70b0ea', RING = 'rgba(150,165,195,.55)';
+    function geom() {
+      const ex = Math.max(26, W * 0.055), ey = H - Math.max(26, H * 0.11), tx = W - Math.max(16, W * 0.04), ty = Math.max(30, H * 0.13);
+      const len = Math.hypot(tx - ex, ty - ey), ux = (tx - ex) / len, uy = (ty - ey) / len, zoomed = ease((1 - keep) / (1 - LANDF)), pp = len / (AXIS_KM * (ZOOM_KM / AXIS_KM) ** zoomed);
+      const rE = (EARTH_KM / 2) * pp, rM = (MOON_D_KM / 2) * pp;
+      const gx = ex + 0.9063 * rE * ux, gy = ey + 0.9063 * rE * uy;
+      const px = uy, py = -ux;                                       // towards the upper left of the stack
+      const at = (km: number, off = 0) => [gx + km * pp * ux + off * px, gy + km * pp * uy + off * py];
+      const ang = Math.atan2(uy, ux), ma = ang + (24 * Math.PI) / 180;
+      const mox = gx + MOON_KM * pp * Math.cos(ma), moy = gy + MOON_KM * pp * Math.sin(ma);
+      return { ex, ey, ux, uy, px, py, pp, rE, rM, gx, gy, at, ang, mox, moy };
+    }
+    type Geom = ReturnType<typeof geom>;
+    function words(s: string, x: number, y: number, size: number, align: CanvasTextAlign, col: string, o: { italic?: boolean; bold?: boolean; plate?: boolean } = {}) {
+      ctx.font = `${o.italic ? 'italic ' : ''}${o.bold ? '700 ' : ''}${size}px ${SERIF}`;
+      ctx.textAlign = align;
+      if (o.plate !== false) {
+        const w = ctx.measureText(s).width + 4, x0 = align === 'left' ? x - 2 : align === 'right' ? x - w + 2 : x - w / 2;
+        ctx.fillStyle = SKY; ctx.fillRect(x0, y - size * 0.86, w, size * 1.12);
+      }
+      ctx.fillStyle = col; ctx.fillText(s, x, y);
+    }
+
+    let keep = 1, noSea = false;                                     // how much of the stack is there: 1 with the sea, LANDF without
+    let hoverKm = -1, shownKm = -1, hoverAmt = 0, lastSwap = 0, hoverKind: '' | 'earth' | 'moon' = '', lensKind: '' | 'earth' | 'moon' = '', lensAmt = 0;
+    let pickedKm = -1;
+
+    function drawStack(G: Geom, bulge: boolean) {
+      const topKm = keep * TOP_KM, wiggle = performance.now() / 110;
+      const half = (km: number) => {
+        let w = 1.05;
+        if (bulge && hoverAmt > 0.01 && shownKm >= 0) {
+          const d_ = (km - shownKm) / (TOP_KM * 0.022);
+          w += hoverAmt * 6.5 * Math.exp(-d_ * d_) * (1 + 0.12 * Math.sin(km / 9000 + wiggle));
+        }
+        return w;
+      };
+      const seg = (a: number, b: number, col: string) => {
+        if (b <= a) return;
+        const n = Math.max(2, Math.ceil(((b - a) / TOP_KM) * 260)), L_: number[][] = [], R_: number[][] = [];
+        for (let i = 0; i <= n; i++) {
+          const km = a + ((b - a) * i) / n, w = half(km);
+          L_.push(G.at(km, w)); R_.push(G.at(km, -w));
+        }
+        ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(L_[0][0], L_[0][1]);
+        for (const q of L_) ctx.lineTo(q[0], q[1]);
+        for (const q of R_.reverse()) ctx.lineTo(q[0], q[1]);
+        ctx.closePath(); ctx.fill();
+      };
+      seg(0, Math.min(LAND_KM, topKm), LAND);
+      seg(LAND_KM, topKm, SEA);
+      // the sea's sheets leaving, while the toggle runs
+      if (keep > LANDF + 0.003 && keep < 0.997) {
+        const [ox, oy] = G.at(topKm);
+        for (let i = 0; i < 34; i++) {
+          const life = (keep * 7 + rnd(i + 40)) % 1, a_ = rnd(i + 50) * 2.2 + G.ang - 1.4, dist = life * W * 0.16, c = FS() * 0.62;
+          ctx.save(); ctx.translate(ox + Math.cos(a_) * dist, oy + Math.sin(a_) * dist); ctx.rotate(life * (rnd(i + 70) * 6 - 3)); ctx.globalAlpha = (1 - life) * 0.9;
+          ctx.fillStyle = `rgb(${50 + rnd(i) * 60},${120 + rnd(i + 1) * 50},${190 + rnd(i + 2) * 50})`; ctx.fillRect(-c / 2, -c / 2, c, c);
+          ctx.restore();
+        }
+        ctx.globalAlpha = 1;
+      }
+    }
+    function drawChart() {
+      const G = geom(), f = FS(), small = Math.max(10.5, f * 0.86), roomy = MOON_KM * G.pp > small * 7.5;
+      ctx.fillStyle = SKY; ctx.fillRect(0, 0, W, H);
+      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = keep === 1 || keep === LANDF ? 'high' : 'medium';
+      // range rings around Greece, every Moon's distance
+      ctx.strokeStyle = RING; ctx.lineWidth = 0.8;
+      for (let n = 1; n <= 4; n++) { ctx.beginPath(); ctx.arc(G.gx, G.gy, n * MOON_KM * G.pp, 0, 2 * Math.PI); ctx.stroke(); }
+      // the bodies, at their true size, turned as the stack is
+      ctx.save(); ctx.translate(G.ex, G.ey); ctx.rotate(G.ang);
+      if (earthImg.complete && earthImg.naturalWidth) { const s_ = G.rE / 0.8; ctx.drawImage(earthImg, -s_, -s_, s_ * 2, s_ * 2); }
+      ctx.restore();
+      if (moonImg.complete && moonImg.naturalWidth) { const s_ = G.rM / 0.96; ctx.drawImage(moonImg, G.mox - s_, G.moy - s_, s_ * 2, s_ * 2); }
+      // the graduation
+      ctx.strokeStyle = `${INK}.7)`; ctx.lineWidth = 0.8;
+      const topKm = keep * TOP_KM;
+      for (let i = 1; i * 1e5 <= topKm; i++) { const a = G.at(i * 1e5, -2.2), b = G.at(i * 1e5, -6); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); }
+      for (let n = 1; n <= 4; n++) {
+        const km = n * MOON_KM, a = G.at(km, 2), b = G.at(km, 9), c = G.at(km, 12);
+        ctx.strokeStyle = `${INK}.9)`; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+        if (roomy) {
+          words(`${fmtN(km)} km`, c[0] + 2, c[1] - 1, small, 'right', `${INK}1)`);
+          words(n === 1 ? "The Moon's distance" : `${n} times`, c[0] + 2, c[1] - 1 - small * 1.15, small, 'right', `${INK}.75)`, { italic: true });
+        } else words(`${n}×`, c[0] + 2, c[1] - 1, small, 'right', `${INK}1)`);
+      }
+      drawStack(G, false);
+      if (pickedKm >= 0 && pickedKm <= topKm) {
+        const a = G.at(pickedKm, 7), b = G.at(pickedKm, -7);
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+      }
+      // locators and names: at this scale the Moon is a speck
+      ctx.strokeStyle = `${INK}.9)`; ctx.lineWidth = 0.9;
+      const ringE = Math.max(G.rE + 4, 8), ringM = Math.max(G.rM + 4, 6);
+      ctx.beginPath(); ctx.arc(G.ex, G.ey, ringE, 0, 7); ctx.stroke();
+      ctx.beginPath(); ctx.arc(G.mox, G.moy, ringM, 0, 7); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(G.ex + ringE * 0.7, G.ey + ringE * 0.7); ctx.lineTo(G.ex + ringE * 0.7 + 7, G.ey + ringE * 0.7 + 7); ctx.stroke();
+      if (G.mox + ringM + 12 + f * 10.5 > W) {
+        ctx.beginPath(); ctx.moveTo(G.mox - ringM, G.moy); ctx.lineTo(G.mox - ringM - 9, G.moy); ctx.stroke();
+        words(roomy ? `Moon, ${fmtN(MOON_D_KM)} km across` : 'Moon', G.mox - ringM - 12, G.moy + f * 0.34, f * 0.95, 'right', `${INK}1)`);
+      } else {
+        ctx.beginPath(); ctx.moveTo(G.mox + ringM, G.moy); ctx.lineTo(G.mox + ringM + 9, G.moy); ctx.stroke();
+        words(roomy ? `Moon, ${fmtN(MOON_D_KM)} km across` : 'Moon', G.mox + ringM + 12, G.moy + f * 0.34, f * 0.95, 'left', `${INK}1)`);
+      }
+      words(roomy ? `Earth, ${fmtN(EARTH_KM)} km across` : 'Earth', G.ex + ringE * 0.7 + 9, Math.min(H - 5, G.ey + ringE * 0.7 + 7 + f * 0.5), f * 0.95, 'left', `${INK}1)`);
+      // what the stack comes to
+      const lBase = G.at(LAND_KM, -3), lTo = [lBase[0] + 12, lBase[1] + 13];
+      ctx.strokeStyle = LAND; ctx.lineWidth = 0.9; ctx.beginPath(); ctx.moveTo(lBase[0], lBase[1]); ctx.lineTo(lTo[0], lTo[1]); ctx.stroke();
+      words(`Land alone: ${fmtN(LAND_KM)} km`, lTo[0] + 3, lTo[1] + f * 0.4, f, 'left', LAND, { bold: true });
+      words('54,326 km short of the Moon', lTo[0] + 3, lTo[1] + f * 1.55, f * 0.92, 'left', `${INK}1)`);
+      const seaShown = (keep - LANDF) / (1 - LANDF);
+      if (seaShown > 0.01) {
+        ctx.globalAlpha = ease(seaShown);
+        const e = G.at(TOP_KM), tx = Math.min(W - 10, e[0] + W * 0.01), ty = e[1] + H * 0.17;
+        ctx.strokeStyle = SEA; ctx.lineWidth = 0.9; ctx.beginPath(); ctx.moveTo(e[0], e[1] + 2); ctx.lineTo(tx, ty - f * 0.9); ctx.stroke();
+        words(`With the sea: ${fmtN(TOP_KM)} km`, tx, ty, f, 'right', SEA, { bold: true });
+        words('813 km short of four Moon distances', tx, ty + f * 1.15, f * 0.92, 'right', `${INK}1)`);
+        ctx.globalAlpha = 1;
+      }
+      // the scale bar, and the note
+      const span = 5e5 * G.pp > W * 0.5 ? 1e5 : 5e5, divs = span === 1e5 ? 4 : 5, bw = span * G.pp, per = bw / divs, bx = W - W * 0.035 - bw, by = H - f * (W > 620 ? 3.6 : 1.4);
+      for (let i = 0; i < divs; i++) { ctx.fillStyle = i % 2 ? SKY : `${INK}.95)`; ctx.fillRect(bx + i * per, by, per, 3.5); }
+      ctx.strokeStyle = `${INK}.95)`; ctx.lineWidth = 0.7; ctx.strokeRect(bx, by, bw, 3.5);
+      words('0', bx, by - 3.5, small, 'center', `${INK}1)`);
+      words(`${fmtN(span / 1000)},000 km`, bx + bw, by - 3.5, small, 'right', `${INK}1)`);
+      if (W > 620) {
+        words('The Earth, the Moon and all distances are true to this bar;', W - W * 0.035, by + 3.5 + small * 1.1, small, 'right', `${INK}.75)`, { italic: true });
+        words("only the stack's thickness is enlarged.", W - W * 0.035, by + 3.5 + small * 2.2, small, 'right', `${INK}.75)`, { italic: true });
+      }
+    }
+    function paint() {
+      const key = `${canvas.width}|${canvas.height}|${keep}|${pickedKm}|${earthImg.complete && earthImg.naturalWidth}|${moonImg.complete && moonImg.naturalWidth}`;
+      if (key !== layerKey) {
+        layerKey = key;
+        layer.width = canvas.width; layer.height = canvas.height;
+        ctx = layerCtx; ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+        drawChart();
+        ctx = screen;
+      }
+      screen.setTransform(1, 0, 0, 1, 0, 0); screen.globalAlpha = 1;
+      screen.drawImage(layer, 0, 0);
+      screen.setTransform(DPR, 0, 0, DPR, 0, 0);
+      const moving = hoverAmt > 0.01 && shownKm >= 0;
+      if (moving || lensAmt > 0.01) {
+        const G = geom();
+        if (moving) drawStack(G, true);
+        if (lensAmt > 0.01 && lensKind) { screen.imageSmoothingQuality = lensAmt === 1 ? 'high' : 'low'; drawLens(G, lensKind, lensAmt); }
+        if (moving) drawCard(G);
+      }
+    }
+
+    /** Hovering a body: a lens grows out of it, with the same globe, enlarged, and what it is. */
+    function drawLens(G: Geom, kind: 'earth' | 'moon', amt: number) {
+      const a = amt < 1 ? 1 - (1 - amt) ** 3 : 1;
+      const earth = kind === 'earth', bx = earth ? G.ex : G.mox, by = earth ? G.ey : G.moy, r0 = earth ? G.rE : G.rM;
+      const LR = Math.min(H * 0.26, W * 0.17);
+      const cx1 = earth ? Math.max(LR + 12, bx + LR * 0.2) : Math.min(W - LR * 1.2, bx + LR * 1.5), cy1 = earth ? Math.max(LR + H * 0.14, by - LR * 1.55) : Math.min(H - LR - 8, by + LR * 0.75);
+      const r = r0 + (LR - r0) * a, cx = bx + (cx1 - bx) * a, cy = by + (cy1 - by) * a;
+      const nx = (bx - cx) / (Math.hypot(bx - cx, by - cy) || 1), ny = (by - cy) / (Math.hypot(bx - cx, by - cy) || 1);
+      ctx.strokeStyle = `${INK}${0.55 * amt})`; ctx.lineWidth = 0.8; ctx.beginPath();
+      ctx.moveTo(bx, by); ctx.lineTo(cx + nx * r * Math.cos(0.9) - ny * r * Math.sin(0.9), cy + ny * r * Math.cos(0.9) + nx * r * Math.sin(0.9));
+      ctx.moveTo(bx, by); ctx.lineTo(cx + nx * r * Math.cos(0.9) + ny * r * Math.sin(0.9), cy + ny * r * Math.cos(0.9) - nx * r * Math.sin(0.9)); ctx.stroke();
+      const img = earth ? earthImg : moonImg, s_ = earth ? r / 0.8 : r / 0.96;
+      ctx.save(); ctx.globalAlpha = Math.min(1, amt * 1.6);
+      ctx.fillStyle = SKY; ctx.beginPath(); ctx.arc(cx, cy, r + 3, 0, 7); ctx.fill();
+      ctx.translate(cx, cy); if (earth) ctx.rotate(G.ang);
+      if (img.complete && img.naturalWidth) ctx.drawImage(img, -s_, -s_, s_ * 2, s_ * 2);
+      ctx.restore();
+      if (earth && a > 0.6) {
+        // where the stack stands
+        const q = ease((a - 0.6) / 0.4), hx = cx + 0.9063 * r * G.ux, hy = cy + 0.9063 * r * G.uy;
+        ctx.strokeStyle = LAND; ctx.lineWidth = 1.6; ctx.globalAlpha = q; ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(hx + G.ux * r * 0.34, hy + G.uy * r * 0.34); ctx.stroke();
+        words('Greece', hx + G.ux * r * 0.34 + 4, hy + G.uy * r * 0.34, FS() * 0.92, 'left', LAND, { bold: true });
+        ctx.globalAlpha = 1;
+      }
+      if (a > 0.5) {
+        const q = ease((a - 0.5) / 0.5), tx = cx + r + 12, f = FS(), times = Math.round((r / r0) / 5) * 5;
+        ctx.globalAlpha = q;
+        const lines = earth
+          ? [`${fmtN(EARTH_KM)} km across`, `${(r0 * 2).toFixed(1)} px on this chart`, `Shown here ${times} times larger`]
+          : [`${fmtN(MOON_D_KM)} km across, ${fmtN(MOON_KM)} km away`, `${(r0 * 2).toFixed(1)} px on this chart`, `Shown here ${times} times larger`];
+        const right = tx + f * 14 > W;
+        const lx = right ? cx - r - 12 : tx, al: CanvasTextAlign = right ? 'right' : 'left';
+        words(earth ? 'The Earth' : 'The Moon', lx, cy - f * 1.4, f * 1.15, al, `${INK}1)`, { bold: true });
+        lines.forEach((l_, i) => words(l_, lx, cy + i * f * 1.2, f * 0.95, al, `${INK}${i ? 0.8 : 1})`, { italic: i > 0 }));
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    let cardKm = -1, cardHasPlace = false, cardLoc: ReturnType<typeof sheetAt> | undefined;
+    /** Set while a place button is hovered: the card then shows exactly the bundle that button opens. */
+    const cardPic = document.createElement('canvas'), cardPicCtx = cardPic.getContext('2d')!;
+    let hoverPlace: { name: string; x: number; y: number; side: number } | undefined;
+    /** Draws the imagery of a Web Mercator box, across as many tiles as it falls on, into the card's picture. */
+    function drawBox(x0: number, x1: number, y0: number, y1: number, dx: number, dy: number, dw: number, dh: number) {
+      const maxZ = GOOGLE.maxZ, z = Math.min(maxZ, Math.floor(Math.log2((2 * R0) / (x1 - x0)))), ts = (2 * R0) / 2 ** z;
+      ctx.save(); ctx.beginPath(); ctx.rect(dx, dy, dw, dh); ctx.clip();
+      ctx.imageSmoothingEnabled = true;
+      for (let ty = Math.floor((R0 - y1) / ts); ty <= Math.floor((R0 - y0) / ts); ty++) for (let tx = Math.floor((x0 + R0) / ts); tx <= Math.floor((x1 + R0) / ts); tx++) {
+        const t_ = tile(z, tx, ty);
+        if (!t_.ok) continue;
+        const px = dx + ((tx * ts - R0 - x0) / (x1 - x0)) * dw, py = dy + ((y1 - (R0 - ty * ts)) / (y1 - y0)) * dh, sz = (ts / (x1 - x0)) * dw;
+        ctx.drawImage(t_.img, px, py, sz + 0.5, sz + 0.5);
+      }
+      ctx.restore();
+    }
+    /** Hovering the stack: it swells around the pointer, sheets riffle out of it, and the one under the pointer flips into view. */
+    function drawCard(G: Geom) {
+      const km = shownKm, amt = hoverAmt, f = FS();
+      const [x, y] = G.at(km);
+      for (let i = -6; i <= 6; i++) {
+        const lift = amt * Math.min(H * 0.07, 40) * (1 - Math.abs(i) / 7) ** 1.4 + Math.sin(performance.now() / 90 + i) * amt * 1.5, along = i * (1.5 + 2.6 * amt);
+        const base = [x + along * G.ux, y + along * G.uy];
+        ctx.strokeStyle = Math.abs(i) <= 1 ? '#fff' : i % 2 ? '#f6f3ea' : '#c9c5b6'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(base[0] - G.px * 3, base[1] - G.py * 3); ctx.lineTo(base[0] + G.px * lift, base[1] + G.py * lift); ctx.stroke();
+      }
+      if (km !== cardKm || (!cardHasPlace && loadedPlaces)) { cardKm = km; cardLoc = sheetAt(km); cardHasPlace = !!loadedPlaces && !!loadedGrid; }
+      const cw = Math.min(H * 0.3, W * 0.28), ch = cw, loc = cardLoc!;
+      const ox = x + G.px * (ch * 0.5 + 34), oy = y + G.py * (ch * 0.5 + 34);
+      const cx_ = Math.min(W - cw / 2 - 8, Math.max(cw / 2 + 8, ox)), cy_ = Math.min(H - ch / 2 - f * 3.4, Math.max(ch / 2 + 8, oy));
+      ctx.save();
+      ctx.globalAlpha = amt;
+      ctx.translate(cx_, cy_ + (1 - amt) * H * 0.012);
+      ctx.shadowColor = 'rgba(0,0,0,.7)'; ctx.shadowBlur = 16; ctx.shadowOffsetY = 6;
+      ctx.fillStyle = '#f6f3ea'; ctx.fillRect(-cw / 2 - 4, -ch / 2 - 4, cw + 8, ch + f * 2.7 + 8);
+      ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+      const hp = hoverPlace, pw = Math.max(1, Math.round(cw * DPR));
+      if (cardPic.width !== pw) { cardPic.width = cardPic.height = pw; cardPicCtx.fillStyle = '#2b3140'; cardPicCtx.fillRect(0, 0, pw, pw); }
+      const half = hp ? (hp.side * (SIDE / 2 ** 23)) / 2 : 700 * K, px_ = hp ? hp.x : loc.x, py_ = hp ? hp.y : loc.y;
+      if (px_ !== null && py_ !== null) {
+        const main = ctx;
+        ctx = cardPicCtx; ctx.setTransform(1, 0, 0, 1, 0, 0);
+        drawBox(px_ - half, px_ + half, py_ - half, py_ + half, 0, 0, pw, pw);
+        ctx = main;
+      }
+      ctx.drawImage(cardPic, -cw / 2, -ch / 2, cw, ch);
+      if (!hp && loc.x !== null) { ctx.strokeStyle = '#ffb648'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, 5, 0, 7); ctx.stroke(); }
+      ctx.fillStyle = '#17181c'; ctx.textAlign = 'left'; ctx.font = `700 ${f * 0.92}px ${SERIF}`;
+      ctx.fillText(hp ? hp.name : `${loc.land ? 'Land' : 'Sea'}${loc.place ? ', ' + loc.place : ''}`, -cw / 2, ch / 2 + f * 1.15, cw);
+      ctx.font = `${f * 0.84}px ${SERIF}`;
+      const across = hp ? hp.side * 0.2 : 0;
+      ctx.fillText(hp ? `${fmtN(km)} km up. A bundle of ${fmtN(hp.side * hp.side)} sheets, ${across < 1000 ? `${fmtN(across)} m` : `${(across / 1000).toFixed(1)} km`} across` : `${fmtN(km)} km up. Click to open a bundle of 4,096 sheets`, -cw / 2, ch / 2 + f * 2.3, cw);
+      ctx.restore();
+    }
+
+    // ---- the stack and the ground: land first, then the sea, cell by cell ----
+    type Grid = { w: number; h: number; d: Uint8ClampedArray; land: Int32Array; sea: Int32Array; rank: Int32Array };
+    let loadedGrid: Grid | undefined, gridP: Promise<Grid> | undefined;
+    const loadGrid = () => (gridP ??= new Promise<Grid>((res, rej) => {
+      const im = new Image();
+      im.onerror = rej;
+      im.onload = () => {
+        const c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight;
+        const x = c.getContext('2d', { willReadFrequently: true })!; x.drawImage(im, 0, 0);
+        const d = x.getImageData(0, 0, c.width, c.height).data, w = c.width, h = c.height, n = w * h;
+        let a = 0, b = 0;
+        for (let k = 0; k < n; k++) { if (d[k * 4] === 1) a++; else if (d[k * 4] === 2) b++; }
+        const land = new Int32Array(a), sea = new Int32Array(b), rank = new Int32Array(n);
+        a = 0; b = 0;
+        for (let k = 0; k < n; k++) { if (d[k * 4] === 1) { rank[k] = a; land[a++] = k; } else if (d[k * 4] === 2) { rank[k] = b; sea[b++] = k; } }
+        loadedGrid = { w, h, d, land, sea, rank };
+        dirty = true;
+        res(loadedGrid);
+      };
+      im.src = '/data/30dmc-2026-day-14-grid.png';
+    }));
+    type Places = { names: string[]; lon: number[]; lat: number[] };
+    let placesP: Promise<Places> | undefined, loadedPlaces: Places | undefined;
+    const loadPlaces = () => (placesP ??= fetch('/data/30dmc-2026-day-14-places.json').then((r) => r.json()).then((p: Places) => { loadedPlaces = p; dirty = true; return p; }));
+    let seaP: Promise<[number, number][]> | undefined;
+    const loadSea = () => (seaP ??= fetch('/data/30dmc-2026-day-14-sea.json').then((r) => r.json()));
+    const nearest = (p: Places, lat: number, lon: number) => {
+      let best = 0, bd = Infinity;
+      const c_ = Math.cos((lat * Math.PI) / 180);
+      for (let i = 0; i < p.names.length; i++) { const e = (p.lat[i] - lat) ** 2 + ((p.lon[i] - lon) * c_) ** 2; if (e < bd) { bd = e; best = i; } }
+      return { name: p.names[best], km: Math.sqrt(bd) * 111.2 };
+    };
+    const lonOf = (x: number) => (x / R0) * 180;
+    const ll = (x: number, y: number) => L.latLng(latOf(y), lonOf(x));
+    const latOf = (y: number) => (2 * Math.atan(Math.exp((y / R0) * Math.PI)) - Math.PI / 2) * (180 / Math.PI);
+    /** Where a height in the stack lies on the ground. */
+    function sheetAt(km: number): { land: boolean; x: number | null; y: number | null; place: string } {
+      const q = km / TOP_KM, land = q < LANDF, g = loadedGrid;
+      if (!g) return { land, x: null, y: null, place: '' };
+      const list = land ? g.land : g.sea, r = (land ? q / LANDF : (q - LANDF) / (1 - LANDF)) * list.length;
+      const i = Math.min(list.length - 1, Math.floor(r)), cell = list[i], fr = r - i;
+      const x = S.x0 + (((cell % g.w) + fr) / g.w) * SIDE, y = S.y1 - ((Math.floor(cell / g.w) + rnd(cell + fr)) / g.h) * SIDE;
+      let place = '';
+      if (loadedPlaces) { const n_ = nearest(loadedPlaces, latOf(y), lonOf(x)); place = n_.km < 40 ? `near ${n_.name}` : `${fmtN(n_.km)} km from ${n_.name}`; }
+      return { land, x, y, place };
+    }
+    /** The height in the stack of a place on the ground. */
+    function kmAt(x: number, y: number, land = false): number {
+      const g = loadedGrid!;
+      const col = Math.min(g.w - 1, Math.max(0, Math.floor(((x - S.x0) / SIDE) * g.w))), row = Math.min(g.h - 1, Math.max(0, Math.floor(((S.y1 - y) / SIDE) * g.h))), k = row * g.w + col, c_ = g.d[k * 4];
+      if (c_ === 1) return (g.rank[k] / g.land.length) * LAND_KM;
+      if (c_ === 2 && !land) return LAND_KM + (g.rank[k] / g.sea.length) * (TOP_KM - LAND_KM);
+      // a coast finer than the grid: the nearest land
+      for (let d_ = 1; d_ < 8; d_++) for (let b = -d_; b <= d_; b++) for (let a = -d_; a <= d_; a++) {
+        const o = (row + b) * g.w + col + a;
+        if (o >= 0 && o < g.d.length / 4 && g.d[o * 4] === 1) return (g.rank[o] / g.land.length) * LAND_KM;
+      }
+      return c_ === 2 ? LAND_KM + (g.rank[k] / g.sea.length) * (TOP_KM - LAND_KM) : -1;
+    }
+
+    // ---- the frame ----
+    let lastFrame = performance.now();
+    const speedSea = () => (reduced() ? 100 : 1 / 1.3);
+    function setHud() {
+      const count = keep >= 0.9999 ? SHEETS : keep <= LANDF + 0.0001 ? LAND_SHEETS : keep * SHEETS;
+      const a = `${fmtN(keep * TOP_KM)} km`, b = fmtN(count);
+      if (elHeight.textContent !== a) elHeight.textContent = a;
+      if (elCount.textContent !== b) elCount.textContent = b;
+    }
+    function frame(now: number) {
+      const dt = Math.min(0.3, (now - lastFrame) / 1000); lastFrame = now;
+      const target = noSea ? LANDF : 1;
+      if (keep !== target) {
+        const step = dt * speedSea() * (1 - LANDF);
+        keep = Math.abs(target - keep) <= step ? target : keep + Math.sign(target - keep) * step;
+        dirty = true;
+      }
+      const over = hoverKm >= 0;
+      if (over || hoverAmt > 0.01) {
+        hoverAmt += ((over ? 1 : 0) - hoverAmt) * Math.min(1, dt * 26);
+        const step = 3 / geom().pp, target = hoverPlace ? hoverKm : Math.round(hoverKm / step) * step;   // the pointer is good to a few pixels, and so is the sheet it shows
+        if (over && now - lastSwap > 60 && target !== shownKm) { shownKm = target; lastSwap = now; }   // a hand's tremor must not change the sheet: neighbouring heights can be far apart on the ground
+        if (!over && hoverAmt <= 0.01) { hoverAmt = 0; shownKm = -1; }
+        dirty = true;
+      }
+      if (hoverKind) lensKind = hoverKind;
+      const lensTarget = hoverKind ? 1 : 0;
+      if (lensAmt !== lensTarget) {
+        const step = reduced() ? 1 : dt / 0.2;
+        lensAmt = Math.abs(lensTarget - lensAmt) <= step ? lensTarget : lensAmt + Math.sign(lensTarget - lensAmt) * step;
+        if (!lensAmt) lensKind = '';
+        dirty = true;
+      }
+      if (dirty) {
+        dirty = false;
+        paint();
+        setHud();
+      }
+      requestAnimationFrame(frame);
+    }
+
+    // ---- the pointer ----
+    let warmed = false;
+    function warm() { if (warmed) return; warmed = true; loadGrid(); loadPlaces(); }
+    function hit(e: MouseEvent): { kind: '' | 'earth' | 'moon' | 'stack'; km: number } {
+      const r = canvas.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, G = geom();
+      if (Math.hypot(x - G.ex, y - G.ey) <= Math.max(G.rE + 9, 16)) return { kind: 'earth', km: -1 };
+      if (Math.hypot(x - G.mox, y - G.moy) <= Math.max(G.rM + 9, 14)) return { kind: 'moon', km: -1 };
+      const along = (x - G.gx) * G.ux + (y - G.gy) * G.uy, off = Math.abs((x - G.gx) * G.px + (y - G.gy) * G.py), km = along / G.pp;
+      if (km >= 0 && km <= keep * TOP_KM && off <= 11) return { kind: 'stack', km };
+      return { kind: '', km: -1 };
+    }
+    canvas.addEventListener('mousemove', (e) => {
+      const h = hit(e);
+      if (h.kind) warm();
+      hoverKm = h.kind === 'stack' ? h.km : -1; hoverPlace = undefined;
+      hoverKind = h.kind === 'earth' || h.kind === 'moon' ? h.kind : '';
+      canvas.classList.toggle('is-over', !!h.kind);
+    });
+    canvas.addEventListener('mouseleave', () => { hoverKm = -1; hoverKind = ''; canvas.classList.remove('is-over'); });
+    canvas.addEventListener('click', async (e) => {
+      const h = hit(e);
+      if (h.kind === 'earth' || h.kind === 'moon') { hoverKind = hoverKind === h.kind ? '' : h.kind; return; }   // a finger has no hover
+      hoverKind = '';
+      if (h.kind !== 'stack') return;
+      warm(); await loadGrid();
+      const s = sheetAt(h.km);
+      pick(s.x!, s.y!, { km: h.km, from: { x: e.clientX, y: e.clientY } });
+    });
+
+    // ---- the toggle ----
+    const modes = [...document.querySelectorAll<HTMLButtonElement>('[data-exact-mode]')];
+    const STATUS = {
+      sea: '15.4 trillion sheets of land and sea: 1,536,787 km, 813 km short of four times the distance to the Moon.',
+      land: '3.3 trillion sheets of land: 330,074 km. On its own, Greece does not reach the Moon, by 54,326 km.',
+    };
+    elStatus.textContent = STATUS.sea;
+    for (const b of modes) b.addEventListener('click', () => {
+      noSea = b.dataset.exactMode === 'land';
+      for (const o of modes) o.setAttribute('aria-pressed', String(o === b));
+      elStatus.textContent = noSea ? STATUS.land : STATUS.sea;
+      if (noSea && pickedKm > LAND_KM) pickedKm = -1;
+      for (const c of document.querySelectorAll<HTMLButtonElement>('[data-exact-place]')) if (c.dataset.sea !== undefined) c.hidden = noSea;
+      hoverKm = -1;
+      dirty = true;
+    });
+
+    // ---- opening a bundle ----
+    const elResult = $('result'), elNumber = $('number'), elFacts = $('facts'), elNote = $('note'), elGoogle = $<HTMLAnchorElement>('google'), elView = $('view'), elWrap = $('wrap'), elUp = $<HTMLButtonElement>('up');
+    const decode = (n: number, levels = LEVELS) => {
+      let x0 = S.x0, x1 = S.x1, y0 = S.y0, y1 = S.y1;
+      for (let i = 0; i < levels; i++) {
+        const bit = Math.floor(n / 2 ** (LEVELS - 1 - i)) % 2;
+        if (i % 2 === 0) { const m = (x0 + x1) / 2; if (bit) x0 = m; else x1 = m; }
+        else { const m = (y0 + y1) / 2; if (bit) y0 = m; else y1 = m; }
+      }
+      return { x0, x1, y0, y1 };
+    };
+    const encode = (x: number, y: number) => {
+      let x0 = S.x0, x1 = S.x1, y0 = S.y0, y1 = S.y1, n = 0;
+      for (let i = 0; i < LEVELS; i++) {
+        n *= 2;
+        if (i % 2 === 0) { const m = (x0 + x1) / 2; if (x >= m) { n += 1; x0 = m; } else x1 = m; }
+        else { const m = (y0 + y1) / 2; if (y >= m) { n += 1; y0 = m; } else y1 = m; }
+      }
+      return n;
+    };
+    const tileAt = (x: number, y: number, z: number) => { const ts = (2 * R0) / 2 ** z; return [Math.floor((x + R0) / ts), Math.floor((R0 - y) / ts)]; };
+    const probe = (url: string) => new Promise<boolean>((res) => { const i = new Image(); i.onload = () => res(true); i.onerror = () => res(false); i.src = url; setTimeout(() => res(false), 3000); });
+    const badgeEl = document.createElement('div');
+    badgeEl.style.cssText = 'padding:4px 9px;font:600 13px system-ui,sans-serif;color:#17181c;background:#ecb04e;border-radius:3px;box-shadow:0 1px 5px rgb(0 0 0 / .4);white-space:nowrap';
+    let view: L.Map | undefined, viewLayers: L.Layer[] = [], gridLayers: L.Layer[] = [], hoverCell: L.Rectangle | undefined, pickToken = 0, shownBox: L.LatLngBounds | undefined;
+    /** What is open: the first bundle, then each square clicked into. side: sheets along one edge. */
+    type Level = { g: { x0: number; x1: number; y0: number; y1: number }; side: number };
+    let trail: Level[] = [];
+    let opened: { name?: string; isLand: boolean; elev: number; km: number; places: Places; sampleText: string; pixelM: number } | undefined;
+    const perOf = (side: number) => Math.min(16, side);
+    /** Locks the view to the box: nothing around it can be seen, and it can only be zoomed into. */
+    function lockBundle() {
+      if (!view || !shownBox) return;
+      view.setMaxBounds(shownBox);
+      view.setMinZoom(view.getZoom());
+    }
+    function fitBundle(animate = false) {
+      if (!view || !shownBox) return;
+      view.invalidateSize({ animate: false });
+      view.setMinZoom(0);
+      view.setMaxBounds(undefined as unknown as L.LatLngBounds);
+      if (animate) {
+        view.once('moveend', lockBundle);
+        view.fitBounds(shownBox, { padding: [0, 0], animate: true, duration: 0.45 });
+      } else {
+        view.fitBounds(shownBox, { padding: [0, 0], animate: false });
+        lockBundle();
+      }
+    }
+    const cellAt = (e: L.LeafletMouseEvent) => {
+      const cur = trail[trail.length - 1];
+      if (!cur || cur.side <= 1) return null;
+      const per = perOf(cur.side), cw = (cur.g.x1 - cur.g.x0) / per, x = mx(e.latlng.lng), y = my(e.latlng.lat);
+      const i = Math.floor((x - cur.g.x0) / cw), j = Math.floor((y - cur.g.y0) / cw);
+      if (i < 0 || j < 0 || i >= per || j >= per) return null;
+      return { x0: cur.g.x0 + i * cw, x1: cur.g.x0 + (i + 1) * cw, y0: cur.g.y0 + j * cw, y1: cur.g.y0 + (j + 1) * cw };
+    };
+    function showLevel(animate: boolean) {
+      const cur = trail[trail.length - 1], o = opened;
+      if (!view || !cur || !o) return;
+      for (const l of gridLayers) view.removeLayer(l);
+      gridLayers = []; hoverCell = undefined;
+      const per = perOf(cur.side), g = cur.g, bundle = cur.side * cur.side, perCell = (cur.side / per) ** 2, single = cur.side === 1;
+      if (!single) {
+        const lines: L.LatLngExpression[][] = [];
+        for (let i = 0; i <= per; i++) {
+          const a = g.x0 + ((g.x1 - g.x0) * i) / per, b = g.y0 + ((g.y1 - g.y0) * i) / per;
+          lines.push([ll(a, g.y0), ll(a, g.y1)], [ll(g.x0, b), ll(g.x1, b)]);
+        }
+        const grid = L.polyline(lines, { color: '#fff', weight: 0.6, opacity: 0.55, interactive: false }).addTo(view);
+        hoverCell = L.rectangle(shownBox!, { color: '#ecb04e', weight: 2, opacity: 0, fillColor: '#ecb04e', fillOpacity: 0, interactive: false }).addTo(view);
+        gridLayers.push(grid, hoverCell);
+      }
+      view.getContainer().style.cursor = single ? '' : 'pointer';
+      shownBox = L.latLngBounds(ll(g.x0, g.y0), ll(g.x1, g.y1));
+      fitBundle(animate);
+      elUp.hidden = trail.length < 2;
+      const cx = (g.x0 + g.x1) / 2, cy = (g.y0 + g.y1) / 2, lat = latOf(cy), lon = lonOf(cx), near_ = nearest(o.places, lat, lon);
+      const size_ = (m: number) => (m < 1 ? `${Math.round(m * 100)} cm` : m < 100 ? `${m.toFixed(1)} m` : m < 1000 ? `${fmtN(m)} m` : `${(m / 1000).toFixed(1)} km`);
+      const shown = size_(cur.side * 0.2), what = single ? 'One sheet' : `A bundle of ${fmtN(bundle)} sheets`;
+      elNumber.textContent = o.name ? `${o.name}: ${single ? 'one sheet' : `a bundle of ${fmtN(bundle)} sheets`}` : what;
+      const rows: [string, string][] = [
+        ['This is', o.isLand ? 'Greek land' : 'Sea, in the Greek EEZ'],
+        ['Where', `${lat.toFixed(single ? 7 : 5)}° N, ${lon.toFixed(single ? 7 : 5)}° E`],
+        [o.isLand ? 'Height' : 'Depth', `about ${fmtN(Math.abs(o.elev))} m (a 1 km average)`],
+        ['Nearest Greek settlement', `${near_.name}, ${near_.km < 10 ? near_.km.toFixed(1) : fmtN(near_.km)} km`],
+        ['In the stack', o.km >= 0 ? `${fmtN(o.km)} km up` : 'at the coast'],
+        [single ? 'Sheet' : 'Bundle', single ? `one of ${fmtN(SHEETS)}, 20 × 20 cm` : `${fmtN(bundle)} sheets of 20 cm, together about ${shown} × ${shown}`],
+      ];
+      elFacts.replaceChildren(...rows.flatMap(([a, b]) => { const dt = document.createElement('dt'), dd = document.createElement('dd'); dt.textContent = a; dd.textContent = b; return [dt, dd]; }));
+      const px = Math.max(1, Math.round((0.2 * K) / o.pixelM));
+      const text = single
+        ? `This is what one sheet of the map shows: about ${px} × ${px} pixels of the sharpest imagery there is, stretched over 20 cm of paper.`
+        : `Click a square to open it, down to a single sheet. Each white square is ${perCell === 1 ? 'one sheet' : `${fmtN(perCell)} sheets`}.`;
+      elNote.textContent = o.sampleText ? `${text} ${o.sampleText}` : text;
+      badgeEl.textContent = single ? 'One sheet · 20 × 20 cm' : `Bundle of ${fmtN(bundle)} sheets · ${shown} × ${shown}`;
+      const lat_ = lat.toFixed(6), lon_ = lon.toFixed(6);
+      elGoogle.href = `https://www.google.com/maps/@?api=1&map_action=map&center=${lat_},${lon_}&zoom=20&basemap=satellite`;
+    }
+    elUp.addEventListener('click', () => { if (trail.length > 1) { trail.pop(); shownBox = L.latLngBounds(ll(trail[trail.length - 1].g.x0, trail[trail.length - 1].g.y0), ll(trail[trail.length - 1].g.x1, trail[trail.length - 1].g.y1)); showLevel(true); } });
+    new ResizeObserver(() => fitBundle()).observe(elWrap);
+    /** The bundle flies out of the stack, lands as a block of paper, and its sheets are dealt away to show the ground under them. */
+    function openBundle(from: { x: number; y: number }) {
+      elResult.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'center' });
+      if (reduced()) return;
+      elWrap.querySelector('.exact__deal')?.remove();
+      const r = elWrap.getBoundingClientRect();
+      const dx = from.x - (r.left + r.width / 2), dy = from.y - (r.top + r.height / 2), s0 = Math.max(0.04, 24 / r.width);
+      elWrap.animate([
+        { transform: `translate(${dx}px, ${dy}px) scale(${s0}) rotate(-9deg)`, offset: 0 },
+        { transform: `translate(${dx * 0.26}px, ${dy * 0.26}px) scale(0.56) rotate(3deg)`, offset: 0.55 },
+        { transform: 'none', offset: 1 },
+      ], { duration: 420, easing: 'cubic-bezier(.2,.75,.25,1)' });
+      const deal = document.createElement('div'); deal.className = 'exact__deal';
+      const anims: Animation[] = [];
+      for (let b = 0; b < 5; b++) for (let a = 0; a < 5; a++) {
+        const s = document.createElement('i'); deal.append(s);
+        const ox = a - 2, oy = b - 2, dist = Math.hypot(ox, oy);
+        anims.push(s.animate([
+          { transform: 'none', opacity: 1 },
+          { transform: `translate(${ox * 46 + (rnd(a * 8 + b) - 0.5) * 50}px, ${oy * 46 + (rnd(a * 8 + b + 90) - 0.5) * 50}px) rotate(${(rnd(a * 8 + b + 40) - 0.5) * 70}deg) scale(0.6)`, opacity: 0 },
+        ], { duration: 340, delay: 300 + (3 - dist) * 70 + rnd(a + b * 8) * 50, easing: 'cubic-bezier(.3,.1,.5,1)', fill: 'both' }));
+      }
+      elWrap.append(deal);
+      Promise.all(anims.map((a) => a.finished)).then(() => deal.remove(), () => deal.remove());
+      elResult.querySelector('.exact__facts')?.animate([{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 0, transform: 'translateY(8px)', offset: 0.65 }, { opacity: 1, transform: 'none' }], { duration: 820, easing: 'ease-out' });
+    }
+    async function pick(x: number, y: number, opts: { level?: number; name?: string; from?: { x: number; y: number }; km?: number } = {}) {
+      const token = ++pickToken, level = opts.level ?? 34;
+      const [grid, places] = await Promise.all([loadGrid(), loadPlaces()]);
+      if (token !== pickToken) return;
+      const km = opts.km ?? kmAt(x, y, !!opts.name && opts.name !== 'Calypso Deep');
+      pickedKm = km; dirty = true;
+      const n = encode(x, y), q = decode(n);
+      const cx = (q.x0 + q.x1) / 2, cy = (q.y0 + q.y1) / 2;
+      // the bundle, on the sheets' own grid, with this sheet near its middle, in squares of many sheets
+      const cell = Math.min(LEVELS, level + 8), per = 2 ** ((cell - level) / 2), cw = SIDE * 2 ** (-cell / 2);
+      const gx0 = S.x0 + Math.floor((cx - (per * cw) / 2 - S.x0) / cw) * cw, gy0 = S.y0 + Math.floor((cy - (per * cw) / 2 - S.y0) / cw) * cw;
+      const g = { x0: gx0, x1: gx0 + per * cw, y0: gy0, y1: gy0 + per * cw };
+      const perCell = 2 ** (LEVELS - cell);
+      const col = Math.min(grid.w - 1, Math.floor(((cx - S.x0) / SIDE) * grid.w)), row = Math.min(grid.h - 1, Math.floor(((S.y1 - cy) / SIDE) * grid.h));
+      const o = (row * grid.w + col) * 4, isLand = opts.name ? opts.name !== 'Calypso Deep' : km < LAND_KM, elev = grid.d[o + 1] * 256 + grid.d[o + 2] - 12000;
+      elResult.hidden = false;
+      if (!view) {
+        view = L.map(elView, { maxZoom: 32, zoomSnap: 0, maxBoundsViscosity: 1, preferCanvas: true, zoomAnimationThreshold: 8 });
+        view.on('mousemove', (e: L.LeafletMouseEvent) => {
+          const c = cellAt(e);
+          if (!hoverCell) return;
+          if (c) { hoverCell.setBounds(L.latLngBounds(ll(c.x0, c.y0), ll(c.x1, c.y1))); hoverCell.setStyle({ opacity: 1, fillOpacity: 0.16 }); }
+          else hoverCell.setStyle({ opacity: 0, fillOpacity: 0 });
+        });
+        view.on('mouseout', () => { hoverCell?.setStyle({ opacity: 0, fillOpacity: 0 }); });
+        view.on('click', (e: L.LeafletMouseEvent) => {
+          const c = cellAt(e), cur = trail[trail.length - 1];
+          if (!c || !cur) return;
+          trail.push({ g: c, side: cur.side / perOf(cur.side) });
+          showLevel(true);
+        });
+        const Badge = L.Control.extend({ onAdd: () => badgeEl });
+        new Badge({ position: 'topright' }).addTo(view);
+      }
+      for (const l of viewLayers.concat(gridLayers)) view.removeLayer(l);
+      viewLayers = []; gridLayers = []; hoverCell = undefined; trail = []; opened = undefined; elUp.hidden = true;
+      const add = <T extends L.Layer>(l: T) => { l.addTo(view!); viewLayers.push(l); return l; };
+      shownBox = L.latLngBounds(ll(g.x0, g.y0), ll(g.x1, g.y1));
+      fitBundle();
+      elView.style.cursor = '';
+      let start = opts.from;
+      if (!start) { const c = canvas.getBoundingClientRect(), [px_, py_] = geom().at(Math.max(0, km)); start = { x: c.left + px_, y: c.top + py_ }; }
+      openBundle(start);
+      // the title and facts now; the imagery as soon as it is known what there is
+      opened = { name: opts.name, isLand, elev, km, places, sampleText: '', pixelM: (2 * R0) / (256 * 2 ** 21) };
+      trail = [{ g, side: 2 ** ((LEVELS - level) / 2) }];
+      showLevel(false);
+
+      // the sharpest imagery there is here; if none reaches this far out, a real image of sea from elsewhere, and the page says so
+      let native = 0, sampleText = '';
+      const src = GOOGLE;
+      const byShore = isLand || [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, 1], [-1, 1], [1, -1]].some(([a, b]) => { const r_ = row + b, c_ = col + a; return r_ >= 0 && c_ >= 0 && r_ < grid.h && c_ < grid.w && grid.d[(r_ * grid.w + c_) * 4] === 1; });
+      if (byShore) {
+        const zooms: number[] = [];
+        for (let z = src.maxZ; z >= Math.min(isLand ? 15 : 19, src.maxZ); z--) zooms.push(z);
+        const found = await Promise.all(zooms.map((z) => { const [tx, ty] = tileAt(cx, cy, z); return probe(src.url(z, tx, ty)); }));
+        if (token !== pickToken) return;
+        native = zooms[found.indexOf(true)] ?? 0;
+      }
+      if (native) {
+        const url = 'https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}';
+        add(L.tileLayer(url, { subdomains: '0123', maxZoom: 32, maxNativeZoom: native, attribution: src.credit }));
+      } else {
+        const sea = await loadSea();
+        if (token !== pickToken) return;
+        const ts = (2 * R0) / 2 ** 19;
+        for (let tries = 0; tries < 6; tries++) {
+          const [tx, ty] = sea[(Math.floor(n / 4096) + tries * 37) % sea.length], url = src.url(19, tx, ty);
+          if (await probe(url)) {
+            if (token !== pickToken) return;
+            const mx_ = (g.x0 + g.x1) / 2, my_ = (g.y0 + g.y1) / 2, half = Math.max(ts / 2, ((g.x1 - g.x0) / 2) * 1.2);
+            add(L.imageOverlay(url, L.latLngBounds(ll(mx_ - half, my_ - half), ll(mx_ + half, my_ + half)), { attribution: src.credit }));
+            const sx = (tx + 0.5) * ts - R0, sy = R0 - (ty + 0.5) * ts;
+            sampleText = `No imagery reaches this far out. The water you see is a stand-in: a real image of the sea off ${nearest(places, latOf(sy), lonOf(sx)).name}. The position and depth are this bundle's own.`;
+            break;
+          }
+        }
+        if (token !== pickToken) return;
+      }
+      opened = { name: opts.name, isLand, elev, km, places, sampleText, pixelM: (2 * R0) / (256 * 2 ** (native || 19)) };
+      showLevel(false);
+    }
+    $('any').addEventListener('click', async () => {
+      await loadGrid();
+      const km = Math.random() * keep * TOP_KM, s = sheetAt(km);
+      pick(s.x!, s.y!, { km });
+    });
+    $('greek').addEventListener('click', async () => {
+      await loadGrid();
+      const km = Math.random() * LAND_KM, s = sheetAt(km);
+      pick(s.x!, s.y!, { km });
+    });
+    const buttons = [...document.querySelectorAll<HTMLButtonElement>('[data-exact-place]')];
+    for (const b of buttons) {
+      const x = mx(Number(b.dataset.lon)), y = my(Number(b.dataset.lat));
+      b.addEventListener('click', () => {
+        for (const o of buttons) o.setAttribute('aria-pressed', String(o === b));
+        pick(x, y, { level: Number(b.dataset.level), name: b.dataset.name });
+      });
+      let inside = false;
+      const on = async () => {
+        inside = true; warm(); await loadGrid(); await loadPlaces();
+        if (!inside) return;
+        const km = kmAt(x, y, b.dataset.sea === undefined);
+        if (km >= 0 && km <= keep * TOP_KM) { hoverPlace = { name: b.dataset.name!, x, y, side: 2 ** ((LEVELS - Number(b.dataset.level)) / 2) }; hoverKm = km; }
+      };
+      const off = () => { inside = false; hoverKm = -1; hoverPlace = undefined; };
+      b.addEventListener('mouseenter', on); b.addEventListener('focus', on);
+      b.addEventListener('mouseleave', off); b.addEventListener('blur', off);
+    }
+
+    function resize() {
+      const r = canvas.getBoundingClientRect();
+      W = Math.max(1, r.width); H = Math.max(1, r.height);
+      DPR = Math.min(2, devicePixelRatio || 1);
+      canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
+      dirty = true;
+    }
+    new ResizeObserver(resize).observe(canvas);
+    (window.requestIdleCallback ?? ((f: () => void) => setTimeout(f, 1500)))(() => warm());
+    resize();
+    setHud();
+    requestAnimationFrame(frame);
+  }
+</script>

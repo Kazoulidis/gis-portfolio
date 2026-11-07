@@ -22,6 +22,7 @@ import CountdownReveal from '../../components/CountdownReveal.astro';
 import RuleMap from '../../components/RuleMap.astro';
 import VeinRoute from '../../components/VeinRoute.astro';
 import DialMap from '../../components/DialMap.astro';
+import ExactMap from '../../components/ExactMap.astro';
 import { projectCategories } from '../../site';
 import { isPublic } from '../../projects';
 import { plainTitle } from '../../cv';
@@ -51,6 +52,7 @@ const CUSTOM_MAPS: Record<string, typeof ProjectMap> = {
   'plato-rules': RuleMap,
   'vein-route': VeinRoute,
   'fm-dial': DialMap,
+  'exact-map': ExactMap,
 };
 
 // Every project gets its page, drafts included: a draft is unlisted, reachable
