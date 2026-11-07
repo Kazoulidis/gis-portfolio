@@ -10,7 +10,7 @@ image: '/images/30dmc-2026-day-11-wide.webp'
 imageFull: '/images/30dmc-2026-day-11-full.webp'
 imageAlt: 'Printed A4 map of Greece with its 51 prefectures coloured by radio stations on air per 100,000 residents, palest in Attica and Thessaloniki and darkest on Samos, Chios and in Rethymno. Dark tuner dials show a tick for each station in the fullest and emptiest prefectures, from 48 in Thessaloniki to 2 in Evrytania.'
 thumbnail: '/images/30dmc-2026-day-11-square.webp'
-thumbnailAlt: 'Greece by prefecture, coloured by radio stations per resident, titled The FM Dial'
+thumbnailAlt: 'Greece by prefecture, coloured by radio stations per resident'
 downloads:
   - label: 'Full-resolution map'
     href: '/downloads/30dmc-2026-day-11-map.jpg'
