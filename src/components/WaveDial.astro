@@ -1,0 +1,391 @@
+---
+/**
+ * Day 13: turn the wind, and the sea around Mykonos, Paros and Naxos answers. 64 SWAN runs (16 wind directions at 5, 10, 15 and 20 m/s, each with that wind's own pattern over
+ * the area) are packed into one PNG; the page blends the two nearest directions by wave energy and the two nearest speeds along each cell's own power law, so any wind gives a field
+ * at once. The wind's frequency comes from 23 years of winds over the area. The beaches are the EEA's bathing waters. The map is Leaflet, on the same basemap as the other maps.
+ *
+ * `src`: the JSON written by Day_13/prep/page_data.py (bounds, atlas, frequencies, presets, beaches, scores).
+ */
+interface Props {
+  src: string;
+  caption?: string;
+}
+const { src, caption } = Astro.props;
+const TICKS = Array.from({ length: 16 }, (_, i) => i * 22.5);
+---
+
+<figure class="map-figure">
+  <div class="wave" data-wave data-src={src}>
+    <div class="wave__top">
+      <div class="wave__compass" role="slider" tabindex="0" aria-label="Wind direction, the way the wind comes from" aria-valuemin="0" aria-valuemax="359" aria-valuenow="0" aria-valuetext="From the north" data-wave-compass>
+        <svg viewBox="0 0 140 140" aria-hidden="true">
+          <circle cx="70" cy="70" r="66" fill="#f6f4ee" stroke="#c9c4b8" />
+          {TICKS.map((a) => <line x1="70" y1={a % 90 === 0 ? 8 : 10} x2="70" y2={a % 90 === 0 ? 17 : 14} stroke="#8a857a" stroke-width={a % 90 === 0 ? 2 : 1} transform={`rotate(${a} 70 70)`} />)}
+          {['N', 'E', 'S', 'W'].map((l, i) => <text x={70 + 47 * Math.sin((i * Math.PI) / 2)} y={70 - 47 * Math.cos((i * Math.PI) / 2) + 5} text-anchor="middle" font-size="14" font-weight="700" fill="#3a3a40">{l}</text>)}
+          <g data-wave-arrow>
+            <line x1="70" y1="22" x2="70" y2="96" stroke="#1d5f9e" stroke-width="5" stroke-linecap="round" />
+            <path d="M70 106 L60 88 L80 88 Z" fill="#1d5f9e" />
+            <circle cx="70" cy="22" r="7" fill="#1d5f9e" />
+          </g>
+        </svg>
+        <span class="wave__hint">Drag to turn the wind</span>
+      </div>
+      <div class="wave__controls">
+        <p class="wave__wind"><span data-wave-dirname>North</span> wind, <strong data-wave-speed>12 m/s</strong> <span class="wave__bft" data-wave-bft></span></p>
+        <label class="wave__slider">
+          <span>Wind speed</span>
+          <input type="range" min="3" max="22" step="0.5" value="12" data-wave-range aria-label="Wind speed in metres a second" />
+        </label>
+        <div class="wave__presets" data-wave-presets></div>
+        <p class="wave__freq" data-wave-freq></p>
+      </div>
+    </div>
+    <div class="map map--tall wave__map" data-wave-map role="application" aria-label="Map of the sea around Mykonos, Paros and Naxos, coloured by wave height for the wind set above. Click the sea for the waves at that spot."></div>
+    <div class="wave__legend" aria-hidden="true">
+      <p class="wave__lead">Wave height (significant: about the average of the highest third) and sea state</p>
+      <div class="wave__bar"></div>
+      <div class="wave__ticks"></div>
+    </div>
+    <p class="wave__note">Inside the dashed line the waves come from the 300 m grid. Outside it they come from the 2.5 km grid of the whole Aegean, so near the coast they are rougher guesses.</p>
+    <div class="wave__lower">
+      <div class="wave__spot" data-wave-spot>
+        <p class="wave__lead">Click the sea for the waves at that spot.</p>
+      </div>
+      <div class="wave__beaches">
+        <p class="wave__lead">Calmest bathing waters in this wind</p>
+        <ol data-wave-beaches></ol>
+      </div>
+    </div>
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<style is:global>
+  /* global: the readout, the beach list and the legend's labels are written by the script, which scoped styles do not reach */
+  .wave__top { display: flex; flex-wrap: wrap; gap: 1rem 1.6rem; align-items: center; margin-bottom: 0.7rem; }
+  .wave__compass { flex: none; width: 140px; text-align: center; cursor: grab; touch-action: none; user-select: none; border-radius: 50%; }
+  .wave__compass:active { cursor: grabbing; }
+  .wave__compass:focus-visible { outline: 3px solid #ecb04e; outline-offset: 2px; }
+  .wave__compass svg { display: block; width: 140px; height: 140px; }
+  .wave__hint { display: block; margin-top: 0.15rem; font-size: 0.78rem; opacity: 0.7; }
+  .wave__controls { flex: 1 1 18rem; min-width: 0; }
+  .wave__wind { margin: 0 0 0.4rem; font-size: 1.05rem; }
+  .wave__bft { display: block; font-size: 0.9rem; opacity: 0.8; }
+  .wave__slider { display: flex; align-items: center; gap: 0.6rem; font-size: 0.9rem; }
+  .wave__slider input { flex: 1; min-width: 0; }
+  .wave__presets { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.6rem 0 0.4rem; }
+  .wave__presets button { padding: 0.25rem 0.65rem; font: inherit; font-size: 0.88rem; color: inherit; background: none; border: 1px solid currentColor; border-radius: 999px; cursor: pointer; }
+  .wave__presets button:hover, .wave__presets button:focus-visible { color: #fff; background: #1d5f9e; border-color: #1d5f9e; }
+  .wave__freq { margin: 0; font-size: 0.88rem; opacity: 0.85; }
+  .wave__legend { margin-top: 0.5rem; }
+  .wave__note { margin: 0.35rem 0 0; font-size: 0.85rem; opacity: 0.8; }
+  .wave__bar { height: 12px; margin: 0 1.2rem; border-radius: 2px; }
+  .wave__ticks { position: relative; height: 2.4rem; margin: 0 1.2rem; font-size: 0.75rem; }
+  .wave__legend .wave__lead { margin-bottom: 0.25rem; font-size: 0.9rem; }
+  .wave__ticks span { position: absolute; transform: translateX(-50%); white-space: nowrap; line-height: 1.2; }
+  .wave__ticks .wave__name { top: 1.05rem; font-weight: 600; }
+  .wave__ticks .wave__m { top: 0.1rem; opacity: 0.75; }
+  .wave__lower { display: grid; grid-template-columns: 3fr 2fr; gap: 1rem; margin-top: 0.4rem; }
+  .wave__lead { margin: 0 0 0.4rem; font-weight: 600; }
+  .wave__spot { display: grid; grid-template-columns: 1fr auto; gap: 0.2rem 1rem; align-content: start; }
+  .wave__spot .wave__lead { grid-column: 1 / -1; }
+  .wave__spot dl { display: grid; grid-template-columns: auto 1fr; gap: 0.15rem 0.7rem; margin: 0; font-size: 0.92rem; }
+  .wave__spot dt { opacity: 0.7; }
+  .wave__spot dd { margin: 0; }
+  .wave__spot svg { width: 150px; height: 150px; }
+  .wave__spot .wave__small { grid-column: 1 / -1; margin: 0.3rem 0 0; font-size: 0.85rem; opacity: 0.8; }
+  .wave__beaches ol { margin: 0; padding-left: 1.3rem; font-size: 0.92rem; }
+  .wave__beaches li { margin: 0.1rem 0; }
+  .wave__beaches .wave__count { list-style: none; margin: 0 0 0.25rem -1.3rem; opacity: 0.85; }
+  .wave__beaches button { padding: 0; font: inherit; color: inherit; text-align: left; background: none; border: 0; border-bottom: 1px dotted currentColor; cursor: pointer; }
+  .wave__beaches .wave__h { opacity: 0.75; font-variant-numeric: tabular-nums; }
+  @media (max-width: 720px) {
+    .wave__lower { grid-template-columns: 1fr; }
+    .wave__spot { grid-template-columns: 1fr; }
+  }
+</style>
+
+<script>
+  import * as L from 'leaflet';
+  import { whenNear } from '../lazy';
+  import 'leaflet/dist/leaflet.css';
+
+  const BASEMAP = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+  const ATTRIBUTION = 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ';
+  const box = document.querySelector<HTMLElement>('[data-wave]');
+  if (box) whenNear(box, () => { void start(box); });
+
+  type Meta = {
+    w: number; h: number; bounds: [[number, number], [number, number]]; area: [number, number][]; merc: [number, number, number, number]; cell: number;
+    dirs: number[]; speeds: number[]; hsStep: number; tpStep: number; atlas: string;
+    freq: { all: number[][]; summer: number[][]; hoursAll: number; hoursSummer: number; years: [number, number] };
+    presets: { name: string; dir: number; speed: number }[];
+    beaches: { name: string; lat: number; lon: number; i: number; quality: string }[];
+    coastNear: number[];
+  };
+  const NAMES = ['north', 'north-north-east', 'north-east', 'east-north-east', 'east', 'east-south-east', 'south-east', 'south-south-east', 'south', 'south-south-west', 'south-west', 'west-south-west', 'west', 'west-north-west', 'north-west', 'north-north-west'];
+  const BFT: [number, string][] = [[0.5, 'calm'], [1.6, 'light air'], [3.4, 'light breeze'], [5.5, 'gentle breeze'], [8, 'moderate breeze'], [10.8, 'fresh breeze'], [13.9, 'strong breeze'], [17.2, 'near gale'], [20.8, 'gale'], [24.5, 'strong gale'], [99, 'storm']];
+  // the World Meteorological Organization's sea states, by significant wave height
+  const SEA: [number, string][] = [[0.1, 'Calm'], [0.5, 'Smooth'], [1.25, 'Slight'], [2.5, 'Moderate'], [4, 'Rough'], [6, 'Very rough'], [99, 'High']];
+  // each sea state gets an equal share of the colour scale, so that a smooth sea and a slight one look different; the colours at the middle of each are the sheet's
+  const BOUNDS = [0, 0.1, 0.5, 1.25, 2.5, 4, 6];
+  const COLOURS = [[233, 244, 242], [207, 233, 232], [159, 211, 220], [90, 169, 207], [52, 102, 171], [59, 47, 134], [42, 11, 79], [30, 6, 58]];
+  const pos = (h: number) => { let i = 0; while (i < BOUNDS.length - 2 && h >= BOUNDS[i + 1]) i++; return Math.min(1, (i + Math.min(1, (h - BOUNDS[i]) / (BOUNDS[i + 1] - BOUNDS[i]))) / (BOUNDS.length - 1)); };
+  const STOPS: [number, number[]][] = [[0, COLOURS[0]], ...Array.from({ length: 6 }, (_, i) => [(i + 0.5) / 6, COLOURS[i + 1]] as [number, number[]]), [1, COLOURS[7]]];
+  const seaState = (h: number) => SEA.find(([v]) => h < v)![1];
+  const fmt = (v: number, d = 1) => v.toLocaleString('en-GB', { minimumFractionDigits: d, maximumFractionDigits: d });
+
+  async function start(root: HTMLElement) {
+    const $ = <T extends Element>(n: string) => root.querySelector<T>(`[data-wave-${n}]`)!;
+    const meta: Meta = await (await fetch(root.dataset.src!)).json();
+    const { w: W, h: H } = meta, N = W * H;
+    // the 64 runs, from the atlas: rows are speeds, columns directions
+    const img = new Image(); img.src = meta.atlas; await img.decode();
+    const cv = document.createElement('canvas'); cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+    const cx = cv.getContext('2d', { willReadFrequently: true })!; cx.drawImage(img, 0, 0);
+    const px = cx.getImageData(0, 0, cv.width, cv.height).data, AW = cv.width;
+    const nd = meta.dirs.length, ns = meta.speeds.length;
+    // kept as the atlas's bytes (one per value), not floats: the page grid is large and there are 64 runs
+    const HS = Array.from({ length: nd * ns }, () => new Uint8Array(N)), TP = Array.from({ length: nd * ns }, () => new Uint8Array(N)), DR = Array.from({ length: nd * ns }, () => new Uint8Array(N));
+    const sea = new Uint8Array(N);
+    for (let j = 0; j < ns; j++) for (let i = 0; i < nd; i++) {
+      const c = j * nd + i;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const o = ((j * H + y) * AW + i * W + x) * 4, k = y * W + x;
+        if (px[o]) { HS[c][k] = px[o]; TP[c][k] = px[o + 1]; DR[c][k] = px[o + 2]; sea[k] = 1; }
+      }
+    }
+    const near = new Uint8Array(N); for (const k of meta.coastNear) near[k] = 1;
+    const lsp = meta.speeds.map(Math.log);
+
+    /** Wave height at one cell for one direction's runs, at any speed: along that cell's own curve through 5, 10, 15 and 20 m/s. */
+    function hsAt(i: number, k: number, u: number) {
+      const lu = Math.log(u);
+      let a = 0; while (a < ns - 2 && lu > lsp[a + 1]) a++;
+      const h0 = Math.max(0.01, HS[a * nd + i][k] * meta.hsStep), h1 = Math.max(0.01, HS[(a + 1) * nd + i][k] * meta.hsStep);
+      return Math.exp(Math.log(h0) + ((Math.log(h1) - Math.log(h0)) * (lu - lsp[a])) / (lsp[a + 1] - lsp[a]));
+    }
+    function tpAt(i: number, k: number, u: number) {
+      let a = 0; while (a < ns - 2 && u > meta.speeds[a + 1]) a++;
+      const f = Math.max(-0.5, Math.min(1.5, (u - meta.speeds[a]) / (meta.speeds[a + 1] - meta.speeds[a])));
+      return (TP[a * nd + i][k] + (TP[(a + 1) * nd + i][k] - TP[a * nd + i][k]) * f) * meta.tpStep;
+    }
+    function drAt(i: number, k: number, u: number) {
+      let a = 0; while (a < ns - 2 && u > meta.speeds[a + 1]) a++;
+      return (DR[Math.min(ns - 1, a + (u - meta.speeds[a] > 2.5 ? 1 : 0)) * nd + i][k] / 256) * 360;
+    }
+    /** Any wind: the two nearest directions, blended by wave energy, which the tests found within 3% of a true run 45 degrees between them. */
+    function waves(theta: number, u: number, k: number) {
+      const s = (((theta % 360) + 360) % 360) / 22.5, i0 = Math.floor(s) % nd, i1 = (i0 + 1) % nd, f = s - Math.floor(s);
+      const a = hsAt(i0, k, u), b = hsAt(i1, k, u);
+      const hs = Math.sqrt((1 - f) * a * a + f * b * b);
+      const tp = (1 - f) * tpAt(i0, k, u) + f * tpAt(i1, k, u);
+      const ra = (drAt(i0, k, u) * Math.PI) / 180, rb = (drAt(i1, k, u) * Math.PI) / 180, wa = (1 - f) * a * a, wb = f * b * b;
+      const dir = ((Math.atan2(wa * Math.sin(ra) + wb * Math.sin(rb), wa * Math.cos(ra) + wb * Math.cos(rb)) * 180) / Math.PI + 360) % 360;
+      return { hs, tp, dir };
+    }
+
+    // ---- the map ----
+    const mapEl = $<HTMLElement>('map');
+    const map = L.map(mapEl, { scrollWheelZoom: true, zoomSnap: 0.25 });
+    L.tileLayer(BASEMAP, { attribution: ATTRIBUTION, maxZoom: 16, maxNativeZoom: 16 }).addTo(map);
+    L.control.scale({ imperial: false }).addTo(map);
+    const bounds = L.latLngBounds(meta.bounds), fine = L.latLngBounds(meta.area);
+    // open on the fine grid, but never so far out that the view goes past the page grid: on a wide or a tall screen the fine grid is then cropped a little
+    const fill = () => map.getBoundsZoom(bounds, true);
+    map.setMaxBounds(bounds);
+    map.setView(fine.getCenter(), Math.max(map.getBoundsZoom(fine.pad(0.01)), fill()), { animate: false });
+    map.setMinZoom(fill());
+    map.on('resize', () => { map.setMinZoom(fill()); if (map.getZoom() < fill()) map.setZoom(fill()); });
+    // past the page grid there are no waves: grey it over
+    const world: [number, number][] = [[-89, -179], [-89, 179], [89, 179], [89, -179]];
+    const sw = bounds.getSouthWest(), ne = bounds.getNorthEast();
+    L.polygon([world, [[sw.lat, sw.lng], [sw.lat, ne.lng], [ne.lat, ne.lng], [ne.lat, sw.lng]]], { stroke: false, fillColor: '#8a9099', fillOpacity: 0.35, interactive: false }).addTo(map);
+    /** Whether a point is inside the fine grid (the dashed line). */
+    const inFine = (ll: L.LatLng) => { let c = false; const a = meta.area; for (let i = 0, j = a.length - 1; i < a.length; j = i++) { if ((a[i][0] > ll.lat) !== (a[j][0] > ll.lat) && ll.lng < ((a[j][1] - a[i][1]) * (ll.lat - a[i][0])) / (a[j][0] - a[i][0]) + a[i][1]) c = !c; } return c; };
+    const edge = map.createPane('wave-edge'); edge.style.zIndex = '450'; edge.style.pointerEvents = 'none';
+    L.polygon(meta.area, { pane: 'wave-edge', fill: false, color: '#3b4250', weight: 1.2, dashArray: '5 4', interactive: false }).addTo(map);
+    const field = document.createElement('canvas'); field.width = W; field.height = H;
+    const fx = field.getContext('2d')!, fimg = fx.createImageData(W, H);
+    const overlay = L.imageOverlay(field.toDataURL(), bounds, { opacity: 0.88, interactive: false, attribution: 'Waves: SWAN model, the author' }).addTo(map);
+    const LUT = new Uint8ClampedArray(256 * 3);
+    for (let n = 0; n < 256; n++) {
+      const v = n / 255; let a = 0; while (a < STOPS.length - 2 && v > STOPS[a + 1][0]) a++;
+      const [x0, c0] = STOPS[a], [x1, c1] = STOPS[a + 1], f = Math.min(1, (v - x0) / (x1 - x0));
+      for (let c = 0; c < 3; c++) LUT[n * 3 + c] = c0[c] + (c1[c] - c0[c]) * f;
+    }
+    const bar = root.querySelector<HTMLElement>('.wave__bar')!, ticks = root.querySelector<HTMLElement>('.wave__ticks')!;
+    bar.style.background = `linear-gradient(to right, ${STOPS.map(([v, c]) => `rgb(${c.join(',')}) ${v * 100}%`).join(', ')})`;
+    // the names sit in the middle of their band, the heights at its edges
+    ticks.innerHTML = ['Calm', 'Smooth', 'Slight', 'Moderate', 'Rough', 'Very rough'].map((t, i) => `<span class="wave__name" style="left:${((i + 0.5) / 6) * 100}%">${t}</span>`).join('')
+      + BOUNDS.map((v, i) => `<span class="wave__m" style="left:${(i / 6) * 100}%">${v}${i === 6 ? '+' : ''}${i === 0 ? ' m' : ''}</span>`).join('');
+
+    // the state, and everything that follows it
+    let theta = meta.presets[0].dir, speed = meta.presets[0].speed;
+    const HSN = new Float32Array(N), DIRN = new Float32Array(N), TPN = new Float32Array(N);
+    let picked = -1, pickedLatLng: L.LatLng | undefined;
+    const marker = L.circleMarker([0, 0], { radius: 7, color: '#ecb04e', weight: 3, fill: false, interactive: false });
+    const beachLayer = L.layerGroup().addTo(map);
+    const beachDots = meta.beaches.map((b) => L.circleMarker([b.lat, b.lon], { radius: 4, color: '#1b1d22', weight: 1, fillColor: '#fff', fillOpacity: 1 }).bindTooltip(b.name, { direction: 'top' }).addTo(beachLayer));
+    beachDots.forEach((d, n) => d.on('click', () => pick(L.latLng(meta.beaches[n].lat, meta.beaches[n].lon), meta.beaches[n].i)));
+
+    function compute() {
+      for (let k = 0; k < N; k++) {
+        if (!sea[k]) continue;
+        const r = waves(theta, speed, k); HSN[k] = r.hs; DIRN[k] = r.dir; TPN[k] = r.tp;
+      }
+    }
+    function paint() {
+      const d = fimg.data;
+      for (let k = 0; k < N; k++) {
+        const o = k * 4;
+        if (!sea[k]) { d[o + 3] = 0; continue; }
+        const n = Math.round(pos(HSN[k]) * 255) * 3;
+        d[o] = LUT[n]; d[o + 1] = LUT[n + 1]; d[o + 2] = LUT[n + 2]; d[o + 3] = 255;
+      }
+      fx.putImageData(fimg, 0, 0);
+      overlay.setUrl(field.toDataURL());
+    }
+
+    // ---- the controls ----
+    const arrow = $<SVGGElement>('arrow'), compass = $<HTMLElement>('compass'), range = $<HTMLInputElement>('range');
+    const elName = $<HTMLElement>('dirname'), elSpeed = $<HTMLElement>('speed'), elBft = $<HTMLElement>('bft'), elFreq = $<HTMLElement>('freq');
+    function words() {
+      const sec = Math.round(theta / 22.5) % 16, name = NAMES[sec];
+      elName.textContent = name[0].toUpperCase() + name.slice(1);
+      elSpeed.textContent = `${fmt(speed)} m/s`;
+      const b = BFT.findIndex(([v]) => speed < v);
+      elBft.textContent = `Beaufort ${b}, ${BFT[b][1]}${speed > 20 ? ' (beyond the strongest run: extrapolated)' : speed < 5 ? ' (below the lightest run: extrapolated)' : ''}`;
+      arrow.setAttribute('transform', `rotate(${theta} 70 70)`);
+      compass.setAttribute('aria-valuenow', String(Math.round(theta)));
+      compass.setAttribute('aria-valuetext', `From the ${name}`);
+      // how often: this sector, within a metre a second either side
+      const lo = Math.max(0, Math.round(speed) - 1), hi = Math.round(speed) + 1;
+      const sum = (t: number[][]) => t[sec].slice(lo, hi + 1).reduce((a, b) => a + b, 0);
+      const pS = (100 * sum(meta.freq.summer)) / meta.freq.hoursSummer, pA = (100 * sum(meta.freq.all)) / meta.freq.hoursAll;
+      const p = (v: number) => (v < 0.1 ? 'under 0.1%' : `${fmt(v, v < 10 ? 1 : 0)}%`);
+      elFreq.textContent = `Winds like this, from the ${name} at ${lo} to ${hi} m/s, blow ${p(pS)} of summer hours and ${p(pA)} of all hours over this sea (${meta.freq.years[0]} to ${meta.freq.years[1]}).`;
+    }
+    let pending = false;
+    function update() {
+      words();
+      if (pending) return;
+      pending = true;
+      requestAnimationFrame(() => { pending = false; compute(); paint(); spot(); beaches(); });
+    }
+    const angleAt = (e: PointerEvent) => { const r = compass.getBoundingClientRect(); return ((Math.atan2(e.clientX - (r.left + r.width / 2), -(e.clientY - (r.top + r.height / 2))) * 180) / Math.PI + 360) % 360; };
+    let dragging = false;
+    compass.addEventListener('pointerdown', (e) => { dragging = true; compass.setPointerCapture(e.pointerId); theta = angleAt(e); update(); });
+    compass.addEventListener('pointermove', (e) => { if (dragging) { theta = angleAt(e); update(); } });
+    compass.addEventListener('pointerup', () => { dragging = false; theta = Math.round(theta / 5) * 5 % 360; update(); });
+    compass.addEventListener('keydown', (e) => {
+      const step = e.shiftKey ? 5 : 22.5;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowUp') theta = (theta + step) % 360;
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') theta = (theta - step + 360) % 360;
+      else return;
+      e.preventDefault(); update();
+    });
+    range.addEventListener('input', () => { speed = Number(range.value); update(); });
+    const presets = $<HTMLElement>('presets');
+    for (const p of meta.presets) {
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = p.name;
+      b.addEventListener('click', () => { theta = p.dir; speed = p.speed; range.value = String(p.speed); update(); });
+      presets.append(b);
+    }
+
+    // ---- a spot: its waves now, and how it answers every wind ----
+    const elSpot = $<HTMLElement>('spot');
+    const cellAt = (ll: L.LatLng) => {
+      const p = L.CRS.EPSG3857.project(ll), x = Math.floor((p.x - meta.merc[0]) / meta.cell), y = Math.floor((meta.merc[3] - p.y) / meta.cell);
+      return x < 0 || y < 0 || x >= W || y >= H ? -1 : y * W + x;
+    };
+    function pick(ll: L.LatLng, k = cellAt(ll)) {
+      pickedLatLng = ll; picked = k;
+      marker.setLatLng(ll).addTo(map);
+      spot();
+    }
+    map.on('click', (e: L.LeafletMouseEvent) => pick(e.latlng));
+    function spot() {
+      if (picked < 0 || !pickedLatLng) return;
+      if (!sea[picked]) { elSpot.innerHTML = '<p class="wave__lead">That is land, or outside the model. Click the sea.</p>'; return; }
+      const hs = HSN[picked], tp = TPN[picked], dir = DIRN[picked];
+      const roseH = Array.from({ length: 16 }, (_, i) => hsAt(i, picked, speed)), mx = Math.max(...roseH, 0.05);
+      const sec = Math.round(theta / 22.5) % 16;
+      const petals = roseH.map((h, i) => {
+        const r = 8 + (h / mx) * 56, a1 = ((i * 22.5 - 9) * Math.PI) / 180, a2 = ((i * 22.5 + 9) * Math.PI) / 180;
+        return `<path d="M75 75 L${75 + r * Math.sin(a1)} ${75 - r * Math.cos(a1)} A${r} ${r} 0 0 1 ${75 + r * Math.sin(a2)} ${75 - r * Math.cos(a2)} Z" fill="${i === sec ? '#ecb04e' : '#5aa9cf'}" opacity="${i === sec ? 1 : 0.75}"/>`;
+      }).join('');
+      const from = NAMES[Math.round(dir / 22.5) % 16];
+      elSpot.innerHTML = `<p class="wave__lead">${seaState(hs)} here: ${fmt(hs, 2)} m</p>
+        <dl><dt>Wave height</dt><dd>${fmt(hs, 2)} m (significant)</dd><dt>Peak period</dt><dd>${fmt(tp, 1)} s</dd><dt>Waves from</dt><dd>the ${from}</dd>
+        <dt>Where</dt><dd>${pickedLatLng.lat.toFixed(4)}° N, ${pickedLatLng.lng.toFixed(4)}° E</dd></dl>
+        <svg viewBox="0 0 150 150" role="img" aria-label="Wave height here for a ${fmt(speed)} m/s wind from each of 16 directions; the current one in orange">
+          <circle cx="75" cy="75" r="64" fill="none" stroke="#d6d1c4"/>${petals}
+          <text x="75" y="9" text-anchor="middle" font-size="10">N</text><text x="146" y="78" text-anchor="end" font-size="10">E</text><text x="75" y="148" text-anchor="middle" font-size="10">S</text><text x="4" y="78" font-size="10">W</text></svg>
+        <p class="wave__small">The rose shows this spot's waves for a ${fmt(speed)} m/s wind from every direction; the largest is ${fmt(mx, 2)} m.${pickedLatLng && !inFine(pickedLatLng) ? ' Outside the dashed line: from the 2.5 km Aegean grid, a rougher guess.' : near[picked] ? ' Within about 600 m of the coast the model is least certain.' : ''}</p>`;
+    }
+
+    // ---- the calmest bathing waters ----
+    const elBeaches = $<HTMLElement>('beaches');
+    function beaches() {
+      const all = meta.beaches.map((b, n) => ({ b, n, h: HSN[b.i] })).filter((r) => sea[r.b.i]).sort((a, z) => a.h - z.h || a.b.name.localeCompare(z.b.name));
+      const calm = all.filter((r) => r.h < 0.1).length, rows = all.slice(0, 6);
+      elBeaches.innerHTML = '';
+      const head = document.createElement('li'); head.className = 'wave__count';
+      head.textContent = calm ? `${calm} of ${all.length} bathing waters here are calm, under 0.1 m:` : `None of the ${all.length} bathing waters here is calm; the least rough:`;
+      elBeaches.append(head);
+      for (const r of rows) {
+        const li = document.createElement('li'), bt = document.createElement('button'), sp = document.createElement('span');
+        bt.type = 'button'; bt.textContent = r.b.name; sp.className = 'wave__h'; sp.textContent = ` ${fmt(r.h, 2)} m offshore, ${seaState(r.h).toLowerCase()}`;
+        bt.addEventListener('click', () => { const ll = L.latLng(r.b.lat, r.b.lon); map.setView(ll, Math.max(map.getZoom(), 12)); pick(ll, r.b.i); });
+        li.append(bt, sp); if (elBeaches.children.length === 1) li.value = 1; elBeaches.append(li);   // the count line above is not a place on the list
+      }
+    }
+
+    // ---- the sea moving: short strokes drifting the way the waves go ----
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)');
+    const Drift = L.Layer.extend({
+      onAdd(m: L.Map) {
+        this._c = L.DomUtil.create('canvas', 'leaflet-zoom-hide'); this._c.style.position = 'absolute'; this._c.style.pointerEvents = 'none';
+        m.getPanes().overlayPane.appendChild(this._c); m.on('moveend resize zoomend', this._reset, this); this._reset();
+      },
+      onRemove(m: L.Map) { this._c.remove(); m.off('moveend resize zoomend', this._reset, this); },
+      _reset() { const s = map.getSize(); this._c.width = s.x; this._c.height = s.y; L.DomUtil.setPosition(this._c, map.containerPointToLayerPoint([0, 0])); },
+    });
+    const drift = new Drift(); drift.addTo(map);
+    const P = 420, parts = Array.from({ length: P }, () => ({ k: -1, x: 0, y: 0, age: 0, life: 0 }));
+    const seaCells: number[] = []; for (let k = 0; k < N; k++) if (sea[k]) seaCells.push(k);
+    const respawn = (p: typeof parts[0]) => { const k = seaCells[(Math.random() * seaCells.length) | 0]; p.k = k; p.x = (k % W) + Math.random(); p.y = Math.floor(k / W) + Math.random(); p.age = 0; p.life = 40 + Math.random() * 60; };
+    parts.forEach(respawn);
+    let visible = false;
+    new IntersectionObserver((e) => { visible = e.some((x) => x.isIntersecting); }).observe(mapEl);
+    let last = performance.now();
+    function tick(now: number) {
+      const dt = Math.min(0.05, (now - last) / 1000); last = now;
+      const c: HTMLCanvasElement = drift._c, g = c.getContext('2d')!;
+      if (visible && !reduce.matches && !document.hidden) {
+        g.clearRect(0, 0, c.width, c.height);
+        g.lineCap = 'round';
+        for (const p of parts) {
+          const k = Math.floor(p.y) * W + Math.floor(p.x);
+          if (p.age++ > p.life || k < 0 || k >= N || !sea[k] || HSN[k] < 0.05) { respawn(p); continue; }
+          const to = ((DIRN[k] + 180) * Math.PI) / 180, v = (0.35 + Math.min(TPN[k], 9) * 0.12) * dt * 6;
+          const ox = p.x, oy = p.y;
+          p.x += Math.sin(to) * v; p.y -= Math.cos(to) * v;
+          const a = map.latLngToContainerPoint(L.CRS.EPSG3857.unproject(L.point(meta.merc[0] + ox * meta.cell, meta.merc[3] - oy * meta.cell)));
+          const b = map.latLngToContainerPoint(L.CRS.EPSG3857.unproject(L.point(meta.merc[0] + p.x * meta.cell, meta.merc[3] - p.y * meta.cell)));
+          const life = Math.sin((p.age / p.life) * Math.PI);
+          g.strokeStyle = `rgba(255,255,255,${0.55 * life * Math.min(1, HSN[k] / 0.8)})`; g.lineWidth = 1.2 + Math.min(1.6, HSN[k] * 0.5);
+          const lx = b.x + (b.x - a.x) * 6, ly = b.y + (b.y - a.y) * 6;
+          g.beginPath(); g.moveTo(b.x, b.y); g.lineTo(lx, ly); g.stroke();
+        }
+      } else if (reduce.matches) g.clearRect(0, 0, c.width, c.height);
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+
+    range.value = String(speed);
+    update();
+    pick(L.latLng(37.29, 25.31));                                       // open sea between Mykonos, Paros and Naxos
+  }
+</script>
