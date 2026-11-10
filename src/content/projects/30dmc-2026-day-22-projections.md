@@ -14,7 +14,7 @@ thumbnailAlt: 'Map of Greece in blue and orange bands showing how the Greek Grid
 downloads:
   - label: 'Full-resolution map'
     href: '/downloads/30dmc-2026-day-22-map.jpg'
-    note: 'JPEG · 7016 × 4961 · 4.4 MB'
+    note: 'JPEG · 7016 × 4961 · 3.3 MB'
   - label: 'Square version'
     href: '/downloads/30dmc-2026-day-22-map-square.jpg'
     note: 'JPEG · 4724 × 4724 · 2.4 MB'
