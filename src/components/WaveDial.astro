@@ -353,10 +353,11 @@ const TICKS = Array.from({ length: 16 }, (_, i) => i * 22.5);
       _reset() { const s = map.getSize(); this._c.width = s.x; this._c.height = s.y; L.DomUtil.setPosition(this._c, map.containerPointToLayerPoint([0, 0])); },
     });
     const drift = new Drift(); drift.addTo(map);
-    const P = 420, parts = Array.from({ length: P }, () => ({ k: -1, x: 0, y: 0, age: 0, life: 0 }));
+    // each stroke keeps its own heading and brightness and eases them towards the cell it is in, so they glide instead of jumping cell to cell
+    const P = 420, parts = Array.from({ length: P }, () => ({ k: -1, x: 0, y: 0, age: 0, life: 0, hd: NaN, al: 0 }));
     const seaCells: number[] = []; for (let k = 0; k < N; k++) if (sea[k]) seaCells.push(k);
-    const respawn = (p: typeof parts[0]) => { const k = seaCells[(Math.random() * seaCells.length) | 0]; p.k = k; p.x = (k % W) + Math.random(); p.y = Math.floor(k / W) + Math.random(); p.age = 0; p.life = 40 + Math.random() * 60; };
-    parts.forEach(respawn);
+    const respawn = (p: typeof parts[0]) => { const k = seaCells[(Math.random() * seaCells.length) | 0]; p.k = k; p.x = (k % W) + Math.random(); p.y = Math.floor(k / W) + Math.random(); p.age = 0; p.life = 3 + Math.random() * 3; p.hd = NaN; p.al = 0; };
+    parts.forEach((p) => { respawn(p); p.age = Math.random() * p.life; });   // start at staggered ages, not all fading in together
     let visible = false;
     new IntersectionObserver((e) => { visible = e.some((x) => x.isIntersecting); }).observe(mapEl);
     let last = performance.now();
@@ -368,16 +369,19 @@ const TICKS = Array.from({ length: 16 }, (_, i) => i * 22.5);
         g.lineCap = 'round';
         for (const p of parts) {
           const k = Math.floor(p.y) * W + Math.floor(p.x);
-          if (p.age++ > p.life || k < 0 || k >= N || !sea[k] || HSN[k] < 0.05) { respawn(p); continue; }
-          const to = ((DIRN[k] + 180) * Math.PI) / 180, v = (0.35 + Math.min(TPN[k], 9) * 0.12) * dt * 6;
-          const ox = p.x, oy = p.y;
-          p.x += Math.sin(to) * v; p.y -= Math.cos(to) * v;
-          const a = map.latLngToContainerPoint(L.CRS.EPSG3857.unproject(L.point(meta.merc[0] + ox * meta.cell, meta.merc[3] - oy * meta.cell)));
+          p.age += dt;
+          if (p.age > p.life || k < 0 || k >= N || !sea[k] || HSN[k] < 0.05) { respawn(p); continue; }
+          const to = ((DIRN[k] + 180) * Math.PI) / 180, ease = 1 - Math.exp(-dt * 3);
+          if (Number.isNaN(p.hd)) p.hd = to;
+          p.hd += Math.atan2(Math.sin(to - p.hd), Math.cos(to - p.hd)) * ease;
+          const want = 0.5 * Math.min(1, HSN[k] / 0.8); p.al += (want - p.al) * ease;
+          const v = (0.8 + Math.min(TPN[k], 9) * 0.25) * dt;             // cells a second: about 5 px a second at the opening zoom
+          p.x += Math.sin(p.hd) * v; p.y -= Math.cos(p.hd) * v;
           const b = map.latLngToContainerPoint(L.CRS.EPSG3857.unproject(L.point(meta.merc[0] + p.x * meta.cell, meta.merc[3] - p.y * meta.cell)));
-          const life = Math.sin((p.age / p.life) * Math.PI);
-          g.strokeStyle = `rgba(255,255,255,${0.55 * life * Math.min(1, HSN[k] / 0.8)})`; g.lineWidth = 1.2 + Math.min(1.6, HSN[k] * 0.5);
-          const lx = b.x + (b.x - a.x) * 6, ly = b.y + (b.y - a.y) * 6;
-          g.beginPath(); g.moveTo(b.x, b.y); g.lineTo(lx, ly); g.stroke();
+          const f = p.age / p.life, fade = Math.min(1, f / 0.25, (1 - f) / 0.25);   // in and out gently, steady between
+          const len = 8 + Math.min(10, HSN[k] * 4);
+          g.strokeStyle = `rgba(255,255,255,${p.al * fade})`; g.lineWidth = 1.3 + Math.min(1.4, HSN[k] * 0.45);
+          g.beginPath(); g.moveTo(b.x, b.y); g.lineTo(b.x + Math.sin(p.hd) * len, b.y - Math.cos(p.hd) * len); g.stroke();
         }
       } else if (reduce.matches) g.clearRect(0, 0, c.width, c.height);
       requestAnimationFrame(tick);
