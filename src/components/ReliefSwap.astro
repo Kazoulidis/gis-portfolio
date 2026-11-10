@@ -1,0 +1,159 @@
+---
+/**
+ * Day 15: Greece with its plains and mountains swapped, and a slider for how much of the height moves. The page holds two height grids of
+ * the same land, the real one and the swapped one (Day_15/prep/swap_relief.py), on Day 4's frame in the Greek Grid; every move of the slider
+ * mixes them and draws the land again, the house relief bands with the light from the north-west, so the relief keeps its shading as it
+ * changes. The sea, the neighbours and the coastlines are fixed pictures under and over it.
+ *
+ * `src`: the JSON written by Day_15/prep/page_data.py (grids, pictures, places, bands).
+ */
+interface Props {
+  src: string;
+  caption?: string;
+}
+const { src, caption } = Astro.props;
+---
+
+<figure class="map-figure">
+  <div class="swap" data-swap data-src={src}>
+    <div class="swap__controls">
+      <label class="swap__slider">
+        <span class="swap__end">Real Greece</span>
+        <input type="range" min="0" max="200" step="1" value="100" list="swap-ticks" data-swap-range aria-label="How much of the height is moved: 0% is real Greece, 100% plains and mountains fully swapped, 200% swapped twice as far" />
+        <span class="swap__end">Twice over</span>
+        <datalist id="swap-ticks"><option value="0"></option><option value="100"></option><option value="200"></option></datalist>
+      </label>
+      <p class="swap__read" data-swap-read aria-live="polite">100% of the height moved</p>
+    </div>
+    <div class="swap__stage" data-swap-stage>
+      <img class="swap__layer" data-swap-sea alt="" />
+      <canvas class="swap__layer" data-swap-land role="img" aria-label="Relief map of Greece; the slider moves its heights between the real relief and the swapped one"></canvas>
+      <img class="swap__layer" data-swap-lines alt="" />
+      <div class="swap__labels" data-swap-labels></div>
+    </div>
+    <div class="swap__legend" aria-hidden="true" data-swap-legend></div>
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<style is:global>
+  /* global: the labels and the legend are written by the script, which scoped styles do not reach */
+  .swap__controls { display: grid; gap: 0.35rem; margin-bottom: 0.6rem; }
+  .swap__slider { display: grid; grid-template-columns: auto 1fr auto; gap: 0.75rem; align-items: center; font-size: 0.9rem; }
+  .swap__slider input { width: 100%; accent-color: #8a6a4a; }
+  .swap__end { white-space: nowrap; opacity: 0.85; }
+  .swap__read { margin: 0; font-size: 0.95rem; font-weight: 600; text-align: center; }
+  .swap__stage { position: relative; width: 100%; aspect-ratio: 1 / 1; background: #dbe9f1; border: 1px solid var(--rule, #d9d4c8); overflow: hidden; }
+  .swap__layer { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .swap__labels { position: absolute; inset: 0; pointer-events: none; }
+  .swap__label { position: absolute; transform: translate(-50%, -100%); padding-bottom: 6px; font-size: clamp(0.62rem, 1.5vw, 0.82rem); line-height: 1.15; text-align: center; color: #23232a;
+    text-shadow: 0 0 3px #f7f4ec, 0 0 3px #f7f4ec, 0 0 2px #f7f4ec; white-space: nowrap; }
+  .swap__label::after { content: ''; position: absolute; left: 50%; bottom: 0; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%; background: #23232a; box-shadow: 0 0 0 1.5px #f7f4ec; }
+  .swap__label b { font-weight: 700; }
+  .swap__label span { display: block; font-variant-numeric: tabular-nums; }
+  .swap__legend { display: flex; margin-top: 0.5rem; font-size: 0.72rem; }
+  .swap__legend > div { flex: 1 1 0; min-width: 0; }
+  .swap__legend i { display: block; height: 0.7rem; }
+  .swap__legend em { display: block; min-height: 1em; font-style: normal; opacity: 0.8; white-space: nowrap; }
+  @media (max-width: 560px) { .swap__legend em { font-size: 0.6rem; } .swap__end { font-size: 0.78rem; } }
+</style>
+
+<script>
+  import { whenNear } from '../lazy';
+
+  type Meta = {
+    w: number; h: number; cell: number; heightStep: number;
+    real: string; swap: string; sea: string; lines: string; mask: string;
+    bands: number[]; colours: [number, number, number][];   // Day 12's relief bands: the upper limits, and a colour for each
+    places: { name: string; x: number; y: number; real: number; swap: number }[];
+  };
+  const box = document.querySelector<HTMLElement>('[data-swap]');
+  if (box) whenNear(box, () => { void start(box); });
+
+  async function grid(url: string, n: number) {
+    const img = new Image(); img.src = url; await img.decode();
+    const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+    const x = c.getContext('2d', { willReadFrequently: true })!; x.drawImage(img, 0, 0);
+    const px = x.getImageData(0, 0, c.width, c.height).data;
+    const z = new Float32Array(n), land = new Uint8Array(n);
+    for (let k = 0; k < n; k++) { const o = k * 4; z[k] = px[o] * 256 + px[o + 1]; land[k] = px[o + 2] > 127 ? 1 : 0; }   // height in steps, land in blue
+    return { z, land };
+  }
+
+  async function start(root: HTMLElement) {
+    const $ = <T extends Element>(n: string) => root.querySelector<T>(`[data-swap-${n}]`)!;
+    const meta: Meta = await (await fetch(root.dataset.src!)).json();
+    const { w: W, h: H } = meta, N = W * H;
+    $<HTMLImageElement>('sea').src = meta.sea; $<HTMLImageElement>('lines').src = meta.lines;
+    const [R, S] = await Promise.all([grid(meta.real, N), grid(meta.swap, N)]);
+    for (let k = 0; k < N; k++) { R.z[k] *= meta.heightStep; S.z[k] *= meta.heightStep; }
+    const land = R.land;
+
+    // Day 12's relief bands, as a lookup every 10 m
+    const LUT_STEP = 10, LUT = new Uint8ClampedArray(Math.ceil(5000 / LUT_STEP) * 3);     // past 100% the new peaks top 3,000 m
+    for (let i = 0; i < LUT.length / 3; i++) {
+      const z = i * LUT_STEP; let b = 0; while (b < meta.bands.length - 1 && z >= meta.bands[b]) b++;
+      LUT.set(meta.colours[b], i * 3);
+    }
+    const cv = $<HTMLCanvasElement>('land'); cv.width = W; cv.height = H;
+    // cut the land to the drawn coast: the grid's cells are coarser than the coastline
+    for (const p of ['maskImage', 'webkitMaskImage'] as const) (cv.style as any)[p] = `url(${meta.mask})`;
+    for (const p of ['maskSize', 'webkitMaskSize'] as const) (cv.style as any)[p] = '100% 100%';
+    const cx = cv.getContext('2d')!, img = cx.createImageData(W, H), d = img.data;
+    const Z = new Float32Array(N);
+    // light from the north-west, 45 degrees up, as on the printed maps
+    const ve = 2.5, alt = Math.PI / 4, lx = -Math.SQRT1_2 * Math.cos(alt), ly = Math.SQRT1_2 * Math.cos(alt), lz = Math.sin(alt);
+
+    function draw(t: number) {
+      for (let k = 0; k < N; k++) Z[k] = land[k] ? R.z[k] + (S.z[k] - R.z[k]) * t : 0;
+      for (let y = 0; y < H; y++) {
+        const yn = y > 0 ? y - 1 : y, ys = y < H - 1 ? y + 1 : y;
+        for (let x = 0; x < W; x++) {
+          const k = y * W + x, o = k * 4;
+          if (!land[k]) { d[o + 3] = 0; continue; }
+          const xw = x > 0 ? x - 1 : x, xe = x < W - 1 ? x + 1 : x;
+          const gx = ((Z[y * W + xe] - Z[y * W + xw]) / ((xe - xw) * meta.cell)) * ve;          // rising eastward
+          const gy = ((Z[yn * W + x] - Z[ys * W + x]) / ((ys - yn) * meta.cell)) * ve;          // rising northward
+          const shade = (-gx * lx - gy * ly + lz) / Math.sqrt(gx * gx + gy * gy + 1) / lz;       // 1 on the flat
+          const f = Math.max(0.55, Math.min(1.18, 0.62 + 0.38 * shade));
+          const i3 = Math.min(LUT.length / 3 - 1, Math.max(0, Math.round(Z[k] / LUT_STEP))) * 3;
+          d[o] = LUT[i3] * f; d[o + 1] = LUT[i3 + 1] * f; d[o + 2] = LUT[i3 + 2] * f; d[o + 3] = 255;
+        }
+      }
+      cx.putImageData(img, 0, 0);
+    }
+
+    // the places, with their height at the slider's mix
+    const labels = $<HTMLElement>('labels');
+    const tags = meta.places.map((p) => {
+      const el = document.createElement('div'); el.className = 'swap__label';
+      el.style.left = `${p.x * 100}%`; el.style.top = `${p.y * 100}%`;
+      el.innerHTML = `<b></b><span></span>`; el.querySelector('b')!.textContent = p.name;
+      labels.append(el); return el.querySelector('span')!;
+    });
+    const fmt = (v: number) => `${Math.round(v).toLocaleString('en-GB')} m`;
+
+    // the legend: Day 12's bands, labelled at their lower limits
+    const legend = $<HTMLElement>('legend');
+    meta.bands.forEach((_, i) => {
+      const el = document.createElement('div'); const lo = i ? meta.bands[i - 1] : 0;
+      el.innerHTML = `<i style="background:rgb(${meta.colours[i].join(',')})"></i><em></em>`;
+      el.querySelector('em')!.textContent = [0, 200, 500, 1000, 1600, 2200].includes(lo) ? lo.toLocaleString('en-GB') + (i === meta.bands.length - 1 ? '+' : '') : '';
+      legend.append(el);
+    });
+
+    const range = $<HTMLInputElement>('range'), read = $<HTMLElement>('read');
+    let pending = false;
+    function update() {
+      const t = Number(range.value) / 100;
+      const pc = Math.round(t * 100);
+      read.textContent = pc === 0 ? 'Real Greece: no height moved' : pc === 100 ? 'Plains and mountains swapped: 100% of the height moved'
+        : pc > 100 ? `${pc}%: swapped, and pushed ${pc - 100}% further` : `${pc}% of the height moved`;
+      meta.places.forEach((p, i) => { tags[i].textContent = fmt(p.real + (p.swap - p.real) * t); });
+      if (pending) return; pending = true;
+      requestAnimationFrame(() => { pending = false; draw(Number(range.value) / 100); });
+    }
+    range.addEventListener('input', update);
+    update();
+  }
+</script>
