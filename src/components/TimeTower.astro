@@ -196,7 +196,8 @@ const { src, caption } = Astro.props;
         const [x, y, z] = sp(g.o.position.x, g.o.position.y, g.o.position.z);
         const ew = g.el.offsetWidth || 80, eh = g.el.offsetHeight || 24;
         let ok = false;
-        if (z < 1) for (const [cx, cy] of SPOTS) {
+        const keep: [number, number] = [g.o.center.x, g.o.center.y];          // its current spot first, so labels do not jump as the view turns
+        if (z < 1) for (const [cx, cy] of [keep, ...SPOTS]) {
           const r = [x - cx * ew, y - cy * eh, x - cx * ew + ew, y - cy * eh + eh];
           if (r[0] < 2 || r[2] > w - 2 || r[1] < 2 || r[3] > h - 2) continue;
           if (placed.some((q) => r[0] < q[2] + 3 && r[2] > q[0] - 3 && r[1] < q[3] + 1 && r[3] > q[1] - 1)) continue;
