@@ -74,7 +74,7 @@ export const languages = [
 export const interests = [
   {
     title: 'Genealogy Research',
-    body: 'Built and maintain a relational family tree of 250+ individuals, resolving identity conflicts through the cross-referencing of civil, military, and refugee records.',
+    body: 'Built and maintain a relational family tree of 350+ individuals, resolving identity conflicts through the cross-referencing of civil, military, and refugee records.',
   },
   {
     title: 'Self-Hosted Applications',

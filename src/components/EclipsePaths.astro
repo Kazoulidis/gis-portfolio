@@ -65,7 +65,7 @@ const { src, caption } = Astro.props;
   .ecl__types label { white-space: nowrap; }
   .ecl__btn { font: inherit; font-size: 0.88rem; padding: 0.25rem 0.75rem; border: 1px solid #2a2648; background: #f7f4ec; color: #23232a; border-radius: 3px; cursor: pointer; white-space: nowrap; }
   .ecl__btn:hover { background: #2a2648; color: #f7f4ec; }
-  .ecl__read { min-height: 2.9rem; margin-bottom: 0.4rem; text-align: center; }
+  .ecl__read { min-height: 4.1rem; margin-bottom: 0.4rem; text-align: center; }
   .ecl__title { margin: 0; font-size: 1.05rem; font-weight: 700; }
   .ecl__sub { margin: 0; font-size: 0.85rem; opacity: 0.85; }
   .ecl__stage { position: relative; width: 100%; aspect-ratio: 1 / 1; background: #dee6ec; border: 1px solid var(--rule, #d9d4c8); overflow: hidden; }
@@ -313,8 +313,9 @@ const { src, caption } = Astro.props;
       cx.strokeStyle = 'rgba(247, 244, 236, 0.9)'; cx.lineWidth = 1.3 * px;
       cx.beginPath(); for (const l of cur.centre) lineOf(l, W); cx.stroke();
       if (shadow) {                                                  // the umbra or antumbra now
-        cx.fillStyle = `rgba(${SHADE}, 0.95)`;
-        for (let k = 0; k < G * G; k++) if (shadow.inside[k]) { const i = k % G, j = (k / G) | 0; cx.fillRect((i / G) * W, (j / G) * W, W / G + 1, W / G + 1); }
+        const d = img.data;                                          // as a smoothed mask, so its edge is round, not stepped
+        for (let k = 0; k < G * G; k++) { const o = k * 4; d[o] = 22; d[o + 1] = 20; d[o + 2] = 44; d[o + 3] = shadow.inside[k] ? 242 : 0; }
+        ox.putImageData(img, 0, 0); cx.drawImage(off, 0, 0, G, G, 0, 0, W, W);
       }
     }
 
@@ -359,22 +360,50 @@ const { src, caption } = Astro.props;
     const pass = $<HTMLButtonElement>('pass'), clock = $<HTMLElement>('clock');
     let raf = 0;
     function stopPass() { if (raf) { cancelAnimationFrame(raf); raf = 0; } clock.hidden = true; pass.textContent = 'Watch it pass'; }
+    const now = new Float32Array(P.n), inside = new Uint8Array(P.n), cnow = new Float32Array(C.n);
+    // the umbra crosses the map in minutes, the whole eclipse takes hours: the pass slows down sixfold while the umbra is over the map
+    const SLOW = 6, umbras = new Map<number, [number, number] | null>();
+    function umbraWin(): [number, number] | null {
+      if (!cur) return null;
+      if (umbras.has(cur.id)) return umbras.get(cur.id)!;
+      let u0 = Infinity, u1 = -Infinity;
+      for (let t = win.t0; t <= win.t1 + 1e-9; t += 1 / 60) {
+        coverAt(cur.el, P, t, now, inside);
+        if (inside.some((v) => v)) { u0 = Math.min(u0, t); u1 = Math.max(u1, t); }
+      }
+      const w: [number, number] | null = isFinite(u0) ? [Math.max(win.t0, u0 - 3 / 60), Math.min(win.t1, u1 + 3 / 60)] : null;
+      umbras.set(cur.id, w); return w;
+    }
+    /** The pass's length in slowed hours, and the eclipse's time at a fraction f of it. */
+    function passLength() { const u = umbraWin(); return u ? win.t1 - win.t0 + (SLOW - 1) * (u[1] - u[0]) : win.t1 - win.t0; }
+    function timeAt(f: number) {
+      const u = umbraWin(), p = f * passLength();
+      if (!u) return win.t0 + p;
+      const a = u[0] - win.t0, b = SLOW * (u[1] - u[0]);
+      return p < a ? win.t0 + p : p < a + b ? u[0] + (p - a) / SLOW : u[1] + (p - a - b);
+    }
+    /** The chosen eclipse's shadow at a fraction f of the pass. */
+    function passAt(f: number) {
+      if (!cur) return;
+      const el = cur.el, t = timeAt(f);
+      clock.hidden = false;
+      coverAt(el, P, t, now, inside);
+      draw({ now, inside });
+      coverAt(el, C, t, cnow);                                       // the cities, at this moment
+      tags.forEach((g, k) => { g.textContent = `${Math.round(cnow[k] * 100)}%`; });
+      let ut = el.t0 + t - el.dt / 3600; ut = ((ut % 24) + 24) % 24;
+      const hh = Math.floor(ut), mm = Math.floor((ut - hh) * 60);
+      clock.textContent = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')} UT`;
+    }
     pass.addEventListener('click', () => {
       if (raf) { stopPass(); draw(); return; }
       if (!cur) return;
       stopPlay();
-      const el = cur.el, now = new Float32Array(P.n), inside = new Uint8Array(P.n), cnow = new Float32Array(C.n);
-      const span = win.t1 - win.t0, secs = Math.min(14, Math.max(6, span * 4)), t_start = performance.now();
-      pass.textContent = 'Stop'; clock.hidden = false;
+      const secs = Math.min(16, Math.max(7, passLength() * 3)), t_start = performance.now();
+      pass.textContent = 'Stop';
       const frame = (ts: number) => {
-        const f = Math.min(1, (ts - t_start) / (secs * 1000)), t = win.t0 + f * span;
-        coverAt(el, P, t, now, inside);
-        draw({ now, inside });
-        coverAt(el, C, t, cnow);                                     // the cities, at this moment
-        tags.forEach((g, k) => { g.textContent = `${Math.round(cnow[k] * 100)}%`; });
-        let ut = el.t0 + t - el.dt / 3600; ut = ((ut % 24) + 24) % 24;
-        const hh = Math.floor(ut), mm = Math.floor((ut - hh) * 60);
-        clock.textContent = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')} UT`;
+        const f = Math.min(1, (ts - t_start) / (secs * 1000));
+        passAt(f);
         if (f < 1) raf = requestAnimationFrame(frame);
         else { raf = 0; pass.textContent = 'Watch it pass'; window.setTimeout(() => { if (!raf) { clock.hidden = true; show(Number(range.value)); } }, 1500); }
       };
@@ -389,5 +418,7 @@ const { src, caption } = Astro.props;
     filter();
     // open on the last total over Greek land
     const last = list.findIndex((e) => e.year === 2006); if (last >= 0) show(last);
+    // for the demo recorder: set any step or moment of the pass directly, frame by frame
+    (window as any).__ecl = { show, passAt, count: () => list.length, index: (year: number) => list.findIndex((e) => e.year === year) };
   }
 </script>
