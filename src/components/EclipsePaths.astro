@@ -1,10 +1,9 @@
 ---
 /**
- * Day 17: every central eclipse of the Sun over Greece, 500 BC to AD 2500, one at a time. A timeline steps through them in order (or plays
- * through three thousand years), the earlier paths staying behind faintly; any one can be picked from the list. For the chosen eclipse the page
+ * Day 17: every central eclipse of the Sun over Greece, 500 BC to AD 2500, one at a time, picked from a list. For the chosen eclipse the page
  * works out, from its Besselian elements, the largest share of the Sun the Moon covers at each place (the same method as
  * Day_17/prep/eclipse_paths.py, on a 100 x 100 grid over the frame), shades it, and draws its contours, the path of totality or annularity
- * and its centre line; "Watch it pass" moves the Moon's shadow across the map minute by minute.
+ * and its centre line; Play, or the time slider, moves the Moon's shadow across the map minute by minute.
  *
  * `src`: the JSON written by Day_17/prep/page_data.py (frame, base map, cities, eclipses with their paths and elements).
  */
@@ -18,12 +17,12 @@ const { src, caption } = Astro.props;
 <figure class="map-figure">
   <div class="ecl" data-ecl data-src={src}>
     <div class="ecl__controls">
-      <div class="ecl__row">
-        <button type="button" class="ecl__btn" data-ecl-play aria-label="Play through the eclipses in order">&#9654; Play</button>
-        <input type="range" min="0" max="0" step="1" value="0" data-ecl-range aria-label="Step through the eclipses in order of date" />
-      </div>
       <div class="ecl__row ecl__row--pick">
-        <label class="ecl__pick">Eclipse <select data-ecl-select></select></label>
+        <span class="ecl__pick">
+          <button type="button" class="ecl__btn ecl__btn--step" data-ecl-prev aria-label="The eclipse before">&#8249;</button>
+          <select data-ecl-select aria-label="Eclipse"></select>
+          <button type="button" class="ecl__btn ecl__btn--step" data-ecl-next aria-label="The eclipse after">&#8250;</button>
+        </span>
         <span class="ecl__types" data-ecl-types>
           <label><input type="checkbox" value="T" checked /> Total</label>
           <label><input type="checkbox" value="A" checked /> Annular</label>
@@ -36,6 +35,11 @@ const { src, caption } = Astro.props;
       <p class="ecl__title" data-ecl-title></p>
       <p class="ecl__sub" data-ecl-sub></p>
     </div>
+    <div class="ecl__row ecl__row--time">
+      <button type="button" class="ecl__btn" data-ecl-play>&#9654; Play</button>
+      <input type="range" min="0" max="1000" step="1" value="0" data-ecl-time aria-label="Time during the eclipse: drag to move the Moon's shadow across the map" />
+      <button type="button" class="ecl__btn" data-ecl-whole>Whole eclipse</button>
+    </div>
     <div class="ecl__stage" data-ecl-stage>
       <img class="ecl__layer" data-ecl-base alt="" />
       <canvas class="ecl__layer" data-ecl-canvas role="img" aria-label="Map of Greece with the chosen eclipse: its path, centre line and how much of the Sun it covered"></canvas>
@@ -43,7 +47,6 @@ const { src, caption } = Astro.props;
       <div class="ecl__clock" data-ecl-clock hidden></div>
     </div>
     <div class="ecl__foot">
-      <button type="button" class="ecl__btn" data-ecl-pass>Watch it pass</button>
       <div class="ecl__legend" aria-hidden="true">
         <span class="ecl__ramp"></span>
         <span class="ecl__ticks"><em>Sun covered: 0%</em><em>50%</em><em>100%</em></span>
@@ -60,7 +63,10 @@ const { src, caption } = Astro.props;
   .ecl__row { display: grid; grid-template-columns: auto 1fr; gap: 0.75rem; align-items: center; }
   .ecl__row input[type='range'] { width: 100%; accent-color: #2a2648; }
   .ecl__row--pick { grid-template-columns: auto 1fr; font-size: 0.88rem; }
+  .ecl__row--time { grid-template-columns: auto 1fr auto; margin-bottom: 0.5rem; }
+  .ecl__pick { display: flex; gap: 0.3rem; align-items: center; }
   .ecl__pick select { max-width: 15rem; font: inherit; }
+  .ecl__btn--step { padding: 0.1rem 0.55rem; font-size: 1rem; line-height: 1.2; }
   .ecl__types { display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; justify-content: flex-end; }
   .ecl__types label { white-space: nowrap; }
   .ecl__btn { font: inherit; font-size: 0.88rem; padding: 0.25rem 0.75rem; border: 1px solid #2a2648; background: #f7f4ec; color: #23232a; border-radius: 3px; cursor: pointer; white-space: nowrap; }
@@ -77,7 +83,7 @@ const { src, caption } = Astro.props;
   .ecl__label b { font-weight: 700; }
   .ecl__label span { display: block; font-variant-numeric: tabular-nums; }
   .ecl__clock { position: absolute; left: 0.6rem; bottom: 0.5rem; padding: 0.15rem 0.45rem; font-size: 0.85rem; font-variant-numeric: tabular-nums; background: rgba(247, 244, 236, 0.85); color: #23232a; border-radius: 3px; }
-  .ecl__foot { display: grid; grid-template-columns: auto 1fr; gap: 0.75rem; align-items: start; margin-top: 0.5rem; }
+  .ecl__foot { margin-top: 0.5rem; }
   .ecl__legend { display: grid; gap: 0.15rem; font-size: 0.72rem; }
   .ecl__ramp { display: block; height: 0.6rem; background: linear-gradient(to right, rgba(22, 20, 44, 0) 50%, rgba(22, 20, 44, 0.08) 70%, rgba(22, 20, 44, 0.18) 80%, rgba(22, 20, 44, 0.37) 90%, rgba(22, 20, 44, 0.7));   /* 0.7 x coverage^6, as drawn */ border: 1px solid #c9c4b8; }
   .ecl__ticks { display: flex; justify-content: space-between; }
@@ -85,7 +91,7 @@ const { src, caption } = Astro.props;
   .ecl__key { display: flex; align-items: center; gap: 0.4rem; }
   .ecl__key-path { display: inline-block; width: 1.6rem; height: 0.6rem; background: rgba(22, 20, 44, 0.85); background-image: linear-gradient(transparent 45%, #f7f4ec 45%, #f7f4ec 55%, transparent 55%); }
   @media (max-width: 560px) {
-    .ecl__row--pick, .ecl__foot { grid-template-columns: 1fr; }
+    .ecl__row--pick { grid-template-columns: 1fr; }
     .ecl__types { justify-content: flex-start; }
   }
 </style>
@@ -233,7 +239,7 @@ const { src, caption } = Astro.props;
     });
 
     // which eclipses are shown
-    const range = $<HTMLInputElement>('range'), select = $<HTMLSelectElement>('select');
+    const select = $<HTMLSelectElement>('select');
     const typeBoxes = [...$<HTMLElement>('types').querySelectorAll<HTMLInputElement>('input[value]')], landBox = $<HTMLInputElement>('land');
     let list: Ecl[] = [];
     let cur: Ecl | null = null, field: Float32Array | null = null, win = { t0: 0, t1: 0 };
@@ -250,9 +256,8 @@ const { src, caption } = Astro.props;
         const o = document.createElement('option'); o.value = String(i); o.textContent = `${e.era}, ${e.day} ${MONTHS[e.month - 1]} · ${TYPES[e.type]}`;
         group!.append(o);
       });
-      range.max = String(Math.max(0, list.length - 1));
       const i = keep ? list.indexOf(keep) : -1;
-      show(i >= 0 ? i : Math.min(Number(range.value), list.length - 1));
+      show(i >= 0 ? i : 0);
     }
     function centuryName(k: number) {
       const n = k < 5 ? 5 - k : k - 4, suf = n % 100 >= 10 && n % 100 <= 20 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] ?? 'th';
@@ -298,10 +303,6 @@ const { src, caption } = Astro.props;
     function draw(shadow?: { now: Float32Array; inside: Float32Array }) {
       const W = cv.width, px = W / 600;
       cx.clearRect(0, 0, W, W);
-      const idx = list.indexOf(cur!);
-      // the eclipses before this one, faintly: the map darkens as the centuries pass
-      cx.fillStyle = `rgba(${SHADE}, 0.02)`;                       // about twenty overlap at an average place: a third of the way to dark
-      for (let i = 0; i < idx; i++) { cx.beginPath(); for (const r of list[i].path) ring(r, W); cx.fill(); }
       if (!cur || (!shadow && !field)) return;
       if (shadow) paintField(shadow.now, 2.5, 0.75);                // the moving shadow: gentler, so the partial phase shows as it sweeps
       else paintField(field!, 6, 0.7);                                // daylight hardly fades until the Sun is mostly covered
@@ -347,68 +348,26 @@ const { src, caption } = Astro.props;
         + (dur ? ` \u00b7 ${e.type === 'A' ? 'annularity' : 'totality'} up to ${Number(dur[1])} min ${Number(dur[2])} s, at the eclipse\u2019s greatest` : '')
         + (e.land ? '' : ' \u00b7 over the sea only') + (note ? ` \u00b7 ${note}` : '');
     }
-    // the times an eclipse's shadow is over the map, on their own: the timelapse needs only these, not the full coverage
-    const wins = new Map<number, { t0: number; t1: number }>();
-    function windowOf(e: Ecl) {
-      let w = wins.get(e.id);
-      if (w) return w;
-      const v = new Float32Array(P.n); let t0 = Infinity, t1 = -Infinity;
-      for (let t = e.el.tmin; t <= e.el.tmax + 1e-9; t += 5 / 60) {
-        coverAt(e.el, P, t, v);
-        if (v.some((x) => x > 0)) { t0 = Math.min(t0, t); t1 = Math.max(t1, t); }
-      }
-      w = isFinite(t0) ? { t0: Math.max(e.el.tmin, t0 - 5 / 60), t1: Math.min(e.el.tmax, t1 + 5 / 60) } : { t0: e.el.tmin, t1: e.el.tmin };
-      wins.set(e.id, w); return w;
-    }
-    /** An eclipse chosen by the timelapse: only what its passing shadow needs, not the full coverage. */
-    function lite(i: number) {
-      i = Math.max(0, Math.min(list.length - 1, i));
-      range.value = String(i); select.value = String(i);
-      cur = list[i]; win = windowOf(cur); field = cache.get(cur.id)?.best ?? null;
-      describe(i);
-    }
     function show(i: number) {
-      stopPass();
+      resetTime();
       if (!list.length) { cur = null; field = null; title.textContent = 'No eclipse with these choices'; sub.textContent = ''; draw(); return; }
       i = Math.max(0, Math.min(list.length - 1, i));
-      range.value = String(i); select.value = String(i);
+      select.value = String(i);
       cur = list[i];
       let c = cache.get(cur.id);
       if (!c) { c = coverMax(cur.el, P); cache.set(cur.id, c); }
-      field = c.best; win = { t0: c.t0, t1: c.t1 }; wins.set(cur.id, win);
+      field = c.best; win = { t0: c.t0, t1: c.t1 };
       const cityMax = coverMax(cur.el, C).best;
       tags.forEach((t, k) => { t.textContent = pct(cityMax[k]); });
       describe(i);
       draw();
     }
 
-    // the timelapse: every eclipse's shadow crossing the map in turn, in order of date, each leaving its path behind faintly
-    const play = $<HTMLButtonElement>('play');
-    const EACH = 1.6;                                                // seconds for each eclipse to cross
-    let timer = 0;
-    function stopPlay() { if (timer) { cancelAnimationFrame(timer); timer = 0; play.innerHTML = '&#9654; Play'; } }
-    play.addEventListener('click', () => {
-      if (timer) { stopPlay(); show(Number(range.value)); return; }
-      stopPass();
-      let i = Number(range.value) >= list.length - 1 ? 0 : Number(range.value), f = 0, last = performance.now();
-      lite(i);
-      play.innerHTML = '&#10074;&#10074; Pause';
-      const step = (ts: number) => {
-        f += Math.max(0, ts - last) / 1000 / EACH; last = ts;
-        if (f >= 1) {
-          if (i >= list.length - 1) { timer = 0; play.innerHTML = '&#9654; Play'; show(i); return; }
-          lite(++i); f = 0;
-        }
-        passAt(Math.min(1, f));
-        timer = requestAnimationFrame(step);
-      };
-      timer = requestAnimationFrame(step);
-    });
-
-    // watch the chosen eclipse's shadow cross the map
-    const pass = $<HTMLButtonElement>('pass'), clock = $<HTMLElement>('clock');
+    // the chosen eclipse's shadow crossing the map: played, or dragged through with the time slider
+    const play = $<HTMLButtonElement>('play'), time = $<HTMLInputElement>('time'), whole = $<HTMLButtonElement>('whole'), clock = $<HTMLElement>('clock');
     let raf = 0;
-    function stopPass() { if (raf) { cancelAnimationFrame(raf); raf = 0; } clock.hidden = true; pass.textContent = 'Watch it pass'; }
+    function stopPass() { if (raf) { cancelAnimationFrame(raf); raf = 0; } play.innerHTML = '&#9654; Play'; }
+    function resetTime() { stopPass(); time.value = '0'; clock.hidden = true; }
     const now = new Float32Array(P.n), inside = new Float32Array(P.n), cnow = new Float32Array(C.n);
     // the umbra crosses the map in minutes, the whole eclipse takes hours: the pass slows down sixfold while the umbra is over the map
     const SLOW = 6, umbras = new Map<number, [number, number] | null>();
@@ -435,7 +394,7 @@ const { src, caption } = Astro.props;
     function passAt(f: number) {
       if (!cur) return;
       const el = cur.el, t = timeAt(f);
-      clock.hidden = false;
+      clock.hidden = false; time.value = String(Math.round(f * 1000));
       coverAt(el, P, t, now, inside);
       draw({ now, inside });
       coverAt(el, C, t, cnow);                                       // the cities, at this moment
@@ -444,30 +403,34 @@ const { src, caption } = Astro.props;
       const hh = Math.floor(ut), mm = Math.floor((ut - hh) * 60);
       clock.textContent = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')} UT`;
     }
-    pass.addEventListener('click', () => {
-      if (raf) { stopPass(); draw(); return; }
+    play.addEventListener('click', () => {
+      if (raf) { stopPass(); return; }                               // pause where it is
       if (!cur) return;
-      stopPlay();
-      const secs = Math.min(16, Math.max(7, passLength() * 3)), t_start = performance.now();
-      pass.textContent = 'Stop';
+      const secs = Math.min(16, Math.max(7, passLength() * 3));
+      let f0 = Number(time.value) / 1000; if (f0 >= 1) f0 = 0;      // from where the slider is, or from the start
+      const t_start = performance.now() - f0 * secs * 1000;
+      play.innerHTML = '&#10074;&#10074; Pause';
       const frame = (ts: number) => {
         const f = Math.min(1, (ts - t_start) / (secs * 1000));
         passAt(f);
         if (f < 1) raf = requestAnimationFrame(frame);
-        else { raf = 0; pass.textContent = 'Watch it pass'; window.setTimeout(() => { if (!raf) { clock.hidden = true; show(Number(range.value)); } }, 1500); }
+        else { raf = 0; play.innerHTML = '&#9654; Play'; }
       };
       raf = requestAnimationFrame(frame);
     });
+    time.addEventListener('input', () => { stopPass(); passAt(Number(time.value) / 1000); });
+    whole.addEventListener('click', () => show(Number(select.value)));   // back to the largest coverage over the whole eclipse
 
-    range.addEventListener('input', () => { stopPlay(); show(Number(range.value)); });
-    select.addEventListener('change', () => { stopPlay(); show(Number(select.value)); });
-    for (const b of [...typeBoxes, landBox]) b.addEventListener('change', () => { stopPlay(); filter(cur); });
-    new ResizeObserver(() => { size(); if (!raf) draw(); }).observe(stage);
+    select.addEventListener('change', () => show(Number(select.value)));
+    $<HTMLButtonElement>('prev').addEventListener('click', () => show(Number(select.value) - 1));
+    $<HTMLButtonElement>('next').addEventListener('click', () => show(Number(select.value) + 1));
+    for (const b of [...typeBoxes, landBox]) b.addEventListener('change', () => filter(cur));
+    new ResizeObserver(() => { size(); if (raf) return; if (Number(time.value) > 0) passAt(Number(time.value) / 1000); else draw(); }).observe(stage);
     size();
     filter();
     // open on the last total over Greek land
     const last = list.findIndex((e) => e.year === 2006); if (last >= 0) show(last);
-    // for the demo recorder: set any step or moment of the pass directly, frame by frame
-    (window as any).__ecl = { show, lite, passAt, count: () => list.length, index: (year: number) => list.findIndex((e) => e.year === year) };
+    // for the demo recorder: set any eclipse or moment of its pass directly, frame by frame
+    (window as any).__ecl = { show, passAt, count: () => list.length, index: (year: number) => list.findIndex((e) => e.year === year) };
   }
 </script>

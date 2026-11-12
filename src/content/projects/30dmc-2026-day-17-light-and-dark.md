@@ -1,6 +1,6 @@
 ---
 title: 'Day 17 - Light & dark: In the Moon''s Shadow'
-summary: 'Every total eclipse of the Sun over Greece from 500 BC to AD 2500, one small map for each century: 50 paths of totality over Greek land, from none in three centuries to four in the 17th. Step through all of them, or watch one cross the map.'
+summary: 'Every total eclipse of the Sun over Greece from 500 BC to AD 2500, one small map for each century: 50 paths of totality over Greek land, from none in three centuries to four in the 17th. Pick any of them and watch its shadow cross the map.'
 date: 2026-11-17
 created: 2026-11-12
 category: '30-day-map-challenge'
@@ -31,7 +31,7 @@ downloads:
     note: 'JPEG · 4724 × 4724 · 3.5 MB'
 map: '/data/30dmc-2026-day-17-eclipses.json'
 mapComponent: 'eclipse-paths'
-mapCaption: 'Play, or drag the slider, to step through the eclipses in order of date; the earlier paths stay behind faintly. Pick any one from the list to see how much of the Sun it covered across the map, and press Watch it pass to follow its shadow minute by minute. Dates before 1582 are in the Julian calendar.'
+mapCaption: 'Pick an eclipse from the list, or step with the arrows, to see how much of the Sun it covered across the map. Press Play, or drag the time slider, to move its shadow across Greece minute by minute; Whole eclipse goes back to the overall coverage. Dates before 1582 are in the Julian calendar.'
 draft: true
 ---
 
@@ -45,4 +45,4 @@ A few of them were written down. A total eclipse in 463 BC is probably the one P
 
 The paths were computed rather than copied. NASA's Five Millennium Canon, by Fred Espenak and Jean Meeus, gives each eclipse as a set of Besselian elements: the position and size of the Moon's shadow as polynomials in time. For a grid of places 2.5 km apart, every 10 seconds, I tested whether each lay inside the umbra with the Sun above the horizon, and drew the path around the ones that did. The centre line is where the shadow's axis met the Earth. As a check, the point of greatest eclipse computed this way lies a median 0.8 km from the canon's own. Delta T, the drift of the Earth's rotation, is the canon's, and it is the main uncertainty for the oldest paths.
 
-The same elements give the share of the Sun covered outside the path, which is what most of Greece actually sees. On 29 March 2006 the Moon hid 84% of the Sun in Athens and 94% in Heraklion. The interactive map works this out in the browser for any of the 176 central eclipses over Greece and its seas, total, annular and hybrid, and can play them through in order or move a single eclipse's shadow across the map.
+The same elements give the share of the Sun covered outside the path, which is what most of Greece actually sees. On 29 March 2006 the Moon hid 84% of the Sun in Athens and 94% in Heraklion. The interactive map works this out in the browser for any of the 176 central eclipses over Greece and its seas, total, annular and hybrid, and moves any eclipse's shadow across the map minute by minute.
