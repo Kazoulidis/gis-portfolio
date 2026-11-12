@@ -132,6 +132,8 @@ const { src, caption } = Astro.props;
     return [lat * (180 / Math.PI), lon];
   }
 
+  // a share of the Sun as a percentage: 100% only when it is all covered, so 99.6% just outside totality reads 99%
+  const pct = (v: number) => `${v >= 1 ? 100 : Math.min(99, Math.round(v * 100))}%`;
   const poly = (c: number[], t: number) => c[0] + t * (c[1] + t * (c[2] + t * (c[3] ?? 0)));
 
   /** Places as sea-level rho sin phi', rho cos phi' and longitude, ready for the elements. */
@@ -143,16 +145,16 @@ const { src, caption } = Astro.props;
   type Places = ReturnType<typeof places>;
 
   /** The share of the Sun's disc the Moon covers at each place at time t (hours from t0), and how deep in the umbra or antumbra it is. */
-  function coverAt(el: El, P: Places, t: number, out: Float32Array, inside?: Uint8Array) {
+  function coverAt(el: El, P: Places, t: number, out: Float32Array, inside?: Float32Array) {
     const x = poly(el.x, t), y = poly(el.y, t), d = (poly(el.d, t) * Math.PI) / 180, mu = poly(el.mu, t);
     const l1 = poly(el.l1, t), l2 = poly(el.l2, t), sd = Math.sin(d), cd = Math.cos(d);
     for (let k = 0; k < P.n; k++) {
       const H = ((mu + P.lon[k] - 0.00417807 * el.dt) * Math.PI) / 180, cH = Math.cos(H);
       const xi = P.rc[k] * Math.sin(H), eta = P.rs[k] * cd - P.rc[k] * cH * sd, zeta = P.rs[k] * sd + P.rc[k] * cH * cd;
-      if (zeta <= 0) { out[k] = 0; if (inside) inside[k] = 0; continue; }                // the Sun below the horizon
+      if (zeta <= 0) { out[k] = 0; if (inside) inside[k] = -1; continue; }               // the Sun below the horizon
       const L1 = l1 - zeta * el.f1, L2 = l2 - zeta * el.f2, Rs = (L1 + L2) / 2, Rm = (L1 - L2) / 2;
       const s = Math.hypot(x - xi, y - eta);
-      if (inside) inside[k] = s < Math.abs(L2) ? 1 : 0;
+      if (inside) inside[k] = Math.abs(L2) - s;                                          // > 0 inside the umbra or antumbra
       let a: number;
       if (s >= Rs + Rm) a = 0;
       else if (s <= Math.abs(Rm - Rs)) a = Math.min(Rs, Rm) ** 2 / (Rs * Rs);
@@ -276,23 +278,40 @@ const { src, caption } = Astro.props;
       // each grid value is a cell's centre, so pixel i of the small canvas covers cell i of the frame
       const W = cv.width; cx.drawImage(off, 0, 0, G, G, 0, 0, W, W);
     }
-    function draw(shadow?: { now: Float32Array; inside: Uint8Array }) {
+    /** Fill where a G x G field is above zero, as one smooth shape: each cell's part, its edge interpolated between the cell centres. */
+    function fillAbove(v: Float32Array, W: number) {
+      const c = W / G; cx.beginPath();
+      for (let j = 0; j < G - 1; j++) for (let i = 0; i < G - 1; i++) {
+        const q = [v[j * G + i], v[j * G + i + 1], v[(j + 1) * G + i + 1], v[(j + 1) * G + i]];
+        if (q[0] <= 0 && q[1] <= 0 && q[2] <= 0 && q[3] <= 0) continue;
+        const pos = [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]].map(([a, b]) => [(a + 0.5) * c, (b + 0.5) * c]);
+        const pts: number[][] = [];
+        for (let k = 0; k < 4; k++) {
+          const n = (k + 1) % 4;
+          if (q[k] > 0) pts.push(pos[k]);
+          if (q[k] > 0 !== q[n] > 0) { const f = q[k] / (q[k] - q[n]); pts.push([pos[k][0] + f * (pos[n][0] - pos[k][0]), pos[k][1] + f * (pos[n][1] - pos[k][1])]); }
+        }
+        cx.moveTo(pts[0][0], pts[0][1]); for (let k = 1; k < pts.length; k++) cx.lineTo(pts[k][0], pts[k][1]); cx.closePath();
+      }
+      cx.fill();
+    }
+    function draw(shadow?: { now: Float32Array; inside: Float32Array }) {
       const W = cv.width, px = W / 600;
       cx.clearRect(0, 0, W, W);
       const idx = list.indexOf(cur!);
       // the eclipses before this one, faintly: the map darkens as the centuries pass
       cx.fillStyle = `rgba(${SHADE}, 0.02)`;                       // about twenty overlap at an average place: a third of the way to dark
       for (let i = 0; i < idx; i++) { cx.beginPath(); for (const r of list[i].path) ring(r, W); cx.fill(); }
-      if (!cur || !field) return;
+      if (!cur || (!shadow && !field)) return;
       if (shadow) paintField(shadow.now, 2.5, 0.75);                // the moving shadow: gentler, so the partial phase shows as it sweeps
-      else paintField(field, 6, 0.7);                                // daylight hardly fades until the Sun is mostly covered
+      else paintField(field!, 6, 0.7);                                // daylight hardly fades until the Sun is mostly covered
       // contours of the largest coverage, every 10%
       if (!shadow) {
         cx.lineWidth = 1.1 * px; cx.strokeStyle = `rgba(${SHADE}, 0.55)`;
         cx.font = `italic ${Math.round(13 * px)}px 'Times New Roman', serif`; cx.textAlign = 'center'; cx.textBaseline = 'middle';
         const marks: [number, number, string][] = [];
         for (let lv = 10; lv <= 90; lv += 10) {
-          const segs = contour(field, lv / 100);
+          const segs = contour(field!, lv / 100);
           if (!segs.length) continue;
           cx.beginPath(); for (const s of segs) { cx.moveTo(s[0] * W, s[1] * W); cx.lineTo(s[2] * W, s[3] * W); } cx.stroke();
           // a label where the line crosses the map's western edge, else nearest the middle
@@ -313,14 +332,41 @@ const { src, caption } = Astro.props;
       cx.strokeStyle = 'rgba(247, 244, 236, 0.9)'; cx.lineWidth = 1.3 * px;
       cx.beginPath(); for (const l of cur.centre) lineOf(l, W); cx.stroke();
       if (shadow) {                                                  // the umbra or antumbra now
-        const d = img.data;                                          // as a smoothed mask, so its edge is round, not stepped
-        for (let k = 0; k < G * G; k++) { const o = k * 4; d[o] = 22; d[o + 1] = 20; d[o + 2] = 44; d[o + 3] = shadow.inside[k] ? 242 : 0; }
-        ox.putImageData(img, 0, 0); cx.drawImage(off, 0, 0, G, G, 0, 0, W, W);
+        cx.fillStyle = `rgba(${SHADE}, ${cur.type === 'A' ? 0.72 : 0.95})`;   // an annular's antumbra leaves a ring of Sun: a little lighter
+        fillAbove(shadow.inside, W);
       }
     }
 
     // the chosen eclipse
     const title = $<HTMLElement>('title'), sub = $<HTMLElement>('sub');
+    function describe(i: number) {
+      const e = cur!, dur = e.dur.match(/(\d+)m(\d+)s/);
+      title.textContent = `${e.era}, ${e.day} ${MONTHS[e.month - 1]}: ${TYPES[e.type].toLowerCase()} eclipse`;
+      const note = NOTES[e.year] ?? '';
+      sub.textContent = `${i + 1} of ${list.length} shown`
+        + (dur ? ` \u00b7 ${e.type === 'A' ? 'annularity' : 'totality'} up to ${Number(dur[1])} min ${Number(dur[2])} s, at the eclipse\u2019s greatest` : '')
+        + (e.land ? '' : ' \u00b7 over the sea only') + (note ? ` \u00b7 ${note}` : '');
+    }
+    // the times an eclipse's shadow is over the map, on their own: the timelapse needs only these, not the full coverage
+    const wins = new Map<number, { t0: number; t1: number }>();
+    function windowOf(e: Ecl) {
+      let w = wins.get(e.id);
+      if (w) return w;
+      const v = new Float32Array(P.n); let t0 = Infinity, t1 = -Infinity;
+      for (let t = e.el.tmin; t <= e.el.tmax + 1e-9; t += 5 / 60) {
+        coverAt(e.el, P, t, v);
+        if (v.some((x) => x > 0)) { t0 = Math.min(t0, t); t1 = Math.max(t1, t); }
+      }
+      w = isFinite(t0) ? { t0: Math.max(e.el.tmin, t0 - 5 / 60), t1: Math.min(e.el.tmax, t1 + 5 / 60) } : { t0: e.el.tmin, t1: e.el.tmin };
+      wins.set(e.id, w); return w;
+    }
+    /** An eclipse chosen by the timelapse: only what its passing shadow needs, not the full coverage. */
+    function lite(i: number) {
+      i = Math.max(0, Math.min(list.length - 1, i));
+      range.value = String(i); select.value = String(i);
+      cur = list[i]; win = windowOf(cur); field = cache.get(cur.id)?.best ?? null;
+      describe(i);
+    }
     function show(i: number) {
       stopPass();
       if (!list.length) { cur = null; field = null; title.textContent = 'No eclipse with these choices'; sub.textContent = ''; draw(); return; }
@@ -329,38 +375,41 @@ const { src, caption } = Astro.props;
       cur = list[i];
       let c = cache.get(cur.id);
       if (!c) { c = coverMax(cur.el, P); cache.set(cur.id, c); }
-      field = c.best; win = { t0: c.t0, t1: c.t1 };
+      field = c.best; win = { t0: c.t0, t1: c.t1 }; wins.set(cur.id, win);
       const cityMax = coverMax(cur.el, C).best;
-      tags.forEach((t, k) => { t.textContent = `${Math.round(cityMax[k] * 100)}%`; });
-      const dur = cur.dur.match(/(\d+)m(\d+)s/);
-      title.textContent = `${cur.era}, ${cur.day} ${MONTHS[cur.month - 1]}: ${TYPES[cur.type].toLowerCase()} eclipse`;
-      const note = NOTES[cur.year] ?? '';
-      sub.textContent = `${i + 1} of ${list.length} shown`
-        + (dur ? ` · ${cur.type === 'A' ? 'annularity' : 'totality'} up to ${Number(dur[1])} min ${Number(dur[2])} s, at the eclipse’s greatest` : '')
-        + (cur.land ? '' : ' · over the sea only') + (note ? ` · ${note}` : '');
+      tags.forEach((t, k) => { t.textContent = pct(cityMax[k]); });
+      describe(i);
       draw();
     }
 
-    // play through the eclipses in order
+    // the timelapse: every eclipse's shadow crossing the map in turn, in order of date, each leaving its path behind faintly
     const play = $<HTMLButtonElement>('play');
+    const EACH = 1.6;                                                // seconds for each eclipse to cross
     let timer = 0;
-    function stopPlay() { if (timer) { clearInterval(timer); timer = 0; play.innerHTML = '&#9654; Play'; } }
+    function stopPlay() { if (timer) { cancelAnimationFrame(timer); timer = 0; play.innerHTML = '&#9654; Play'; } }
     play.addEventListener('click', () => {
-      if (timer) { stopPlay(); return; }
-      if (Number(range.value) >= list.length - 1) show(0);
+      if (timer) { stopPlay(); show(Number(range.value)); return; }
+      stopPass();
+      let i = Number(range.value) >= list.length - 1 ? 0 : Number(range.value), f = 0, last = performance.now();
+      lite(i);
       play.innerHTML = '&#10074;&#10074; Pause';
-      timer = window.setInterval(() => {
-        const i = Number(range.value) + 1;
-        if (i >= list.length) { stopPlay(); return; }
-        show(i);
-      }, 900);
+      const step = (ts: number) => {
+        f += Math.max(0, ts - last) / 1000 / EACH; last = ts;
+        if (f >= 1) {
+          if (i >= list.length - 1) { timer = 0; play.innerHTML = '&#9654; Play'; show(i); return; }
+          lite(++i); f = 0;
+        }
+        passAt(Math.min(1, f));
+        timer = requestAnimationFrame(step);
+      };
+      timer = requestAnimationFrame(step);
     });
 
     // watch the chosen eclipse's shadow cross the map
     const pass = $<HTMLButtonElement>('pass'), clock = $<HTMLElement>('clock');
     let raf = 0;
     function stopPass() { if (raf) { cancelAnimationFrame(raf); raf = 0; } clock.hidden = true; pass.textContent = 'Watch it pass'; }
-    const now = new Float32Array(P.n), inside = new Uint8Array(P.n), cnow = new Float32Array(C.n);
+    const now = new Float32Array(P.n), inside = new Float32Array(P.n), cnow = new Float32Array(C.n);
     // the umbra crosses the map in minutes, the whole eclipse takes hours: the pass slows down sixfold while the umbra is over the map
     const SLOW = 6, umbras = new Map<number, [number, number] | null>();
     function umbraWin(): [number, number] | null {
@@ -369,7 +418,7 @@ const { src, caption } = Astro.props;
       let u0 = Infinity, u1 = -Infinity;
       for (let t = win.t0; t <= win.t1 + 1e-9; t += 1 / 60) {
         coverAt(cur.el, P, t, now, inside);
-        if (inside.some((v) => v)) { u0 = Math.min(u0, t); u1 = Math.max(u1, t); }
+        if (inside.some((v) => v > 0)) { u0 = Math.min(u0, t); u1 = Math.max(u1, t); }
       }
       const w: [number, number] | null = isFinite(u0) ? [Math.max(win.t0, u0 - 3 / 60), Math.min(win.t1, u1 + 3 / 60)] : null;
       umbras.set(cur.id, w); return w;
@@ -390,7 +439,7 @@ const { src, caption } = Astro.props;
       coverAt(el, P, t, now, inside);
       draw({ now, inside });
       coverAt(el, C, t, cnow);                                       // the cities, at this moment
-      tags.forEach((g, k) => { g.textContent = `${Math.round(cnow[k] * 100)}%`; });
+      tags.forEach((g, k) => { g.textContent = pct(cnow[k]); });
       let ut = el.t0 + t - el.dt / 3600; ut = ((ut % 24) + 24) % 24;
       const hh = Math.floor(ut), mm = Math.floor((ut - hh) * 60);
       clock.textContent = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')} UT`;
@@ -419,6 +468,6 @@ const { src, caption } = Astro.props;
     // open on the last total over Greek land
     const last = list.findIndex((e) => e.year === 2006); if (last >= 0) show(last);
     // for the demo recorder: set any step or moment of the pass directly, frame by frame
-    (window as any).__ecl = { show, passAt, count: () => list.length, index: (year: number) => list.findIndex((e) => e.year === year) };
+    (window as any).__ecl = { show, lite, passAt, count: () => list.length, index: (year: number) => list.findIndex((e) => e.year === year) };
   }
 </script>
