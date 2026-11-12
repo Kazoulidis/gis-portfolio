@@ -148,13 +148,12 @@ const { src, caption } = Astro.props;
       ticks.push({ yr, objs: [r, o] });
     }
     // the trips worth naming, at the far end of each branch
-    const seen = new Set<string>(); let farN = 0;
     const tags = meta.labels.map((l) => {                                  // every trip named, repeats included
       const el = document.createElement('div'); el.className = 'tower__label';
       el.innerHTML = '<b></b><br><span></span>'; el.querySelector('b')!.textContent = l.name; el.querySelector('span')!.textContent = `${l.when}, ${l.km.toLocaleString('en-GB')} km${l.far ? ', not to scale' : ''}`;
       const o = new CSS2DObject(el); o.position.set(l.x - half, Y(l.t), -(l.y - half));
-      o.center.set(-0.05, l.far ? (farN++ % 2 ? -0.6 : 1.6) : 0.5); scene.add(o);   // the two trips abroad end close together: one label above its branch, one below
-      return { o, t: l.t };
+      o.center.set(-0.05, 0.5); scene.add(o);
+      return { o, t: l.t, el, on: true };
     });
 
     function resize() {
@@ -172,7 +171,7 @@ const { src, caption } = Astro.props;
       let k = 0; while (k < meta.n && P[k * 4 + 2] <= t) k++;
       geo.instanceCount = Math.max(0, k - 1);
       let f = 0; while (f < fT.length && fT[f] <= t) f++; fgeo.instanceCount = f;
-      tags.forEach((g) => { g.o.visible = g.t <= t; });
+      tags.forEach((g) => { g.on = g.t <= t; g.o.visible = g.on; });
       ticks.forEach((k) => k.objs.forEach((o) => { o.visible = k.yr <= t; }));
       yearEl.textContent = String(Math.min(Math.floor(t), Math.floor(meta.t1)));
     }
@@ -183,7 +182,31 @@ const { src, caption } = Astro.props;
     const reduce = matchMedia('(prefers-reduced-motion: reduce)');
     if (reduce.matches) { controls.autoRotate = false; spin.checked = false; }
     upTo(meta.t1);
-    (window as any).__tower = { upTo, controls, camera, render: () => { controls.update(); renderer.render(scene, camera); labelR.render(scene, camera); }, HEIGHT, S, trunk: [hx, hz], Y, meta: { t0: meta.t0, t1: meta.t1 }, scene };
+    // labels kept apart: in order of importance (the trips abroad, then by distance), each takes the first spot around its branch end
+    // that is clear of the labels already placed and of the trunk; one that finds none is hidden
+    const SPOTS: [number, number][] = [[-0.05, 0.5], [1.05, 0.5], [-0.05, 1.5], [-0.05, -0.5], [1.05, 1.5], [1.05, -0.5], [-0.05, 2.5], [-0.05, -1.5], [1.05, 2.5], [1.05, -1.5]];
+    const v3 = new THREE.Vector3();
+    function declutter() {
+      const w = stage.clientWidth, h = stage.clientHeight, placed: number[][] = [];
+      const sp = (x: number, y: number, z: number) => { v3.set(x, y, z).project(camera); return [(v3.x + 1) / 2 * w, (1 - v3.y) / 2 * h, v3.z]; };
+      const b = sp(hx, Y(meta.t0), hz), tp = sp(hx, Y(meta.t1), hz);
+      placed.push([Math.min(b[0], tp[0]) - 9, Math.min(b[1], tp[1]), Math.max(b[0], tp[0]) + 9, Math.max(b[1], tp[1])]);   // the trunk
+      for (const g of tags) {
+        if (!g.on) continue;
+        const [x, y, z] = sp(g.o.position.x, g.o.position.y, g.o.position.z);
+        const ew = g.el.offsetWidth || 80, eh = g.el.offsetHeight || 24;
+        let ok = false;
+        if (z < 1) for (const [cx, cy] of SPOTS) {
+          const r = [x - cx * ew, y - cy * eh, x - cx * ew + ew, y - cy * eh + eh];
+          if (r[0] < 2 || r[2] > w - 2 || r[1] < 2 || r[3] > h - 2) continue;
+          if (placed.some((q) => r[0] < q[2] + 3 && r[2] > q[0] - 3 && r[1] < q[3] + 1 && r[3] > q[1] - 1)) continue;
+          g.o.center.set(cx, cy); placed.push(r); ok = true; break;
+        }
+        g.o.visible = ok;
+      }
+    }
+    let lastPlace = 0;
+    (window as any).__tower = { upTo, controls, camera, render: () => { controls.update(); renderer.render(scene, camera); labelR.render(scene, camera); declutter(); labelR.render(scene, camera); }, HEIGHT, S, trunk: [hx, hz], Y, meta: { t0: meta.t0, t1: meta.t1 }, scene };
 
     function frame(now: number) {
       if (playing) {
@@ -191,6 +214,7 @@ const { src, caption } = Astro.props;
         range.value = String(v); upTo(tAt(v)); if (v >= 1000) playing = false;
       }
       controls.update(); renderer.render(scene, camera); labelR.render(scene, camera);
+      if (now - lastPlace > 200) { lastPlace = now; declutter(); }
       requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
