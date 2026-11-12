@@ -23,7 +23,10 @@ const { src, caption } = Astro.props;
       <div class="ecl__row ecl__row--pick">
         <span class="ecl__pick">
           <button type="button" class="ecl__btn ecl__btn--step" data-ecl-prev aria-label="The eclipse before">&#8249;</button>
-          <select data-ecl-select aria-label="Eclipse"></select>
+          <span class="ecl__list">
+            <button type="button" class="ecl__btn ecl__open" data-ecl-open aria-haspopup="listbox" aria-expanded="false" aria-label="Choose an eclipse"><span data-ecl-current></span><i aria-hidden="true">&#9662;</i></button>
+            <ul class="ecl__options" data-ecl-options role="listbox" aria-label="Eclipses, by century" tabindex="-1" hidden></ul>
+          </span>
           <button type="button" class="ecl__btn ecl__btn--step" data-ecl-next aria-label="The eclipse after">&#8250;</button>
         </span>
         <span class="ecl__types" data-ecl-types>
@@ -67,7 +70,16 @@ const { src, caption } = Astro.props;
   .ecl__row--pick { grid-template-columns: auto 1fr; font-size: 0.88rem; }
   .ecl__row--time { grid-template-columns: auto 1fr auto; margin-bottom: 0.5rem; }
   .ecl__pick { display: flex; gap: 0.3rem; align-items: center; }
-  .ecl__pick select { max-width: 15rem; font: inherit; }
+  /* the list of eclipses: drawn on the page, not the browser's own, so it looks the same everywhere (and in the demo video) */
+  .ecl__list { position: relative; }
+  .ecl__open { display: inline-flex; gap: 0.5rem; align-items: center; min-width: 14.5rem; justify-content: space-between; }
+  .ecl__open i { font-style: normal; font-size: 0.75rem; }
+  .ecl__options { position: absolute; left: 0; top: calc(100% + 3px); z-index: 1100; width: 16rem; max-height: 17rem; overflow-y: auto; margin: 0; padding: 0.2rem 0;
+    list-style: none; background: #f7f4ec; border: 1px solid #2a2648; border-radius: 3px; box-shadow: 0 6px 18px rgba(22, 20, 44, 0.22); font-size: 0.85rem; }
+  .ecl__options li { padding: 0.18rem 0.7rem; cursor: pointer; white-space: nowrap; }
+  .ecl__options li[role='option']:hover, .ecl__options li.is-active { background: #2a2648; color: #f7f4ec; }
+  .ecl__options li[aria-selected='true'] { font-weight: 700; }
+  .ecl__options li.ecl__group { padding-top: 0.45rem; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.6; cursor: default; }
   .ecl__btn--step { padding: 0.1rem 0.55rem; font-size: 1rem; line-height: 1.2; }
   .ecl__types { display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; justify-content: flex-end; }
   .ecl__types label { white-space: nowrap; }
@@ -261,7 +273,8 @@ const { src, caption } = Astro.props;
     });
 
     // which eclipses are shown
-    const select = $<HTMLSelectElement>('select');
+    const openBtn = $<HTMLButtonElement>('open'), options = $<HTMLUListElement>('options'), current = $<HTMLElement>('current');
+    let at = 0;                                                       // the chosen eclipse's place in the list
     const typeBoxes = [...$<HTMLElement>('types').querySelectorAll<HTMLInputElement>('input[value]')], landBox = $<HTMLInputElement>('land');
     let list: Ecl[] = [];
     let cur: Ecl | null = null, win = { t0: 0, t1: 0 };
@@ -273,13 +286,14 @@ const { src, caption } = Astro.props;
     function filter(keep?: Ecl | null) {
       const on = new Set(typeBoxes.filter((b) => b.checked).map((b) => b.value));
       list = data.eclipses.filter((e) => on.has(e.type) && (!landBox.checked || e.land));
-      select.replaceChildren();
-      let group: HTMLOptGroupElement | null = null, gk = '';
+      options.replaceChildren();
+      let gk = '';
       list.forEach((e, i) => {
         const name = centuryName(Math.floor((e.year + 499) / 100));
-        if (name !== gk) { group = document.createElement('optgroup'); group.label = name; select.append(group); gk = name; }
-        const o = document.createElement('option'); o.value = String(i); o.textContent = `${e.era}, ${e.day} ${MONTHS[e.month - 1]} · ${TYPES[e.type]}`;
-        group!.append(o);
+        if (name !== gk) { const g = document.createElement('li'); g.className = 'ecl__group'; g.setAttribute('role', 'presentation'); g.textContent = name; options.append(g); gk = name; }
+        const o = document.createElement('li'); o.setAttribute('role', 'option'); o.id = `ecl-opt-${i}`; o.dataset.i = String(i);
+        o.textContent = `${e.era}, ${e.day} ${MONTHS[e.month - 1]} \u00b7 ${TYPES[e.type]}`;
+        options.append(o);
       });
       const i = keep ? list.indexOf(keep) : -1;
       show(i >= 0 ? i : 0);
@@ -377,7 +391,9 @@ const { src, caption } = Astro.props;
       resetTime();
       if (!list.length) { cur = null; title.textContent = 'No eclipse with these choices'; sub.textContent = ''; pathLayer.clearLayers(); clear(); return; }
       i = Math.max(0, Math.min(list.length - 1, i));
-      select.value = String(i);
+      at = i;
+      current.textContent = `${list[i].era}, ${list[i].day} ${MONTHS[list[i].month - 1]} \u00b7 ${TYPES[list[i].type]}`;
+      for (const o of options.querySelectorAll('[role=option]')) o.setAttribute('aria-selected', String(Number((o as HTMLElement).dataset.i) === i));
       const changed = cur !== list[i];
       cur = list[i];
       win = wins.get(cur.id) ?? windowOf(cur.el, A); wins.set(cur.id, win);
@@ -436,7 +452,7 @@ const { src, caption } = Astro.props;
     play.addEventListener('click', () => {
       if (raf) { stopPass(); return; }                                 // pause where it is
       if (!cur) return;
-      const secs = Math.min(16, Math.max(7, passLength() * 3));
+      const secs = Math.min(12, Math.max(6, passLength() * 2.5));
       let f0 = Number(time.value) / 1000; if (f0 >= 1) f0 = 0;        // from where the slider is, or from the start
       const t_start = performance.now() - f0 * secs * 1000;
       play.innerHTML = '&#10074;&#10074; Pause';
@@ -449,11 +465,37 @@ const { src, caption } = Astro.props;
       raf = requestAnimationFrame(frame);
     });
     time.addEventListener('input', () => { stopPass(); passAt(Number(time.value) / 1000); });
-    whole.addEventListener('click', () => show(Number(select.value)));   // back to the largest coverage over the whole eclipse
+    whole.addEventListener('click', () => show(at));   // back to the largest coverage over the whole eclipse
 
-    select.addEventListener('change', () => show(Number(select.value)));
-    $<HTMLButtonElement>('prev').addEventListener('click', () => show(Number(select.value) - 1));
-    $<HTMLButtonElement>('next').addEventListener('click', () => show(Number(select.value) + 1));
+    // the list: opens under its button, scrolled to the chosen eclipse; a click, or Enter, picks; Escape or a click elsewhere closes it
+    let active = -1;
+    function mark(i: number) {
+      active = Math.max(0, Math.min(list.length - 1, i));
+      for (const o of options.querySelectorAll('.is-active')) o.classList.remove('is-active');
+      const o = options.querySelector<HTMLElement>(`#ecl-opt-${active}`);
+      if (o) { o.classList.add('is-active'); o.scrollIntoView({ block: 'nearest' }); options.setAttribute('aria-activedescendant', o.id); }
+    }
+    function openList() {
+      options.hidden = false; openBtn.setAttribute('aria-expanded', 'true');
+      const o = options.querySelector<HTMLElement>(`#ecl-opt-${at}`);
+      if (o) options.scrollTop = o.offsetTop - options.clientHeight / 2 + o.offsetHeight / 2;
+      mark(at); options.focus({ preventScroll: true });
+    }
+    function closeList(focus = true) { options.hidden = true; openBtn.setAttribute('aria-expanded', 'false'); if (focus) openBtn.focus({ preventScroll: true }); }
+    openBtn.addEventListener('click', () => (options.hidden ? openList() : closeList()));
+    options.addEventListener('click', (ev) => {
+      const o = (ev.target as HTMLElement).closest<HTMLElement>('[role=option]');
+      if (o) { closeList(); show(Number(o.dataset.i)); }
+    });
+    options.addEventListener('keydown', (ev) => {
+      if (ev.key === 'ArrowDown') { mark(active + 1); ev.preventDefault(); }
+      else if (ev.key === 'ArrowUp') { mark(active - 1); ev.preventDefault(); }
+      else if (ev.key === 'Enter' || ev.key === ' ') { closeList(); show(active); ev.preventDefault(); }
+      else if (ev.key === 'Escape' || ev.key === 'Tab') closeList(ev.key === 'Escape');
+    });
+    document.addEventListener('pointerdown', (ev) => { if (!options.hidden && !(ev.target as HTMLElement).closest('.ecl__list')) closeList(false); });
+    $<HTMLButtonElement>('prev').addEventListener('click', () => show(at - 1));
+    $<HTMLButtonElement>('next').addEventListener('click', () => show(at + 1));
     for (const b of [...typeBoxes, landBox]) b.addEventListener('change', () => filter(cur));
 
     // the view changed: lay the grid again and redraw what was on it; while zooming, hide the canvases rather than stretch them
