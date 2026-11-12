@@ -153,7 +153,8 @@ const { src, caption } = Astro.props;
       el.innerHTML = '<b></b><br><span></span>'; el.querySelector('b')!.textContent = l.name; el.querySelector('span')!.textContent = `${l.when}, ${l.km.toLocaleString('en-GB')} km${l.far ? ', not to scale' : ''}`;
       const o = new CSS2DObject(el); o.position.set(l.x - half, Y(l.t), -(l.y - half));
       o.center.set(-0.05, 0.5); scene.add(o);
-      return { o, t: l.t, el, on: true };
+      el.style.opacity = '0';
+      return { o, t: l.t, el, on: true, alpha: 0, blocked: 0, clear: 0 };
     });
 
     function resize() {
@@ -191,19 +192,26 @@ const { src, caption } = Astro.props;
       const sp = (x: number, y: number, z: number) => { v3.set(x, y, z).project(camera); return [(v3.x + 1) / 2 * w, (1 - v3.y) / 2 * h, v3.z]; };
       const b = sp(hx, Y(meta.t0), hz), tp = sp(hx, Y(meta.t1), hz);
       placed.push([Math.min(b[0], tp[0]) - 9, Math.min(b[1], tp[1]), Math.max(b[0], tp[0]) + 9, Math.max(b[1], tp[1])]);   // the trunk
+      // calm, not flickering: a label keeps its spot while that spot is clear, moves to another clear one when blocked, never overlaps,
+      // shows only after fitting for SHOW passes in a row, and fades in and out by FADE a pass instead of popping
+      const SHOW = 3, FADE = 0.2;
       for (const g of tags) {
-        if (!g.on) continue;
+        if (!g.on) { g.alpha = 0; g.clear = 0; g.el.style.opacity = '0'; g.o.visible = false; continue; }
         const [x, y, z] = sp(g.o.position.x, g.o.position.y, g.o.position.z);
         const ew = g.el.offsetWidth || 80, eh = g.el.offsetHeight || 24;
-        let ok = false;
-        const keep: [number, number] = [g.o.center.x, g.o.center.y];          // its current spot first, so labels do not jump as the view turns
-        if (z < 1) for (const [cx, cy] of [keep, ...SPOTS]) {
-          const r = [x - cx * ew, y - cy * eh, x - cx * ew + ew, y - cy * eh + eh];
-          if (r[0] < 2 || r[2] > w - 2 || r[1] < 2 || r[3] > h - 2) continue;
-          if (placed.some((q) => r[0] < q[2] + 3 && r[2] > q[0] - 3 && r[1] < q[3] + 1 && r[3] > q[1] - 1)) continue;
-          g.o.center.set(cx, cy); placed.push(r); ok = true; break;
+        const rect = (cx: number, cy: number) => [x - cx * ew, y - cy * eh, x - cx * ew + ew, y - cy * eh + eh];
+        const free = (r: number[]) => r[0] >= 2 && r[2] <= w - 2 && r[1] >= 2 && r[3] <= h - 2 &&
+          !placed.some((q) => r[0] < q[2] + 3 && r[2] > q[0] - 3 && r[1] < q[3] + 1 && r[3] > q[1] - 1);
+        let want = false;
+        const cur = rect(g.o.center.x, g.o.center.y);
+        if (z < 1 && free(cur)) { want = true; placed.push(cur); }            // its spot is clear: stay
+        else if (z < 1 && g.alpha === 0) {                                    // blocked and faded out: find another clear spot
+          for (const [cx, cy] of SPOTS) { const r = rect(cx, cy); if (free(r)) { g.o.center.set(cx, cy); placed.push(r); want = true; break; } }
         }
-        g.o.visible = ok;
+        g.clear = want ? g.clear + 1 : 0;
+        const target = want && (g.alpha > 0 || g.clear >= SHOW) ? 1 : 0;
+        g.alpha = target > g.alpha ? Math.min(target, g.alpha + FADE) : Math.max(target, g.alpha - FADE);   // towards the target, then still
+        g.el.style.opacity = String(g.alpha); g.o.visible = true;            // hidden by opacity only, so the label keeps its size for the next pass
       }
     }
     let lastPlace = 0;
@@ -215,7 +223,7 @@ const { src, caption } = Astro.props;
         range.value = String(v); upTo(tAt(v)); if (v >= 1000) playing = false;
       }
       controls.update(); renderer.render(scene, camera); labelR.render(scene, camera);
-      if (now - lastPlace > 200) { lastPlace = now; declutter(); }
+      if (now - lastPlace > 60) { lastPlace = now; declutter(); }
       requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);

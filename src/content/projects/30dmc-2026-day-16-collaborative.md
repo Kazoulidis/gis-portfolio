@@ -25,7 +25,7 @@ downloads:
     note: 'JPEG · 7016 × 4961 · 2.0 MB'
   - label: 'Square map'
     href: '/downloads/30dmc-2026-day-16-map-square.jpg'
-    note: 'JPEG · 4724 × 4724 · 0.9 MB'
+    note: 'JPEG · 4724 × 4724 · 0.8 MB'
 map: '/data/30dmc-2026-day-16-cube.json'
 mapComponent: 'time-tower'
 mapCaption: 'Drag to turn the tower, scroll to zoom, and play or slide to grow it year by year. Positions are rounded to 1 km, and home is shown only to within 10 km.'
