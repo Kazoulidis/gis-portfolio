@@ -1,11 +1,14 @@
 ---
 /**
- * Day 17: every central eclipse of the Sun over Greece, 500 BC to AD 2500, one at a time, picked from a list. For the chosen eclipse the page
+ * Day 17: every central eclipse of the Sun over Greece, 500 BC to AD 2500, one at a time, on a Leaflet map. For the chosen eclipse the page
  * works out, from its Besselian elements, the largest share of the Sun the Moon covers at each place (the same method as
- * Day_17/prep/eclipse_paths.py, on a 100 x 100 grid over the frame), shades it, and draws its contours, the path of totality or annularity
- * and its centre line; Play, or the time slider, moves the Moon's shadow across the map minute by minute.
+ * Day_17/prep/eclipse_paths.py), shades it and draws its contours, the path of totality or annularity and its centre line, and the map's
+ * camera moves to the centre line; Play, or the time slider, moves the Moon's shadow across the map minute by minute.
  *
- * `src`: the JSON written by Day_17/prep/page_data.py (frame, base map, cities, eclipses with their paths and elements).
+ * The shading is worked out on a grid over the map's view, a node every few pixels, so it stays sharp at any zoom: when the view changes the
+ * grid is laid again. Two canvases hold it, one under the path (the coverage) and one over it (the umbra), in their own panes.
+ *
+ * `src`: the JSON written by Day_17/prep/page_data.py (the area, cities, eclipses with their paths and elements, in latitude and longitude).
  */
 interface Props {
   src: string;
@@ -41,9 +44,7 @@ const { src, caption } = Astro.props;
       <button type="button" class="ecl__btn" data-ecl-whole>Whole eclipse</button>
     </div>
     <div class="ecl__stage" data-ecl-stage>
-      <img class="ecl__layer" data-ecl-base alt="" />
-      <canvas class="ecl__layer" data-ecl-canvas role="img" aria-label="Map of Greece with the chosen eclipse: its path, centre line and how much of the Sun it covered"></canvas>
-      <div class="ecl__labels" data-ecl-labels></div>
+      <div class="ecl__map" data-ecl-map role="img" aria-label="Map of Greece with the chosen eclipse: its path, centre line and how much of the Sun it covered"></div>
       <div class="ecl__clock" data-ecl-clock hidden></div>
     </div>
     <div class="ecl__foot">
@@ -74,15 +75,16 @@ const { src, caption } = Astro.props;
   .ecl__read { min-height: 4.1rem; margin-bottom: 0.4rem; text-align: center; }
   .ecl__title { margin: 0; font-size: 1.05rem; font-weight: 700; }
   .ecl__sub { margin: 0; font-size: 0.85rem; opacity: 0.85; }
-  .ecl__stage { position: relative; width: 100%; aspect-ratio: 1 / 1; background: #dee6ec; border: 1px solid var(--rule, #d9d4c8); overflow: hidden; }
-  .ecl__layer { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-  .ecl__labels { position: absolute; inset: 0; pointer-events: none; }
-  .ecl__label { position: absolute; transform: translate(-50%, -100%); padding-bottom: 6px; font-size: clamp(0.6rem, 1.5vw, 0.8rem); line-height: 1.15; text-align: center;
-    color: #23232a; text-shadow: 0 0 3px #f7f4ec, 0 0 3px #f7f4ec, 0 0 2px #f7f4ec; white-space: nowrap; }
-  .ecl__label::after { content: ''; position: absolute; left: 50%; bottom: 0; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%; background: #23232a; box-shadow: 0 0 0 1.5px #f7f4ec; }
+  .ecl__stage { position: relative; width: 100%; aspect-ratio: 1 / 1; border: 1px solid var(--rule, #d9d4c8); }
+  .ecl__map { position: absolute; inset: 0; background: #dee2e6; }
+  .ecl__cv { position: absolute; left: 0; top: 0; pointer-events: none; }
+  .ecl__label { background: none; border: 0; }
+  .ecl__label div { position: absolute; left: 0; bottom: 0; transform: translateX(-50%); padding-bottom: 6px; font-size: clamp(0.6rem, 1.5vw, 0.8rem); line-height: 1.15;
+    text-align: center; color: #23232a; text-shadow: 0 0 3px #f7f4ec, 0 0 3px #f7f4ec, 0 0 2px #f7f4ec; white-space: nowrap; }
+  .ecl__label div::after { content: ''; position: absolute; left: 50%; bottom: 0; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%; background: #23232a; box-shadow: 0 0 0 1.5px #f7f4ec; }
   .ecl__label b { font-weight: 700; }
   .ecl__label span { display: block; font-variant-numeric: tabular-nums; }
-  .ecl__clock { position: absolute; left: 0.6rem; bottom: 0.5rem; padding: 0.15rem 0.45rem; font-size: 0.85rem; font-variant-numeric: tabular-nums; background: rgba(247, 244, 236, 0.85); color: #23232a; border-radius: 3px; }
+  .ecl__clock { position: absolute; left: 0.6rem; bottom: 1.6rem; z-index: 1000; padding: 0.15rem 0.45rem; font-size: 0.85rem; font-variant-numeric: tabular-nums; background: rgba(247, 244, 236, 0.9); color: #23232a; border-radius: 3px; pointer-events: none; }
   .ecl__foot { margin-top: 0.5rem; }
   .ecl__legend { display: grid; gap: 0.15rem; font-size: 0.72rem; }
   .ecl__ramp { display: block; height: 0.6rem; background: linear-gradient(to right, rgba(22, 20, 44, 0) 50%, rgba(22, 20, 44, 0.08) 70%, rgba(22, 20, 44, 0.18) 80%, rgba(22, 20, 44, 0.37) 90%, rgba(22, 20, 44, 0.7));   /* 0.7 x coverage^6, as drawn */ border: 1px solid #c9c4b8; }
@@ -97,14 +99,18 @@ const { src, caption } = Astro.props;
 </style>
 
 <script>
+  import * as L from 'leaflet';
+  import 'leaflet/dist/leaflet.css';
   import { whenNear } from '../lazy';
 
   type El = { t0: number; tmin: number; tmax: number; dt: number; x: number[]; y: number[]; d: number[]; mu: number[]; l1: number[]; l2: number[]; f1: number; f2: number };
+  type LL = [number, number];
   type Ecl = { id: number; year: number; era: string; month: number; day: number; type: 'T' | 'A' | 'H'; land: boolean; dur: string;
-    path: [number, number][][]; centre: [number, number][][]; el: El };
-  type Data = { frame: { x0: number; y0: number; x1: number; y1: number }; base: string;
-    cities: { name: string; x: number; y: number; lat: number; lon: number }[]; eclipses: Ecl[] };
+    path: LL[][]; centre: LL[][]; el: El };
+  type Data = { area: [LL, LL]; cities: { name: string; lat: number; lon: number }[]; eclipses: Ecl[] };
 
+  const BASEMAP = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+  const ATTRIBUTION = 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ · Eclipse Predictions by Fred Espenak, NASA’s GSFC';
   const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   const TYPES = { T: 'Total', A: 'Annular', H: 'Hybrid' } as const;
   // the eclipses writers recorded (astronomical years: -462 is 463 BC)
@@ -117,36 +123,22 @@ const { src, caption } = Astro.props;
     2088: 'The next total eclipse over Greek land.',
   };
   const SHADE = '22, 20, 44';
-  const G = 100;                                                     // the coverage grid over the frame
+  const CELL = 7;                                                    // pixels between the shading grid's nodes
   const F = 0.99664719;                                              // the Besselian elements' 1 - flattening
+  const GREECE: LL = [38.6, 23.6];                                   // the camera centres the centre line's point nearest here
 
   const box = document.querySelector<HTMLElement>('[data-ecl]');
   if (box) whenNear(box, () => { void start(box); });
-
-  // the Greek Grid (EPSG:2100) to latitude and longitude: transverse Mercator on GRS80, 24 E, k0 0.9996, false easting 500 km
-  function gridToLatLon(E: number, N: number): [number, number] {
-    const a = 6378137, f = 1 / 298.257222101, k0 = 0.9996, e2 = f * (2 - f), ep2 = e2 / (1 - e2);
-    const M = N / k0, mu = M / (a * (1 - e2 / 4 - (3 * e2 * e2) / 64 - (5 * e2 ** 3) / 256));
-    const e1 = (1 - Math.sqrt(1 - e2)) / (1 + Math.sqrt(1 - e2));
-    const p1 = mu + (1.5 * e1 - (27 / 32) * e1 ** 3) * Math.sin(2 * mu) + ((21 / 16) * e1 * e1 - (55 / 32) * e1 ** 4) * Math.sin(4 * mu)
-      + ((151 / 96) * e1 ** 3) * Math.sin(6 * mu) + ((1097 / 512) * e1 ** 4) * Math.sin(8 * mu);
-    const s = Math.sin(p1), c = Math.cos(p1), t = Math.tan(p1);
-    const N1 = a / Math.sqrt(1 - e2 * s * s), T1 = t * t, C1 = ep2 * c * c, R1 = (a * (1 - e2)) / (1 - e2 * s * s) ** 1.5, D = (E - 500000) / (N1 * k0);
-    const lat = p1 - ((N1 * t) / R1) * (D * D / 2 - ((5 + 3 * T1 + 10 * C1 - 4 * C1 * C1 - 9 * ep2) * D ** 4) / 24
-      + ((61 + 90 * T1 + 298 * C1 + 45 * T1 * T1 - 252 * ep2 - 3 * C1 * C1) * D ** 6) / 720);
-    const lon = 24 + ((D - ((1 + 2 * T1 + C1) * D ** 3) / 6 + ((5 - 2 * C1 + 28 * T1 - 3 * C1 * C1 + 8 * ep2 + 24 * T1 * T1) * D ** 5) / 120) / c) * (180 / Math.PI);
-    return [lat * (180 / Math.PI), lon];
-  }
 
   // a share of the Sun as a percentage: 100% only when it is all covered, so 99.6% just outside totality reads 99%
   const pct = (v: number) => `${v >= 1 ? 100 : Math.min(99, Math.round(v * 100))}%`;
   const poly = (c: number[], t: number) => c[0] + t * (c[1] + t * (c[2] + t * (c[3] ?? 0)));
 
   /** Places as sea-level rho sin phi', rho cos phi' and longitude, ready for the elements. */
-  function places(lat: Float64Array, lon: Float64Array) {
-    const n = lat.length, rs = new Float64Array(n), rc = new Float64Array(n);
+  function places(lat: ArrayLike<number>, lon: ArrayLike<number>) {
+    const n = lat.length, rs = new Float64Array(n), rc = new Float64Array(n), lo = Float64Array.from(lon);
     for (let k = 0; k < n; k++) { const U = Math.atan(F * Math.tan((lat[k] * Math.PI) / 180)); rs[k] = F * Math.sin(U); rc[k] = Math.cos(U); }
-    return { n, rs, rc, lon };
+    return { n, rs, rc, lon: lo };
   }
   type Places = ReturnType<typeof places>;
 
@@ -173,34 +165,34 @@ const { src, caption } = Astro.props;
     }
   }
 
-  /** The largest coverage at each place over the eclipse, and the times the shadow is over the area: a coarse pass, then minutes. */
-  function coverMax(el: El, P: Places) {
-    const best = new Float32Array(P.n), now = new Float32Array(P.n);
-    let t0 = Infinity, t1 = -Infinity;
+  /** The times the shadow touches some of the places, a coarse pass at 5 minutes. */
+  function windowOf(el: El, P: Places) {
+    const now = new Float32Array(P.n); let t0 = Infinity, t1 = -Infinity;
     for (let t = el.tmin; t <= el.tmax + 1e-9; t += 5 / 60) {
       coverAt(el, P, t, now);
-      for (let k = 0; k < P.n; k++) if (now[k] > 0) { t0 = Math.min(t0, t); t1 = Math.max(t1, t); break; }
+      if (now.some((v) => v > 0)) { t0 = Math.min(t0, t); t1 = Math.max(t1, t); }
     }
-    if (!isFinite(t0)) return { best, t0: el.tmin, t1: el.tmin };
-    t0 = Math.max(el.tmin, t0 - 5 / 60); t1 = Math.min(el.tmax, t1 + 5 / 60);
-    for (let t = t0; t <= t1 + 1e-9; t += 1 / 60) {
+    return isFinite(t0) ? { t0: Math.max(el.tmin, t0 - 5 / 60), t1: Math.min(el.tmax, t1 + 5 / 60) } : { t0: el.tmin, t1: el.tmin };
+  }
+  /** The largest coverage at each place over a window, minute by minute. */
+  function coverMax(el: El, P: Places, w: { t0: number; t1: number }) {
+    const best = new Float32Array(P.n), now = new Float32Array(P.n);
+    for (let t = w.t0; t <= w.t1 + 1e-9; t += 1 / 60) {
       coverAt(el, P, t, now);
       for (let k = 0; k < P.n; k++) if (now[k] > best[k]) best[k] = now[k];
     }
-    return { best, t0, t1 };
+    return best;
   }
 
-  /** Contour segments of a G x G field at a level, in fractions of the frame (marching squares). */
-  function contour(v: Float32Array, level: number) {
+  /** Contour segments of a GX x GY field at a level, in node units (marching squares). */
+  function contour(v: Float32Array, GX: number, GY: number, level: number) {
     const segs: number[][] = [];
-    const at = (i: number, j: number) => v[j * G + i];
     const lerp = (a: number, b: number) => (level - a) / (b - a);
-    for (let j = 0; j < G - 1; j++) for (let i = 0; i < G - 1; i++) {
-      const a = at(i, j), b = at(i + 1, j), c = at(i + 1, j + 1), d = at(i, j + 1);
+    for (let j = 0; j < GY - 1; j++) for (let i = 0; i < GX - 1; i++) {
+      const a = v[j * GX + i], b = v[j * GX + i + 1], c = v[(j + 1) * GX + i + 1], d = v[(j + 1) * GX + i];
       const code = (a >= level ? 8 : 0) | (b >= level ? 4 : 0) | (c >= level ? 2 : 0) | (d >= level ? 1 : 0);
       if (code === 0 || code === 15) continue;
-      const X = (u: number) => (i + 0.5 + u) / G, Y = (u: number) => (j + 0.5 + u) / G;
-      const top = [X(lerp(a, b)), Y(0)], right = [X(1), Y(lerp(b, c))], bottom = [X(lerp(d, c)), Y(1)], left = [X(0), Y(lerp(a, d))];
+      const top = [i + lerp(a, b), j], right = [i + 1, j + lerp(b, c)], bottom = [i + lerp(d, c), j + 1], left = [i, j + lerp(a, d)];
       const pairs: Record<number, number[][][]> = {
         1: [[left, bottom]], 2: [[bottom, right]], 3: [[left, right]], 4: [[top, right]], 5: [[left, top], [bottom, right]], 6: [[top, bottom]], 7: [[left, top]],
         8: [[left, top]], 9: [[top, bottom]], 10: [[top, right], [left, bottom]], 11: [[top, right]], 12: [[left, right]], 13: [[bottom, right]], 14: [[left, bottom]],
@@ -213,45 +205,77 @@ const { src, caption } = Astro.props;
   async function start(root: HTMLElement) {
     const $ = <T extends Element>(n: string) => root.querySelector<T>(`[data-ecl-${n}]`)!;
     const data: Data = await (await fetch(root.dataset.src!)).json();
-    const { x0, y0, x1, y1 } = data.frame, S = x1 - x0;
-    $<HTMLImageElement>('base').src = data.base;
 
-    // the grid's places, once
-    const lat = new Float64Array(G * G), lon = new Float64Array(G * G);
-    for (let j = 0; j < G; j++) for (let i = 0; i < G; i++) {
-      const [la, lo] = gridToLatLon(x0 + ((i + 0.5) / G) * S, y1 - ((j + 0.5) / G) * S); lat[j * G + i] = la; lon[j * G + i] = lo;
+    // the map
+    const area = L.latLngBounds(data.area);
+    const map = L.map($<HTMLElement>('map'), { scrollWheelZoom: true, zoomSnap: 0.25, maxBounds: area, maxBoundsViscosity: 1 });
+    L.tileLayer(BASEMAP, { attribution: ATTRIBUTION, maxZoom: 12, maxNativeZoom: 16 }).addTo(map);
+    L.control.scale({ imperial: false }).addTo(map);
+    const fit = () => map.getBoundsZoom(L.latLngBounds([[34.6, 19.3], [41.8, 28.4]]));      // Greece
+    map.setView(GREECE, fit(), { animate: false });
+    map.setMinZoom(map.getBoundsZoom(area, true));                      // never so far out that the view passes the area the paths were traced over
+
+    // two canvases in their own panes: the coverage under the path, the umbra over it
+    function canvasPane(name: string, z: number) {
+      const pane = map.createPane(name); pane.style.zIndex = String(z); pane.style.pointerEvents = 'none';
+      return L.DomUtil.create('canvas', 'ecl__cv', pane) as HTMLCanvasElement;
     }
-    const P = places(lat, lon);
-    const C = places(Float64Array.from(data.cities, (c) => c.lat), Float64Array.from(data.cities, (c) => c.lon));
+    const cvCover = canvasPane('ecl-cover', 350), cvUmbra = canvasPane('ecl-umbra', 450);
+    const cxCover = cvCover.getContext('2d')!, cxUmbra = cvUmbra.getContext('2d')!;
+    map.createPane('ecl-path').style.zIndex = '400';
 
-    const cv = $<HTMLCanvasElement>('canvas'), cx = cv.getContext('2d')!;
-    const off = document.createElement('canvas'); off.width = G; off.height = G;
-    const ox = off.getContext('2d')!, img = ox.createImageData(G, G);
-    const stage = $<HTMLElement>('stage');
+    // the grid over the view: a node every CELL pixels, its places laid again whenever the view changes
+    let GX = 0, GY = 0, P: Places = places([], []), dpr = 1;
+    function layGrid() {
+      const s = map.getSize(); dpr = Math.min(2, window.devicePixelRatio || 1);
+      GX = Math.ceil(s.x / CELL) + 2; GY = Math.ceil(s.y / CELL) + 2;
+      const lat = new Float64Array(GX * GY), lon = new Float64Array(GX * GY);
+      for (let j = 0; j < GY; j++) for (let i = 0; i < GX; i++) {
+        const p = map.containerPointToLatLng([(i - 0.5) * CELL, (j - 0.5) * CELL]); lat[j * GX + i] = p.lat; lon[j * GX + i] = p.lng;
+      }
+      P = places(lat, lon);
+      const origin = map.containerPointToLayerPoint([0, 0]);
+      for (const c of [cvCover, cvUmbra]) {
+        c.width = Math.round(s.x * dpr); c.height = Math.round(s.y * dpr); c.style.width = `${s.x}px`; c.style.height = `${s.y}px`;
+        L.DomUtil.setPosition(c, origin);
+      }
+    }
+    // node (i, j) sits at pixel ((i - 0.5) * CELL, (j - 0.5) * CELL) of the map's container
+    const px = (i: number) => ((i - 0.5) * CELL) * dpr;
+
+    // a fixed grid over the whole area, for the times the shadow is over it, the same whatever the view
+    const AG = 40, alat: number[] = [], alon: number[] = [];
+    for (let j = 0; j < AG; j++) for (let i = 0; i < AG; i++) {
+      alat.push(area.getSouth() + ((j + 0.5) / AG) * (area.getNorth() - area.getSouth())); alon.push(area.getWest() + ((i + 0.5) / AG) * (area.getEast() - area.getWest()));
+    }
+    const A = places(alat, alon);
+    const C = places(data.cities.map((c) => c.lat), data.cities.map((c) => c.lon));
 
     // the cities, with the coverage of the chosen eclipse
-    const labels = $<HTMLElement>('labels');
     const tags = data.cities.map((c) => {
-      const el = document.createElement('div'); el.className = 'ecl__label';
-      el.style.left = `${c.x * 100}%`; el.style.top = `${c.y * 100}%`;
-      el.innerHTML = '<b></b><span></span>'; el.querySelector('b')!.textContent = c.name;
-      labels.append(el); return el.querySelector('span')!;
+      const icon = L.divIcon({ className: 'ecl__label', html: '<div><b></b><span></span></div>', iconSize: [0, 0] });
+      const m = L.marker([c.lat, c.lon], { icon, interactive: false, keyboard: false }).addTo(map);
+      const el = m.getElement()!; el.querySelector('b')!.textContent = c.name;
+      return el.querySelector('span')!;
     });
 
     // which eclipses are shown
     const select = $<HTMLSelectElement>('select');
     const typeBoxes = [...$<HTMLElement>('types').querySelectorAll<HTMLInputElement>('input[value]')], landBox = $<HTMLInputElement>('land');
     let list: Ecl[] = [];
-    let cur: Ecl | null = null, field: Float32Array | null = null, win = { t0: 0, t1: 0 };
-    const cache = new Map<number, { best: Float32Array; t0: number; t1: number }>();
-
+    let cur: Ecl | null = null, win = { t0: 0, t1: 0 };
+    const wins = new Map<number, { t0: number; t1: number }>();
+    function centuryName(k: number) {
+      const n = k < 5 ? 5 - k : k - 4, suf = n % 100 >= 10 && n % 100 <= 20 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] ?? 'th';
+      return `${n}${suf} century${k < 5 ? ' BC' : ''}`;
+    }
     function filter(keep?: Ecl | null) {
       const on = new Set(typeBoxes.filter((b) => b.checked).map((b) => b.value));
       list = data.eclipses.filter((e) => on.has(e.type) && (!landBox.checked || e.land));
       select.replaceChildren();
       let group: HTMLOptGroupElement | null = null, gk = '';
       list.forEach((e, i) => {
-        const k = Math.floor((e.year + 499) / 100), name = centuryName(k);
+        const name = centuryName(Math.floor((e.year + 499) / 100));
         if (name !== gk) { group = document.createElement('optgroup'); group.label = name; select.append(group); gk = name; }
         const o = document.createElement('option'); o.value = String(i); o.textContent = `${e.era}, ${e.day} ${MONTHS[e.month - 1]} · ${TYPES[e.type]}`;
         group!.append(o);
@@ -259,37 +283,37 @@ const { src, caption } = Astro.props;
       const i = keep ? list.indexOf(keep) : -1;
       show(i >= 0 ? i : 0);
     }
-    function centuryName(k: number) {
-      const n = k < 5 ? 5 - k : k - 4, suf = n % 100 >= 10 && n % 100 <= 20 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] ?? 'th';
-      return `${n}${suf} century${k < 5 ? ' BC' : ''}`;
-    }
 
-    // drawing
-    function size() {
-      const r = stage.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
-      cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
+    // the path and centre line, as Leaflet layers
+    const pathLayer = L.layerGroup().addTo(map);
+    let pathPoly: L.Polygon | null = null;
+    function drawPath() {
+      pathLayer.clearLayers(); pathPoly = null;
+      if (!cur) return;
+      pathPoly = L.polygon(cur.path, { pane: 'ecl-path', interactive: false, color: cur.type === 'A' ? 'rgb(214, 128, 30)' : `rgb(${SHADE})`, weight: 1.2, opacity: 0.9,
+        fillColor: `rgb(${SHADE})`, fillOpacity: 0.62 }).addTo(pathLayer);
+      L.polyline(cur.centre, { pane: 'ecl-path', interactive: false, color: '#f7f4ec', weight: 1.6, opacity: 0.95 }).addTo(pathLayer);
     }
-    function ring(r: [number, number][], W: number) {
-      cx.moveTo(r[0][0] * W, r[0][1] * W); for (let k = 1; k < r.length; k++) cx.lineTo(r[k][0] * W, r[k][1] * W); cx.closePath();
-    }
-    function lineOf(l: [number, number][], W: number) {
-      cx.moveTo(l[0][0] * W, l[0][1] * W); for (let k = 1; k < l.length; k++) cx.lineTo(l[k][0] * W, l[k][1] * W);
-    }
-    function paintField(v: Float32Array, power: number, scale: number) {
-      const d = img.data;
-      for (let k = 0; k < G * G; k++) { const o = k * 4; d[o] = 22; d[o + 1] = 20; d[o + 2] = 44; d[o + 3] = Math.round(255 * scale * v[k] ** power); }
+    function pathMode(passing: boolean) { pathPoly?.setStyle({ fillOpacity: passing ? 0.16 : 0.62 }); }
+
+    // drawing on the canvases
+    const off = document.createElement('canvas'), ox = off.getContext('2d')!;
+    function paintField(cx: CanvasRenderingContext2D, v: Float32Array, power: number, scale: number) {
+      off.width = GX; off.height = GY;
+      const img = ox.createImageData(GX, GY), d = img.data;
+      for (let k = 0; k < GX * GY; k++) { const o = k * 4; d[o] = 22; d[o + 1] = 20; d[o + 2] = 44; d[o + 3] = Math.round(255 * scale * v[k] ** power); }
       ox.putImageData(img, 0, 0);
       cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high';
-      // each grid value is a cell's centre, so pixel i of the small canvas covers cell i of the frame
-      const W = cv.width; cx.drawImage(off, 0, 0, G, G, 0, 0, W, W);
+      // pixel i of the small canvas is node i: its centre lands on the node
+      cx.drawImage(off, 0, 0, GX, GY, px(0) - (CELL * dpr) / 2, px(0) - (CELL * dpr) / 2, GX * CELL * dpr, GY * CELL * dpr);
     }
-    /** Fill where a G x G field is above zero, as one smooth shape: each cell's part, its edge interpolated between the cell centres. */
-    function fillAbove(v: Float32Array, W: number) {
-      const c = W / G; cx.beginPath();
-      for (let j = 0; j < G - 1; j++) for (let i = 0; i < G - 1; i++) {
-        const q = [v[j * G + i], v[j * G + i + 1], v[(j + 1) * G + i + 1], v[(j + 1) * G + i]];
+    /** Fill where a field is above zero, as one smooth shape: each cell's part, its edge interpolated between the nodes. */
+    function fillAbove(cx: CanvasRenderingContext2D, v: Float32Array) {
+      cx.beginPath();
+      for (let j = 0; j < GY - 1; j++) for (let i = 0; i < GX - 1; i++) {
+        const q = [v[j * GX + i], v[j * GX + i + 1], v[(j + 1) * GX + i + 1], v[(j + 1) * GX + i]];
         if (q[0] <= 0 && q[1] <= 0 && q[2] <= 0 && q[3] <= 0) continue;
-        const pos = [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]].map(([a, b]) => [(a + 0.5) * c, (b + 0.5) * c]);
+        const pos = [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]].map(([a, b]) => [px(a), px(b)]);
         const pts: number[][] = [];
         for (let k = 0; k < 4; k++) {
           const n = (k + 1) % 4;
@@ -300,42 +324,32 @@ const { src, caption } = Astro.props;
       }
       cx.fill();
     }
-    function draw(shadow?: { now: Float32Array; inside: Float32Array }) {
-      const W = cv.width, px = W / 600;
-      cx.clearRect(0, 0, W, W);
-      if (!cur || (!shadow && !field)) return;
-      if (shadow) paintField(shadow.now, 2.5, 0.75);                // the moving shadow: gentler, so the partial phase shows as it sweeps
-      else paintField(field!, 6, 0.7);                                // daylight hardly fades until the Sun is mostly covered
-      // contours of the largest coverage, every 10%
-      if (!shadow) {
-        cx.lineWidth = 1.1 * px; cx.strokeStyle = `rgba(${SHADE}, 0.55)`;
-        cx.font = `italic ${Math.round(13 * px)}px 'Times New Roman', serif`; cx.textAlign = 'center'; cx.textBaseline = 'middle';
-        const marks: [number, number, string][] = [];
-        for (let lv = 10; lv <= 90; lv += 10) {
-          const segs = contour(field!, lv / 100);
-          if (!segs.length) continue;
-          cx.beginPath(); for (const s of segs) { cx.moveTo(s[0] * W, s[1] * W); cx.lineTo(s[2] * W, s[3] * W); } cx.stroke();
-          // a label where the line crosses the map's western edge, else nearest the middle
-          let bestS = segs[0], bd = Infinity;
-          for (const s of segs) {
-            const mx = (s[0] + s[2]) / 2, my = (s[1] + s[3]) / 2;
-            const dd = my > 0.06 && my < 0.94 ? Math.abs(mx - 0.08) : 9 + Math.hypot(mx - 0.5, my - 0.5);
-            if (dd < bd) { bd = dd; bestS = s; }
-          }
-          marks.push([((bestS[0] + bestS[2]) / 2) * W, ((bestS[1] + bestS[3]) / 2) * W, `${lv}%`]);
+    function clear() { cxCover.clearRect(0, 0, cvCover.width, cvCover.height); cxUmbra.clearRect(0, 0, cvUmbra.width, cvUmbra.height); }
+    /** The largest coverage over the whole eclipse, with contours every 10%. */
+    function drawWhole() {
+      clear(); pathMode(false);
+      if (!cur) return;
+      const field = coverMax(cur.el, P, win);
+      paintField(cxCover, field, 6, 0.7);                              // daylight hardly fades until the Sun is mostly covered
+      const cx = cxCover, u = dpr;
+      cx.lineWidth = 1.1 * u; cx.strokeStyle = `rgba(${SHADE}, 0.55)`;
+      cx.font = `italic ${Math.round(13 * u)}px 'Times New Roman', serif`; cx.textAlign = 'center'; cx.textBaseline = 'middle';
+      const marks: [number, number, string][] = [];
+      for (let lv = 10; lv <= 90; lv += 10) {
+        const segs = contour(field, GX, GY, lv / 100);
+        if (!segs.length) continue;
+        cx.beginPath(); for (const s of segs) { cx.moveTo(px(s[0]), px(s[1])); cx.lineTo(px(s[2]), px(s[3])); } cx.stroke();
+        // a label where the line crosses near the map's western edge, else nearest the middle
+        let bestS = segs[0], bd = Infinity;
+        for (const s of segs) {
+          const mx = (s[0] + s[2]) / 2 / GX, my = (s[1] + s[3]) / 2 / GY;
+          const dd = my > 0.08 && my < 0.92 ? Math.abs(mx - 0.08) : 9 + Math.hypot(mx - 0.5, my - 0.5);
+          if (dd < bd) { bd = dd; bestS = s; }
         }
-        cx.lineWidth = 3 * px; cx.strokeStyle = 'rgba(247, 244, 236, 0.95)'; cx.fillStyle = '#23232a';
-        for (const [x, y, s] of marks) { cx.strokeText(s, x, y); cx.fillText(s, x, y); }
+        marks.push([px((bestS[0] + bestS[2]) / 2), px((bestS[1] + bestS[3]) / 2), `${lv}%`]);
       }
-      // the path, and its centre line
-      cx.fillStyle = `rgba(${SHADE}, ${shadow ? 0.18 : 0.82})`; cx.strokeStyle = cur.type === 'A' ? 'rgba(214, 128, 30, 0.95)' : `rgba(${SHADE}, 0.9)`; cx.lineWidth = 1.2 * px;
-      cx.beginPath(); for (const r of cur.path) ring(r, W); cx.fill(); cx.stroke();
-      cx.strokeStyle = 'rgba(247, 244, 236, 0.9)'; cx.lineWidth = 1.3 * px;
-      cx.beginPath(); for (const l of cur.centre) lineOf(l, W); cx.stroke();
-      if (shadow) {                                                  // the umbra or antumbra now
-        cx.fillStyle = `rgba(${SHADE}, ${cur.type === 'A' ? 0.72 : 0.95})`;   // an annular's antumbra leaves a ring of Sun: a little lighter
-        fillAbove(shadow.inside, W);
-      }
+      cx.lineWidth = 3 * u; cx.strokeStyle = 'rgba(247, 244, 236, 0.95)'; cx.fillStyle = '#23232a';
+      for (const [x, y, s] of marks) { cx.strokeText(s, x, y); cx.fillText(s, x, y); }
     }
 
     // the chosen eclipse
@@ -345,22 +359,33 @@ const { src, caption } = Astro.props;
       title.textContent = `${e.era}, ${e.day} ${MONTHS[e.month - 1]}: ${TYPES[e.type].toLowerCase()} eclipse`;
       const note = NOTES[e.year] ?? '';
       sub.textContent = `${i + 1} of ${list.length} shown`
-        + (dur ? ` \u00b7 ${e.type === 'A' ? 'annularity' : 'totality'} up to ${Number(dur[1])} min ${Number(dur[2])} s, at the eclipse\u2019s greatest` : '')
-        + (e.land ? '' : ' \u00b7 over the sea only') + (note ? ` \u00b7 ${note}` : '');
+        + (dur ? ` · ${e.type === 'A' ? 'annularity' : 'totality'} up to ${Number(dur[1])} min ${Number(dur[2])} s, at the eclipse’s greatest` : '')
+        + (e.land ? '' : ' · over the sea only') + (note ? ` · ${note}` : '');
     }
-    function show(i: number) {
+    /** The camera on the path: its centre line's point nearest the middle of Greece, at the zoom the map has. */
+    function centreOn(e: Ecl, animate: boolean) {
+      let best: LL | null = null, bd = Infinity;
+      for (const p of e.centre.flat()) { const d = Math.hypot(p[0] - GREECE[0], (p[1] - GREECE[1]) * 0.78); if (d < bd) { bd = d; best = p; } }
+      if (!best && e.path.length) {                                  // no centre line over the area: the point of the path nearest Greece
+        const b = L.latLngBounds(e.path.flat());
+        best = [Math.min(Math.max(GREECE[0], b.getSouth()), b.getNorth()), Math.min(Math.max(GREECE[1], b.getWest()), b.getEast())];
+      }
+      if (best) map.panTo(best, { animate, duration: 0.6 });
+    }
+    function show(i: number, animate = true) {
       resetTime();
-      if (!list.length) { cur = null; field = null; title.textContent = 'No eclipse with these choices'; sub.textContent = ''; draw(); return; }
+      if (!list.length) { cur = null; title.textContent = 'No eclipse with these choices'; sub.textContent = ''; pathLayer.clearLayers(); clear(); return; }
       i = Math.max(0, Math.min(list.length - 1, i));
       select.value = String(i);
+      const changed = cur !== list[i];
       cur = list[i];
-      let c = cache.get(cur.id);
-      if (!c) { c = coverMax(cur.el, P); cache.set(cur.id, c); }
-      field = c.best; win = { t0: c.t0, t1: c.t1 };
-      const cityMax = coverMax(cur.el, C).best;
+      win = wins.get(cur.id) ?? windowOf(cur.el, A); wins.set(cur.id, win);
+      const cityMax = coverMax(cur.el, C, win);
       tags.forEach((t, k) => { t.textContent = pct(cityMax[k]); });
       describe(i);
-      draw();
+      drawPath();
+      drawWhole();
+      if (changed) centreOn(cur, animate);
     }
 
     // the chosen eclipse's shadow crossing the map: played, or dragged through with the time slider
@@ -368,21 +393,19 @@ const { src, caption } = Astro.props;
     let raf = 0;
     function stopPass() { if (raf) { cancelAnimationFrame(raf); raf = 0; } play.innerHTML = '&#9654; Play'; }
     function resetTime() { stopPass(); time.value = '0'; clock.hidden = true; }
-    const now = new Float32Array(P.n), inside = new Float32Array(P.n), cnow = new Float32Array(C.n);
-    // the umbra crosses the map in minutes, the whole eclipse takes hours: the pass slows down sixfold while the umbra is over the map
+    // the umbra crosses the map in minutes, the whole eclipse takes hours: the pass slows down sixfold while the umbra is over the area
     const SLOW = 6, umbras = new Map<number, [number, number] | null>();
     function umbraWin(): [number, number] | null {
       if (!cur) return null;
       if (umbras.has(cur.id)) return umbras.get(cur.id)!;
-      let u0 = Infinity, u1 = -Infinity;
+      const v = new Float32Array(A.n), ins = new Float32Array(A.n); let u0 = Infinity, u1 = -Infinity;
       for (let t = win.t0; t <= win.t1 + 1e-9; t += 1 / 60) {
-        coverAt(cur.el, P, t, now, inside);
-        if (inside.some((v) => v > 0)) { u0 = Math.min(u0, t); u1 = Math.max(u1, t); }
+        coverAt(cur.el, A, t, v, ins);
+        if (ins.some((x) => x > 0)) { u0 = Math.min(u0, t); u1 = Math.max(u1, t); }
       }
       const w: [number, number] | null = isFinite(u0) ? [Math.max(win.t0, u0 - 3 / 60), Math.min(win.t1, u1 + 3 / 60)] : null;
       umbras.set(cur.id, w); return w;
     }
-    /** The pass's length in slowed hours, and the eclipse's time at a fraction f of it. */
     function passLength() { const u = umbraWin(); return u ? win.t1 - win.t0 + (SLOW - 1) * (u[1] - u[0]) : win.t1 - win.t0; }
     function timeAt(f: number) {
       const u = umbraWin(), p = f * passLength();
@@ -390,24 +413,30 @@ const { src, caption } = Astro.props;
       const a = u[0] - win.t0, b = SLOW * (u[1] - u[0]);
       return p < a ? win.t0 + p : p < a + b ? u[0] + (p - a) / SLOW : u[1] + (p - a - b);
     }
+    let now = new Float32Array(0), inside = new Float32Array(0);
+    const cnow = new Float32Array(C.n);
     /** The chosen eclipse's shadow at a fraction f of the pass. */
     function passAt(f: number) {
       if (!cur) return;
+      if (now.length !== P.n) { now = new Float32Array(P.n); inside = new Float32Array(P.n); }
       const el = cur.el, t = timeAt(f);
       clock.hidden = false; time.value = String(Math.round(f * 1000));
       coverAt(el, P, t, now, inside);
-      draw({ now, inside });
-      coverAt(el, C, t, cnow);                                       // the cities, at this moment
+      clear(); pathMode(true);
+      paintField(cxCover, now, 2.5, 0.75);                             // the moving shadow: gentler, so the partial phase shows as it sweeps
+      cxUmbra.fillStyle = `rgba(${SHADE}, ${cur.type === 'A' ? 0.72 : 0.95})`;   // an annular's antumbra leaves a ring of Sun: a little lighter
+      fillAbove(cxUmbra, inside);
+      coverAt(el, C, t, cnow);                                         // the cities, at this moment
       tags.forEach((g, k) => { g.textContent = pct(cnow[k]); });
       let ut = el.t0 + t - el.dt / 3600; ut = ((ut % 24) + 24) % 24;
       const hh = Math.floor(ut), mm = Math.floor((ut - hh) * 60);
       clock.textContent = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')} UT`;
     }
     play.addEventListener('click', () => {
-      if (raf) { stopPass(); return; }                               // pause where it is
+      if (raf) { stopPass(); return; }                                 // pause where it is
       if (!cur) return;
       const secs = Math.min(16, Math.max(7, passLength() * 3));
-      let f0 = Number(time.value) / 1000; if (f0 >= 1) f0 = 0;      // from where the slider is, or from the start
+      let f0 = Number(time.value) / 1000; if (f0 >= 1) f0 = 0;        // from where the slider is, or from the start
       const t_start = performance.now() - f0 * secs * 1000;
       play.innerHTML = '&#10074;&#10074; Pause';
       const frame = (ts: number) => {
@@ -425,12 +454,20 @@ const { src, caption } = Astro.props;
     $<HTMLButtonElement>('prev').addEventListener('click', () => show(Number(select.value) - 1));
     $<HTMLButtonElement>('next').addEventListener('click', () => show(Number(select.value) + 1));
     for (const b of [...typeBoxes, landBox]) b.addEventListener('change', () => filter(cur));
-    new ResizeObserver(() => { size(); if (raf) return; if (Number(time.value) > 0) passAt(Number(time.value) / 1000); else draw(); }).observe(stage);
-    size();
+
+    // the view changed: lay the grid again and redraw what was on it; while zooming, hide the canvases rather than stretch them
+    function redraw() {
+      layGrid();
+      if (!cur) return;
+      if (Number(time.value) > 0 || raf) passAt(Number(time.value) / 1000); else drawWhole();
+    }
+    map.on('zoomstart', () => { cvCover.style.visibility = 'hidden'; cvUmbra.style.visibility = 'hidden'; });
+    map.on('moveend zoomend resize', () => { redraw(); cvCover.style.visibility = ''; cvUmbra.style.visibility = ''; });
+    layGrid();
     filter();
     // open on the last total over Greek land
-    const last = list.findIndex((e) => e.year === 2006); if (last >= 0) show(last);
+    const last = list.findIndex((e) => e.year === 2006); if (last >= 0) show(last, false);
     // for the demo recorder: set any eclipse or moment of its pass directly, frame by frame
-    (window as any).__ecl = { show, passAt, count: () => list.length, index: (year: number) => list.findIndex((e) => e.year === year) };
+    (window as any).__ecl = { show, passAt, map, count: () => list.length, index: (year: number) => list.findIndex((e) => e.year === year) };
   }
 </script>

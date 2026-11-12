@@ -31,7 +31,7 @@ downloads:
     note: 'JPEG · 4724 × 4724 · 3.5 MB'
 map: '/data/30dmc-2026-day-17-eclipses.json'
 mapComponent: 'eclipse-paths'
-mapCaption: 'Pick an eclipse from the list, or step with the arrows, to see how much of the Sun it covered across the map. Press Play, or drag the time slider, to move its shadow across Greece minute by minute; Whole eclipse goes back to the overall coverage. Dates before 1582 are in the Julian calendar.'
+mapCaption: 'Pick an eclipse from the list, or step with the arrows, to see how much of the Sun it covered; the map moves to its path, and can be dragged and zoomed. Press Play, or drag the time slider, to move its shadow across Greece minute by minute; Whole eclipse goes back to the overall coverage. Dates before 1582 are in the Julian calendar.'
 draft: true
 ---
 
