@@ -25,6 +25,7 @@ import DialMap from '../../components/DialMap.astro';
 import ExactMap from '../../components/ExactMap.astro';
 import WaveDial from '../../components/WaveDial.astro';
 import ReliefSwap from '../../components/ReliefSwap.astro';
+import TimeTower from '../../components/TimeTower.astro';
 import { projectCategories } from '../../site';
 import { isPublic } from '../../projects';
 import { plainTitle } from '../../cv';
@@ -57,6 +58,7 @@ const CUSTOM_MAPS: Record<string, typeof ProjectMap> = {
   'exact-map': ExactMap,
   'wave-dial': WaveDial,
   'relief-swap': ReliefSwap,
+  'time-tower': TimeTower,
 };
 
 // Every project gets its page, drafts included: a draft is unlisted, reachable
