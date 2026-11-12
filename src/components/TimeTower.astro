@@ -1,6 +1,6 @@
 ---
 /**
- * Day 16: twelve years of one person's location history as a space-time cube (Hägerstrand's time geography): the map of Greece is the floor and
+ * Day 16: twelve years of a friend's location history (shared with consent) as a space-time cube (Hägerstrand's time geography): the map of Greece is the floor and
  * time rises upward, so staying home draws a trunk and every trip a branch. Three.js; drag to turn it, scroll to zoom, the slider grows it.
  *
  * `src`: the JSON written by Day_16/prep/cube_data.py (the path in km and years, the floor picture, the named trips). Positions are on
@@ -149,7 +149,7 @@ const { src, caption } = Astro.props;
     }
     // the trips worth naming, at the far end of each branch
     const seen = new Set<string>(); let farN = 0;
-    const tags = meta.labels.filter((l) => !seen.has(l.name) && (seen.add(l.name), true)).map((l) => {   // one label a place: its biggest trip
+    const tags = meta.labels.map((l) => {                                  // every trip named, repeats included
       const el = document.createElement('div'); el.className = 'tower__label';
       el.innerHTML = '<b></b><br><span></span>'; el.querySelector('b')!.textContent = l.name; el.querySelector('span')!.textContent = `${l.when}, ${l.km.toLocaleString('en-GB')} km${l.far ? ', not to scale' : ''}`;
       const o = new CSS2DObject(el); o.position.set(l.x - half, Y(l.t), -(l.y - half));

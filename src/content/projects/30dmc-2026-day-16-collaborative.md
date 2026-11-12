@@ -1,6 +1,6 @@
 ---
 title: 'Day 16 - Collaborative map: Twelve Years in One Tower'
-summary: 'Twelve years of one person''s location history as a tower over Greece. Time rises upward, so staying home draws a trunk and every trip a branch: 55,011 hours, 28 trips, two of them abroad.'
+summary: 'Twelve years of a friend''s location history, shared for this map, as a tower over Greece. Time rises upward, so staying home draws a trunk and every trip a branch: 55,011 hours, 28 trips, two of them abroad.'
 date: 2026-11-16
 created: 2026-11-11
 category: '30-day-map-challenge'
@@ -8,11 +8,11 @@ context: '#30DayMapChallenge 2026 · Day 16'
 tags: ['Python', 'three.js', 'Time geography', 'GNSS']
 image: '/images/30dmc-2026-day-16-wide.webp'
 imageFull: '/images/30dmc-2026-day-16-full.webp'
-imageAlt: 'Printed A4 sheet titled Twelve Years in One Tower: a glowing vertical trunk rising from a dark relief map of Greece, with coloured branches reaching out to trips such as Ios, Sami, Corfu and Patras, and dashed branches to England and the Netherlands; a legend of years, a small map of the trips from above, a table of the farthest trips and three figures fill the side panel'
+imageAlt: 'Printed A4 sheet titled Twelve Years in One Tower: a glowing vertical trunk rising from a dark relief map of Greece, with coloured branches reaching out to trips such as Ios, Fiskardo, Corfu, Patras and Xanthi, and dashed branches to England and the Netherlands; a legend of years, a small map of the trips from above, a table of the farthest trips and three figures fill the side panel'
 thumbnail: '/images/30dmc-2026-day-16-square.webp'
 thumbnailAlt: 'A glowing tower of twelve years of location history rising over a dark relief map of Greece'
 dataSource:
-  - label: 'Location history: Google Maps Timeline and a phone tracker, 2014-2026'
+  - label: 'Location history: a friend''s Google Maps Timeline and phone tracker, 2014-2026, shared with consent'
   - label: 'Copernicus DEM GLO-90 - relief of Greece'
     href: 'https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM'
   - label: 'GEBCO 2026 - relief of the neighbouring countries'
@@ -34,9 +34,9 @@ draft: true
 
 **Prompt:** Collaborative map.
 
-This map is built from twelve years of one person's location history: Google Maps Timeline from 2014, and a phone tracker in recent years, close to a million positions in all.
+This map is a collaboration with a friend, who shared twelve years of their location history for it: Google Maps Timeline from 2014, and a phone tracker in recent years, close to a million positions in all. They supplied the data; I turned it into the map.
 
-It is drawn as a space-time cube, an idea from Torsten Hägerstrand's time geography. The map of Greece is the floor and time rises upward, a year to each ring. Days at home stack up into a single trunk. Every trip leaves the trunk as a branch, reaching out over the map to the place it went and coming back a few days higher. Ios in July 2022 is the longest branch in Greece, at 468 km; Corfu, Sami and Patras are the others that reach the far side of the country.
+It is drawn as a space-time cube, an idea from Torsten Hägerstrand's time geography. The map of Greece is the floor and time rises upward, a year to each ring. Days at home stack up into a single trunk. Every trip leaves the trunk as a branch, reaching out over the map to the place it went and coming back a few days higher. Ios in July 2022 is the longest branch in Greece, at 468 km; Fiskardo, Athens, Corfu and Patras are the others that reach the far side of the country, while Xanthi, Kavala, Asprovalta and the beaches of Chalkidiki come back year after year.
 
 Two trips left Greece, to England in December 2021 and the Netherlands in March 2022. At true scale they would be several times wider than the whole map, so beyond 450 km from home their distance is compressed, in the true direction. They are drawn dashed, with their real distances in the labels.
 
