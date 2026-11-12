@@ -60,6 +60,7 @@ const { src, caption } = Astro.props;
 
 <style is:global>
   /* global: the labels are written by the script, which scoped styles do not reach */
+  .ecl { max-width: 760px; margin: 0 auto; }                      /* smaller than the column: the map and its controls together */
   .ecl__controls { display: grid; gap: 0.5rem; margin-bottom: 0.5rem; }
   .ecl__row { display: grid; grid-template-columns: auto 1fr; gap: 0.75rem; align-items: center; }
   .ecl__row input[type='range'] { width: 100%; accent-color: #2a2648; }
@@ -75,7 +76,7 @@ const { src, caption } = Astro.props;
   .ecl__read { min-height: 4.1rem; margin-bottom: 0.4rem; text-align: center; }
   .ecl__title { margin: 0; font-size: 1.05rem; font-weight: 700; }
   .ecl__sub { margin: 0; font-size: 0.85rem; opacity: 0.85; }
-  .ecl__stage { position: relative; width: 100%; aspect-ratio: 1 / 1; border: 1px solid var(--rule, #d9d4c8); }
+  .ecl__stage { position: relative; width: 100%; aspect-ratio: 3 / 2; max-height: 440px; border: 1px solid var(--rule, #d9d4c8); }
   .ecl__map { position: absolute; inset: 0; background: #dee2e6; }
   .ecl__cv { position: absolute; left: 0; top: 0; pointer-events: none; }
   .ecl__label { background: none; border: 0; }

@@ -1,5 +1,5 @@
 ---
-title: 'Day 17 - Light & dark: In the Moon''s Shadow'
+title: 'Day 17 - Light & dark: The Shadow Calendar'
 summary: 'Every total eclipse of the Sun over Greece from 500 BC to AD 2500, one small map for each century: 50 paths of totality over Greek land, from none in three centuries to four in the 17th. Pick any of them and watch its shadow cross the map.'
 date: 2026-11-17
 created: 2026-11-12
@@ -8,7 +8,7 @@ context: '#30DayMapChallenge 2026 · Day 17'
 tags: ['ArcGIS Pro', 'Python', 'Canvas', 'Astronomy']
 image: '/images/30dmc-2026-day-17-wide.webp'
 imageFull: '/images/30dmc-2026-day-17-full.webp'
-imageAlt: 'Printed A4 sheet titled In the Moon''s Shadow: a grid of thirty small maps of Greece, one for each century from the 5th century BC to the 25th century AD, each crossed by dark bands for the paths of total eclipses with their years, and three of them empty; a legend, a map of the share of the Sun covered on 29 March 2006, a table of cities and three figures fill the side panel'
+imageAlt: 'Printed A4 sheet titled The Shadow Calendar: a grid of thirty small maps of Greece, one for each century from the 5th century BC to the 25th century AD, each crossed by dark bands for the paths of total eclipses with their years, and three of them empty; a legend, a map of the share of the Sun covered on 29 March 2006, a table of cities and the eclipses in the written record fill the side panel'
 thumbnail: '/images/30dmc-2026-day-17-square.webp'
 thumbnailAlt: 'Thirty small maps of Greece crossed by the dark paths of total solar eclipses, one map for each century'
 dataSource:
