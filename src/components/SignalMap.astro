@@ -1,0 +1,173 @@
+---
+/**
+ * Day 18 (NULL): where Greece's internet runs out, on a Leaflet map. The data are two PNGs of class values in Web Mercator, about 320 m a pixel
+ * (Day_18/prep/page_data.py): the national broadband map's mobile grid, copper and fiber, and the three networks' own maps. The page colours
+ * them for the layer chosen, and a click on the map reads every value at that spot.
+ *
+ * `src`: the JSON written by page_data.py (bounds, grid origin and cell, the two PNGs, the dead zones' range labels).
+ */
+interface Props {
+  src: string;
+  caption?: string;
+}
+const { src, caption } = Astro.props;
+---
+
+<figure class="map-figure">
+  <div class="sig" data-sig data-src={src}>
+    <div class="sig__layers" data-sig-layers role="radiogroup" aria-label="Map layer">
+      <label><input type="radio" name="sig-layer" value="reach" checked /> What reaches the land</label>
+      <label><input type="radio" name="sig-layer" value="mobile" /> Best mobile speed</label>
+      <label><input type="radio" name="sig-layer" value="tk" /> Telekom</label>
+      <label><input type="radio" name="sig-layer" value="vf" /> Vodafone</label>
+      <label><input type="radio" name="sig-layer" value="nv" /> Nova</label>
+    </div>
+    <div class="sig__stage">
+      <div class="sig__map" data-sig-map role="img" aria-label="Map of Greece: fixed and mobile internet coverage, and the places no network reaches"></div>
+    </div>
+    <div class="sig__legend" data-sig-legend aria-hidden="true"></div>
+    <p class="sig__hint">Click anywhere on the land to see what reaches it.</p>
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<style is:global>
+  /* global: the legend and the popups are written by the script, which scoped styles do not reach */
+  .sig { max-width: 760px; margin: 0 auto; }
+  .sig__layers { display: flex; flex-wrap: wrap; gap: 0.35rem 1rem; justify-content: center; margin-bottom: 0.6rem; font-size: 0.88rem; }
+  .sig__layers label { white-space: nowrap; cursor: pointer; }
+  .sig__layers input { accent-color: #702470; }
+  .sig__stage { position: relative; width: 100%; aspect-ratio: 1 / 1; max-height: 640px; border: 1px solid var(--rule, #d9d4c8); }
+  .sig__map { position: absolute; inset: 0; background: #dee2e6; }
+  .sig__legend { display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; justify-content: center; margin-top: 0.55rem; font-size: 0.75rem; }
+  .sig__legend span { display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap; }
+  .sig__legend i { display: inline-block; width: 0.9rem; height: 0.7rem; border: 1px solid rgba(35, 35, 40, 0.35); }
+  .sig__hint { margin: 0.35rem 0 0; text-align: center; font-size: 0.78rem; opacity: 0.75; }
+  .sig__label { background: none; border: 0; }
+  .sig__label div { transform: translate(-50%, -50%); font: italic 700 0.82rem/1 'Times New Roman', serif; color: #23232a; white-space: nowrap;
+    text-shadow: 0 0 3px #f7f4ec, 0 0 3px #f7f4ec, 0 0 2px #f7f4ec; }
+  .sig__pop { font-size: 0.82rem; line-height: 1.4; }
+  .sig__pop b { display: block; margin-bottom: 0.15rem; }
+  .sig__pop table { border-collapse: collapse; }
+  .sig__pop td { padding: 0 0.6rem 0 0; vertical-align: top; }
+  .sig__pop td + td { font-variant-numeric: tabular-nums; }
+  .sig__pop .none { color: #b0141c; font-weight: 700; }
+  .sig__overlay { image-rendering: auto; }
+</style>
+
+<script>
+  import * as L from 'leaflet';
+  import 'leaflet/dist/leaflet.css';
+  import { whenNear } from '../lazy';
+
+  type Meta = { bounds: [[number, number], [number, number]]; size: [number, number]; origin: [number, number]; res: number; a: string; b: string;
+    labels: { name: string; km2: number; lat: number; lon: number }[]; stats: { ops_none: Record<string, number>; dead_km2: number; dead_pct: number } };
+
+  const BASEMAP = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+  const ATTRIBUTION = 'Tiles &copy; Esri &middot; Coverage: national broadband map (Ministry of Digital Governance); Telekom, Vodafone, Nova';
+  // the national map's classes (0 not covered, 1 under 0.2 Mbit/s ... 8 at 1 Gbit/s and more), and the networks' (0 no service ... 7)
+  const NAT = ['not covered', 'under 0.2 Mbit/s', '0.2 to 2 Mbit/s', '2 to 10 Mbit/s', '10 to 30 Mbit/s', '30 to 100 Mbit/s', '100 to 300 Mbit/s', '300 Mbit/s to 1 Gbit/s', '1 Gbit/s or more'];
+  const NET = ['no service', 'under 2 Mbit/s', '2 to 10 Mbit/s', '10 to 30 Mbit/s', '30 to 100 Mbit/s', '100 to 300 Mbit/s', '300 Mbit/s to 1 Gbit/s', '1 Gbit/s or more'];
+  const COP = ['no line', 'under 0.2 Mbit/s', '0.2 to 2 Mbit/s', '2 to 10 Mbit/s', '10 to 30 Mbit/s', '30 to 100 Mbit/s', '100 to 300 Mbit/s'];
+  // speed, slow to fast: pale to deep; no service black
+  const RAMP: [number, number, number][] = [[254, 235, 170], [215, 230, 140], [150, 205, 120], [82, 175, 120], [40, 135, 140], [35, 95, 150], [44, 45, 110]];
+  const BLACK: [number, number, number] = [0, 0, 0];
+  const FIX = { slow: [246, 214, 168] as [number, number, number], fast: [228, 140, 62] as [number, number, number], fibre: [112, 36, 112] as [number, number, number] };
+  const MOBILE_ONLY: [number, number, number] = [238, 236, 230];
+
+  const box = document.querySelector<HTMLElement>('[data-sig]');
+  if (box) whenNear(box, () => { void start(box); });
+
+  async function pixels(url: string, w: number, h: number) {
+    const img = new Image(); img.src = url; await img.decode();
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const x = c.getContext('2d', { willReadFrequently: true })!; x.drawImage(img, 0, 0);
+    return x.getImageData(0, 0, w, h).data;
+  }
+
+  async function start(root: HTMLElement) {
+    const $ = <T extends Element>(n: string) => root.querySelector<T>(`[data-sig-${n}]`)!;
+    const meta: Meta = await (await fetch(root.dataset.src!)).json();
+    const [W, H] = meta.size, N = W * H;
+    const [A, B] = await Promise.all([pixels(meta.a, W, H), pixels(meta.b, W, H)]);
+
+    // the map
+    const bounds = L.latLngBounds(meta.bounds);
+    const map = L.map($<HTMLElement>('map'), { scrollWheelZoom: true, zoomSnap: 0.25, maxBounds: bounds.pad(0.05), maxBoundsViscosity: 0.8 });
+    L.tileLayer(BASEMAP, { attribution: ATTRIBUTION, maxZoom: 13, maxNativeZoom: 16 }).addTo(map);
+    L.control.scale({ imperial: false }).addTo(map);
+    const fit = () => map.getBoundsZoom(L.latLngBounds([[34.8, 19.4], [41.75, 28.3]]));
+    map.setView([38.3, 23.8], fit(), { animate: false });
+    map.setMinZoom(fit() - 0.5);
+
+    // one canvas, coloured for the layer chosen, laid over the map
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const cx = cv.getContext('2d')!, img = cx.createImageData(W, H), d = img.data;
+    let overlay: L.ImageOverlay | null = null, url = '';
+    const legend = $<HTMLElement>('legend');
+    function swatches(items: [string, [number, number, number]][]) {
+      legend.replaceChildren(...items.map(([t, c]) => {
+        const s = document.createElement('span'); const i = document.createElement('i'); i.style.background = `rgb(${c.join(',')})`;
+        s.append(i, document.createTextNode(t)); return s;
+      }));
+    }
+    function paint(layer: string) {
+      for (let k = 0; k < N; k++) {
+        const o = k * 4;
+        if (A[o + 3] === 0) { d[o + 3] = 0; continue; }
+        let c: [number, number, number] | null;
+        if (layer === 'reach') {
+          const mob = A[o], cop = A[o + 1], fib = A[o + 2];
+          c = mob <= 1 ? BLACK : fib ? FIX.fibre : cop >= 5 ? FIX.fast : cop >= 1 ? FIX.slow : MOBILE_ONLY;
+        } else if (layer === 'mobile') {
+          const v = A[o]; c = v <= 1 ? BLACK : RAMP[v - 2];
+        } else {
+          const v = B[o + ({ tk: 0, vf: 1, nv: 2 } as Record<string, number>)[layer]]; c = v === 0 ? BLACK : RAMP[v - 1];
+        }
+        d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = layer === 'reach' && c === MOBILE_ONLY ? 110 : 215;
+      }
+      cx.putImageData(img, 0, 0);
+      cv.toBlob((blob) => {
+        if (!blob) return;
+        const u = URL.createObjectURL(blob);
+        if (overlay) { overlay.setUrl(u); } else { overlay = L.imageOverlay(u, bounds, { className: 'sig__overlay', interactive: false }).addTo(map); }
+        if (url) URL.revokeObjectURL(url);
+        url = u;
+      });
+      if (layer === 'reach') swatches([['Fiber', FIX.fibre], ['Copper, 30 Mbit/s or more', FIX.fast], ['Copper, slower', FIX.slow], ['Mobile only', MOBILE_ONLY], ['No usable mobile data', BLACK]]);
+      else {
+        const names = layer === 'mobile' ? NAT.slice(2) : NET.slice(1);
+        swatches([[layer === 'mobile' ? 'Not covered, or under 0.2 Mbit/s' : 'No service', BLACK], ...names.map((t, i) => [t, RAMP[i]] as [string, [number, number, number]])]);
+      }
+    }
+
+    // the dead zones' ranges
+    for (const l of meta.labels) {
+      L.marker([l.lat, l.lon], { icon: L.divIcon({ className: 'sig__label', html: `<div>${l.name}</div>`, iconSize: [0, 0] }), interactive: false, keyboard: false }).addTo(map);
+    }
+
+    // a click: everything at that spot
+    const crs = L.CRS.EPSG3857;
+    map.on('click', (ev: L.LeafletMouseEvent) => {
+      const p = crs.project(ev.latlng);
+      const i = Math.floor((p.x - meta.origin[0]) / meta.res), j = Math.floor((meta.origin[1] - p.y) / meta.res);
+      if (i < 0 || j < 0 || i >= W || j >= H) return;
+      const o = (j * W + i) * 4;
+      if (A[o + 3] === 0) return;                                     // the sea, or outside Greece
+      const val = (s: string, dead: boolean) => dead ? `<span class="none">${s}</span>` : s;
+      const fixed = A[o + 2] ? 'fiber nearby' : COP[A[o + 1]];
+      const html = `<div class="sig__pop"><b>${A[o] <= 1 ? 'No usable mobile data on the national map' : 'Here'}</b><table>`
+        + `<tr><td>Mobile, national map</td><td>${val(NAT[A[o]], A[o] <= 1)}</td></tr>`
+        + `<tr><td>Telekom</td><td>${val(NET[B[o]], B[o] === 0)}</td></tr>`
+        + `<tr><td>Vodafone</td><td>${val(NET[B[o + 1]], B[o + 1] === 0)}</td></tr>`
+        + `<tr><td>Nova</td><td>${val(NET[B[o + 2]], B[o + 2] === 0)}</td></tr>`
+        + `<tr><td>Fixed line</td><td>${fixed}</td></tr></table></div>`;
+      L.popup({ maxWidth: 320 }).setLatLng(ev.latlng).setContent(html).openOn(map);
+    });
+
+    const radios = [...$<HTMLElement>('layers').querySelectorAll<HTMLInputElement>('input')];
+    for (const r of radios) r.addEventListener('change', () => { if (r.checked) paint(r.value); });
+    paint('reach');
+    (window as any).__sig = { map, paint };
+  }
+</script>

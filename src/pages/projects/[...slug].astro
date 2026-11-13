@@ -27,6 +27,7 @@ import WaveDial from '../../components/WaveDial.astro';
 import ReliefSwap from '../../components/ReliefSwap.astro';
 import TimeTower from '../../components/TimeTower.astro';
 import EclipsePaths from '../../components/EclipsePaths.astro';
+import SignalMap from '../../components/SignalMap.astro';
 import { projectCategories } from '../../site';
 import { isPublic } from '../../projects';
 import { plainTitle } from '../../cv';
@@ -61,6 +62,7 @@ const CUSTOM_MAPS: Record<string, typeof ProjectMap> = {
   'relief-swap': ReliefSwap,
   'time-tower': TimeTower,
   'eclipse-paths': EclipsePaths,
+  'signal-map': SignalMap,
 };
 
 // Every project gets its page, drafts included: a draft is unlisted, reachable
