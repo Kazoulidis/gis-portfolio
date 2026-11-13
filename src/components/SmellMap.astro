@@ -1,0 +1,211 @@
+---
+/**
+ * Day 19 (Senses: smell): the inner Thermaikos Gulf's chlorophyll on a Leaflet map. The data are one greyscale PNG atlas of frames on a Web Mercator
+ * grid of about 300 m (Day_19/prep/page_data.py): the summer median of ten summers, each calendar month's median, and each clear day of April to
+ * October 2026 with that afternoon's wind over the bay. The page colours the frame chosen, as on the printed map, and a click reads the value.
+ *
+ * `src`: the JSON written by page_data.py (bounds, frame size, the atlas, the frames, the seafront and the two outfalls).
+ */
+interface Props {
+  src: string;
+  caption?: string;
+}
+const { src, caption } = Astro.props;
+---
+
+<figure class="map-figure">
+  <div class="sml" data-sml data-src={src}>
+    <div class="sml__modes" data-sml-modes role="radiogroup" aria-label="What to show">
+      <label><input type="radio" name="sml-mode" value="summer" checked /> Ten summers</label>
+      <label><input type="radio" name="sml-mode" value="month" /> Month by month</label>
+      <label><input type="radio" name="sml-mode" value="day" /> Day by day, 2026</label>
+    </div>
+    <div class="sml__time" data-sml-time hidden>
+      <button type="button" class="sml__play" data-sml-play aria-label="Play">&#9654;</button>
+      <input type="range" min="0" max="0" value="0" step="1" data-sml-slider aria-label="Frame" />
+    </div>
+    <p class="sml__label" data-sml-label aria-live="polite"></p>
+    <div class="sml__stage">
+      <div class="sml__map" data-sml-map role="img" aria-label="Map of the inner Thermaikos Gulf coloured by chlorophyll, with the Thessaloniki seafront and the two outfalls"></div>
+    </div>
+    <div class="sml__legend" data-sml-legend aria-hidden="true"></div>
+    <p class="sml__hint">Click the sea for the chlorophyll at a spot. Grey: no reading (cloud, or too near the coast).</p>
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<style is:global>
+  .sml { max-width: 760px; margin: 0 auto; }
+  .sml__modes { display: flex; flex-wrap: wrap; gap: 0.35rem 1rem; justify-content: center; margin-bottom: 0.5rem; font-size: 0.88rem; }
+  .sml__modes label { white-space: nowrap; cursor: pointer; }
+  .sml__modes input { accent-color: #8a6a2a; }
+  .sml__time { display: flex; align-items: center; gap: 0.6rem; margin: 0 auto 0.4rem; max-width: 560px; }
+  .sml__time[hidden] { display: none; }
+  .sml__time input { flex: 1; accent-color: #8a6a2a; }
+  .sml__play { width: 2rem; height: 2rem; border: 1px solid var(--rule, #d9d4c8); background: var(--paper, #faf7f0); cursor: pointer; font-size: 0.8rem; }
+  .sml__label { margin: 0 0 0.45rem; text-align: center; font-size: 0.9rem; min-height: 2.6em; }
+  .sml__label b { font-weight: 700; }
+  .sml__stage { position: relative; width: 100%; aspect-ratio: 1 / 1; max-height: 640px; border: 1px solid var(--rule, #d9d4c8); }
+  .sml__map { position: absolute; inset: 0; background: #e2e6e9; }
+  .sml__legend { display: flex; flex-wrap: wrap; gap: 0.3rem 0.8rem; justify-content: center; margin-top: 0.55rem; font-size: 0.75rem; }
+  .sml__legend span { display: inline-flex; align-items: center; gap: 0.3rem; white-space: nowrap; }
+  .sml__legend i { display: inline-block; width: 0.9rem; height: 0.7rem; border: 1px solid rgba(35, 35, 40, 0.35); }
+  .sml__hint { margin: 0.35rem 0 0; text-align: center; font-size: 0.78rem; opacity: 0.75; }
+  .sml__overlay { image-rendering: pixelated; }
+  .sml__wind { background: none; border: 0; }
+  .sml__wind svg { overflow: visible; }
+  .sml__tag { background: none; border: 0; }
+  .sml__tag div { transform: translate(-50%, -50%); font: 0.78rem/1.1 'Times New Roman', serif; color: #23232a; white-space: nowrap;
+    text-shadow: 0 0 3px #f7f4ec, 0 0 3px #f7f4ec, 0 0 2px #f7f4ec; }
+  .sml__pop { font-size: 0.82rem; line-height: 1.4; }
+</style>
+
+<script>
+  import * as L from 'leaflet';
+  import 'leaflet/dist/leaflet.css';
+  import { whenNear } from '../lazy';
+
+  type Frame = { kind: 'summer' | 'month' | 'day'; label: string; m?: number; date?: string; front?: number; wind_from?: number; wind_ms?: number };
+  type Plant = { name: string; load_pe: number; plant: [number, number]; outfall: [number, number] };
+  type Meta = { bounds: [[number, number], [number, number]]; size: [number, number]; cols: number; enc: [number, number]; frames: Frame[];
+    front: GeoJSON.Geometry; plants: Plant[]; stats: { ratio: number; afternoon_onshore: number; night_onshore: number } };
+
+  const BASEMAP = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+  const ATTRIBUTION = 'Tiles &copy; Esri &middot; Chlorophyll and winds: Copernicus Marine &middot; Plants: EEA';
+  // as on the printed map: upper bounds in mg/m3, clear blue to green and brown
+  const BOUNDS = [0.2, 0.5, 1, 2, 5, 10, Infinity];
+  const COLS: [number, number, number][] = [[38, 76, 128], [52, 112, 156], [86, 152, 168], [140, 184, 150], [190, 196, 104], [176, 150, 58], [122, 92, 36]];
+  const NAMES = ['under 0.2', '0.2 to 0.5', '0.5 to 1', '1 to 2', '2 to 5', '5 to 10', 'over 10'];
+  const COMPASS = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
+
+  const box = document.querySelector<HTMLElement>('[data-sml]');
+  if (box) whenNear(box, () => { void start(box); });
+
+  async function start(root: HTMLElement) {
+    const $ = <T extends Element>(n: string) => root.querySelector<T>(`[data-sml-${n}]`)!;
+    const meta: Meta = await (await fetch(root.dataset.src!)).json();
+    const [W, H] = meta.size;
+    const img = new Image(); img.src = root.dataset.src!.replace('-smell.json', '-atlas.png'); await img.decode();
+    const ac = document.createElement('canvas'); ac.width = img.width; ac.height = img.height;
+    const actx = ac.getContext('2d', { willReadFrequently: true })!; actx.drawImage(img, 0, 0);
+    const atlas = actx.getImageData(0, 0, img.width, img.height).data;
+    const value = (f: number, i: number, j: number) => {                // the encoded value of frame f at column i, row j (0 = none)
+      const r = Math.floor(f / meta.cols), c = f % meta.cols;
+      return atlas[((r * H + j) * img.width + c * W + i) * 4];
+    };
+    const [LO, HI] = meta.enc;
+    const decode = (v: number) => Math.pow(10, LO + (v - 1) / 254 * (HI - LO));
+    // a class for each encoded value
+    const cls = new Uint8Array(256);
+    for (let v = 1; v < 256; v++) { const c = decode(v); cls[v] = BOUNDS.findIndex((b) => c < b); }
+
+    const bounds = L.latLngBounds(meta.bounds);
+    const map = L.map($<HTMLElement>('map'), { scrollWheelZoom: true, zoomSnap: 0.25, maxBounds: bounds.pad(0.1), maxBoundsViscosity: 0.8 });
+    L.tileLayer(BASEMAP, { attribution: ATTRIBUTION, maxZoom: 14, maxNativeZoom: 16 }).addTo(map);
+    L.control.scale({ imperial: false }).addTo(map);
+    map.fitBounds(L.latLngBounds([[40.22, 22.55], [40.66, 23.12]]), { animate: false });
+    map.setMinZoom(map.getZoom() - 0.5);
+
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const cx = cv.getContext('2d')!, out = cx.createImageData(W, H), d = out.data;
+    let overlay: L.ImageOverlay | null = null, url = '';
+    let current = 0;
+    function paint(f: number) {
+      current = f;
+      for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+        const o = (j * W + i) * 4, v = value(f, i, j);
+        if (!v) { d[o + 3] = 0; continue; }
+        const c = COLS[cls[v]]; d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 225;
+      }
+      cx.putImageData(out, 0, 0);
+      cv.toBlob((blob) => {
+        if (!blob) return;
+        const u = URL.createObjectURL(blob);
+        if (overlay) overlay.setUrl(u); else overlay = L.imageOverlay(u, bounds, { className: 'sml__overlay', interactive: false }).addTo(map);
+        if (url) URL.revokeObjectURL(url);
+        url = u;
+      });
+      describe(meta.frames[f]);
+    }
+
+    // the seafront, and the two plants with their outfalls
+    L.geoJSON(meta.front as any, { style: { color: '#c41e24', weight: 4, opacity: 1 }, interactive: false }).addTo(map);
+    for (const p of meta.plants) {
+      L.polyline([p.plant, p.outfall], { color: '#23232a', weight: 1.5, dashArray: '5 4', interactive: false }).addTo(map);
+      L.circleMarker(p.outfall, { radius: 4, color: '#faf7f0', weight: 1, fillColor: '#23232a', fillOpacity: 1 })
+        .bindTooltip(`${p.name}'s outfall`).addTo(map);
+      L.marker(p.plant, { icon: L.divIcon({ className: 'sml__tag', html: `<div>&#9633; ${p.name}</div>`, iconSize: [0, 0] }), interactive: false, keyboard: false }).addTo(map);
+    }
+    L.marker([40.60, 22.968], { icon: L.divIcon({ className: 'sml__tag', html: '<div><b>Seafront</b></div>', iconSize: [0, 0] }), interactive: false, keyboard: false }).addTo(map);
+
+    // the day's afternoon wind, drawn over the bay as an arrow going the way the wind blows
+    const wind = L.marker([40.548, 22.92], { interactive: false, keyboard: false, icon: L.divIcon({ className: 'sml__wind', html: '', iconSize: [0, 0] }) });
+    function arrow(from: number, ms: number) {
+      const len = 24 + Math.min(ms, 10) * 6;
+      return `<svg width="0" height="0"><g transform="rotate(${from + 180})"><line x1="0" y1="${len / 2}" x2="0" y2="${-len / 2}" stroke="#23232a" stroke-width="6" stroke-linecap="round"/>`
+        + `<line x1="0" y1="${len / 2}" x2="0" y2="${-len / 2}" stroke="#faf7f0" stroke-width="3" stroke-linecap="round"/>`
+        + `<path d="M-8 ${-len / 2 + 10} L0 ${-len / 2 - 2} L8 ${-len / 2 + 10}" fill="none" stroke="#23232a" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>`
+        + `<path d="M-8 ${-len / 2 + 10} L0 ${-len / 2 - 2} L8 ${-len / 2 + 10}" fill="none" stroke="#faf7f0" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/></g></svg>`;
+    }
+    const label = $<HTMLElement>('label');
+    function describe(f: Frame) {
+      let s = `<b>${f.label}</b>`;
+      if (f.front !== undefined) s += ` &middot; off the seafront ${f.front.toFixed(1)} mg/m&sup3;`;
+      if (f.kind === 'day' && f.wind_from !== undefined) {
+        const onshore = f.wind_from >= 135 && f.wind_from <= 247.5;
+        s += `<br>Afternoon wind from the ${COMPASS[Math.round(f.wind_from / 45) % 8]}, ${f.wind_ms!.toFixed(1)} m/s${onshore ? ': off the bay, onto the seafront' : ''}`;
+        wind.setIcon(L.divIcon({ className: 'sml__wind', html: arrow(f.wind_from, f.wind_ms!), iconSize: [0, 0] }));
+        if (!map.hasLayer(wind)) wind.addTo(map);
+      } else {
+        if (map.hasLayer(wind)) wind.remove();
+        if (f.kind === 'summer') s += `<br>In summer the bay is ${meta.stats.ratio} times greener than the open gulf.`;
+      }
+      label.innerHTML = s;
+    }
+
+    const legend = $<HTMLElement>('legend');
+    legend.replaceChildren(...NAMES.map((t, k) => {
+      const sp = document.createElement('span'); const i = document.createElement('i'); i.style.background = `rgb(${COLS[k].join(',')})`;
+      sp.append(i, document.createTextNode(t)); return sp;
+    }), Object.assign(document.createElement('span'), { textContent: 'mg/m³ chlorophyll-a' }));
+
+    // a click: the value at that spot, in the frame shown
+    const crs = L.CRS.EPSG3857;
+    const nw = crs.project(bounds.getNorthWest()), se = crs.project(bounds.getSouthEast());
+    map.on('click', (ev: L.LeafletMouseEvent) => {
+      const p = crs.project(ev.latlng);
+      const i = Math.floor((p.x - nw.x) / (se.x - nw.x) * W), j = Math.floor((nw.y - p.y) / (nw.y - se.y) * H);
+      if (i < 0 || j < 0 || i >= W || j >= H) return;
+      const v = value(current, i, j);
+      const html = v ? `<div class="sml__pop"><b>${decode(v) < 10 ? decode(v).toFixed(2) : decode(v).toFixed(1)} mg/m&sup3;</b><br>${meta.frames[current].label}</div>`
+        : `<div class="sml__pop">No reading here in this frame.</div>`;
+      L.popup({ maxWidth: 260 }).setLatLng(ev.latlng).setContent(html).openOn(map);
+    });
+
+    // modes and time
+    const groups = { summer: [] as number[], month: [] as number[], day: [] as number[] };
+    meta.frames.forEach((f, k) => groups[f.kind].push(k));
+    const time = $<HTMLElement>('time'), slider = $<HTMLInputElement>('slider'), play = $<HTMLButtonElement>('play');
+    let mode: keyof typeof groups = 'summer', timer = 0;
+    function stop() { if (timer) { clearInterval(timer); timer = 0; play.innerHTML = '&#9654;'; play.setAttribute('aria-label', 'Play'); } }
+    function setMode(m: keyof typeof groups) {
+      stop(); mode = m;
+      const g = groups[m];
+      time.hidden = g.length < 2;
+      slider.max = String(g.length - 1);
+      slider.value = m === 'month' ? '6' : m === 'day' ? String(Math.max(0, g.findIndex((k) => meta.frames[k].date! >= '2026-06-09'))) : '0';
+      paint(g[+slider.value]);
+    }
+    slider.addEventListener('input', () => paint(groups[mode][+slider.value]));
+    play.addEventListener('click', () => {
+      if (timer) { stop(); return; }
+      play.innerHTML = '&#10074;&#10074;'; play.setAttribute('aria-label', 'Pause');
+      timer = window.setInterval(() => {
+        const g = groups[mode]; slider.value = String((+slider.value + 1) % g.length); paint(g[+slider.value]);
+      }, mode === 'day' ? 450 : 900);
+    });
+    for (const r of $<HTMLElement>('modes').querySelectorAll<HTMLInputElement>('input')) r.addEventListener('change', () => { if (r.checked) setMode(r.value as any); });
+    setMode('summer');
+    (window as any).__sml = { map, paint, meta };
+  }
+</script>
