@@ -11,6 +11,7 @@
 import type { CollectionEntry } from 'astro:content';
 import { plainTitle } from '../cv';
 import { untilPublic } from '../projects';
+import PinIcon from './PinIcon.astro';
 
 interface Props {
   projects: CollectionEntry<'projects'>[];
@@ -37,14 +38,17 @@ const { projects, heading = 'Check out my recent projects', shown = 10 } = Astro
             data-umami-event-project={project.id}
             {...untilPublic(project)}
           >
-            <img
-              src={project.data.thumbnail}
-              alt=""
-              width="900"
-              height="900"
-              loading={i === 0 ? 'eager' : 'lazy'}
-              decoding="async"
-            />
+            <span class="recent-card__image">
+              <img
+                src={project.data.thumbnail}
+                alt=""
+                width="900"
+                height="900"
+                loading={i === 0 ? 'eager' : 'lazy'}
+                decoding="async"
+              />
+              {project.data.featured && <PinIcon class="recent-card__pin" />}
+            </span>
             <span class="recent-card__title">{plainTitle(project.data.title)}</span>
             {project.data.context && <span class="recent-card__context">{project.data.context}</span>}
           </a>
@@ -186,6 +190,24 @@ const { projects, heading = 'Check out my recent projects', shown = 10 } = Astro
     object-fit: cover;
     border: 1px solid var(--rule);
     border-radius: var(--radius);
+  }
+
+  .recent-card__image {
+    position: relative;
+    display: block;
+  }
+
+  /* On a white disc so it reads over any map. :global because the pin's own
+     markup belongs to PinIcon, and Astro scopes these rules to this file. */
+  .recent-card__image :global(.recent-card__pin) {
+    position: absolute;
+    top: 0.4rem;
+    right: 0.4rem;
+    padding: 0.3rem;
+    border-radius: 50%;
+    background: var(--bg-surface);
+    border: 1px solid var(--rule);
+    color: var(--text);
   }
 
   .recent-card__title {

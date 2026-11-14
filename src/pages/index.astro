@@ -1,6 +1,7 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import RecentProjectsCard from '../components/RecentProjectsCard.astro';
+import PinIcon from '../components/PinIcon.astro';
 import { site, projectCategories, projectsHref } from '../site';
 import {
   summary,
@@ -146,7 +147,8 @@ const fullDate = (d: Date) =>
       <h2 class="section">Recent projects</h2>
       {
         recent.map((project) => (
-          <article class="entry" data-recent-entry {...untilPublic(project)}>
+          <article class="entry recent-entry" data-recent-entry {...untilPublic(project)}>
+            {project.data.featured && <PinIcon class="recent-entry__pin" />}
             <div class="entry__date">{fullDate(madeOn(project))}</div>
             <div class="entry__body">
               <h3 class="entry__title">
@@ -316,6 +318,22 @@ const fullDate = (d: Date) =>
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--text-muted);
+  }
+
+  /* The pin sits in the entry's top right corner, level with the title; the
+     title keeps clear of it. */
+  .recent-entry {
+    position: relative;
+  }
+
+  .recent-entry :global(.recent-entry__pin) {
+    position: absolute;
+    top: 1.6rem;
+    right: 0;
+  }
+
+  .recent-entry:has(.recent-entry__pin) .entry__title {
+    padding-right: 1.5rem;
   }
 
   .entry__title {
