@@ -2,6 +2,7 @@
 title: 'Day 1 - Points: How Fast Greece Is Moving'
 summary: 'Horizontal velocities of 212 permanent GNSS stations, relative to stable Europe. Northern Greece barely moves; Crete moves 3 cm a year to the south-west. One station, TUC2 in Chania, positioned from raw satellite data and checked against the official solution.'
 date: 2026-11-01
+featured: true
 created: 2026-10-24
 category: '30-day-map-challenge'
 context: '#30DayMapChallenge 2026 · Day 1'

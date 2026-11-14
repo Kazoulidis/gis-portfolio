@@ -5,7 +5,7 @@
  */
 export const site = {
   name: 'Antonis Kazoulidis',
-  role: 'GIS Specialist | Spatial Planning and Development Engineer',
+  role: 'Spatial Planning and Development Engineer | Surveying and GIS',
   // One or two sentences. This is the meta description and the line under your
   // name on the About page. Recruiters read this and nothing else, sometimes.
   tagline:
@@ -13,7 +13,7 @@ export const site = {
   email: 'antonis@kazoulidis.com',
   // Shown on the Contact page only. `null` hides it.
   phone: '+30 697 385 7887',
-  location: 'Thessaloniki, Greece',
+  location: 'Thessaloniki, Greece (relocating to Ireland)',
   linkedin: 'https://www.linkedin.com/in/kazoulidis',
   // No GitHub on the CV; the link hides itself while this is null.
   github: null,

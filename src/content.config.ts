@@ -29,6 +29,9 @@ const projects = defineCollection({
     // same label against every entry and order them by prompt number rather
     // than by what was made most recently. Falls back to `date` when absent.
     created: z.coerce.date().optional(),
+    // Pinned to the top of "Recent projects" on the About page, whatever its
+    // date, so the surveying work stays in view after newer maps push it down.
+    featured: z.boolean().default(false),
     // Which sub-tab this project appears under. The allowed values come from
     // `projectCategories` in src/site.ts; an unrecognised one fails the build
     // rather than quietly hiding the project. Defaults to 'misc'.

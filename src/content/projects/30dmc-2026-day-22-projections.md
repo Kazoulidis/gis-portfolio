@@ -2,6 +2,7 @@
 title: 'Day 22 - Projections: Greek Coordinates'
 summary: 'What the Greek map grid, GPS conversion and height reference do to a coordinate. On the grid, 1 km on the ground comes out up to 78 cm shorter or 1.5 m longer; the default GPS conversion lands up to 2 m from the official model; and GPS heights sit 15 to 45 m away from heights above sea level.'
 date: 2026-11-22
+featured: true
 created: 2026-10-26
 category: '30-day-map-challenge'
 context: '#30DayMapChallenge 2026 · Day 22'

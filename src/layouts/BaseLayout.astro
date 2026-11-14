@@ -17,17 +17,18 @@ interface Props {
 const {
   title,
   description = site.tagline,
-  image = '/og/default.jpg?v=2', // the number tells Facebook and others the card has changed
+  image = '/og/default.jpg?v=3', // the number tells Facebook and others the card has changed
   imageAlt = `${site.name}, ${site.role}`,
   type = 'website',
   noindex = false,
 } = Astro.props;
 
 // Search results cut titles at about 60 characters, so the home page uses the
-// first half of the role only ("GIS Specialist"); the full role is on the page.
+// second half of the role only ("Surveying and GIS", what people search for);
+// the full role is on the page.
 const pageTitle = title
   ? `${title} - ${site.name}`
-  : `${site.name} - ${site.role.split(' | ')[0]}`;
+  : `${site.name} - ${site.role.split(' | ').at(-1)}`;
 
 // Normalise so "/projects/foo" marks the "Projects" tab, and trailing
 // slashes or .html suffixes don't break the match. `build.format: 'file'`

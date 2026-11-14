@@ -34,8 +34,9 @@ const homepageCategories = projectCategories
 const madeOn = ({ data }: { data: { created?: Date; date: Date } }) =>
   data.created && data.created > data.date ? data.created : data.date;
 
-// The ten newest listed, plus any still to come: the list and the card keep ten
-// of what is public when the page is opened.
+// Ten in all: the featured projects first, then the newest listed, plus any
+// still to come. The list and the card keep the first ten of what is public
+// when the page is opened, so a featured project is never the one dropped.
 const SHOWN = 10;
 const candidates = (
   await getCollection(
@@ -44,8 +45,10 @@ const candidates = (
       isInList({ data }) && Boolean(data.thumbnail) && homepageCategories.includes(data.category),
   )
 ).sort((a, b) => madeOn(b).valueOf() - madeOn(a).valueOf());
-const newestListed = new Set(candidates.filter(isListed).slice(0, SHOWN));
-const recent = candidates.filter((entry) => newestListed.has(entry) || !isListed(entry));
+const featured = candidates.filter((entry) => entry.data.featured);
+const others = candidates.filter((entry) => !entry.data.featured);
+const newestListed = new Set(others.filter(isListed).slice(0, SHOWN - featured.filter(isListed).length));
+const recent = [...featured, ...others.filter((entry) => newestListed.has(entry) || !isListed(entry))];
 
 // Day included: several of these fall in the same month, and "Aug 2026" four
 // times over says nothing.
