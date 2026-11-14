@@ -15,14 +15,16 @@ import { untilPublic } from '../projects';
 interface Props {
   projects: CollectionEntry<'projects'>[];
   heading?: string;
+  /** How many slides to keep once projects to come are accounted for. */
+  shown?: number;
 }
 
-const { projects, heading = 'Check out my recent projects' } = Astro.props;
+const { projects, heading = 'Check out my recent projects', shown = 10 } = Astro.props;
 ---
 
 {
   projects.length > 0 && (
-    <section class="recent-card" data-recent-card aria-roledescription="carousel" aria-label="Recent projects">
+    <section class="recent-card" data-recent-card data-shown={shown} aria-roledescription="carousel" aria-label="Recent projects">
       <h3 class="recent-card__heading">{heading}</h3>
       <div class="recent-card__slides">
         {projects.map((project, i) => (
@@ -73,9 +75,8 @@ const { projects, heading = 'Check out my recent projects' } = Astro.props;
 
 <script>
   const INTERVAL = 3000;
-  const SHOWN = 5;
-
   for (const card of document.querySelectorAll<HTMLElement>('[data-recent-card]')) {
+    const SHOWN = Number(card.dataset.shown) || 10;
     const slides = [...card.querySelectorAll<HTMLElement>('.recent-card__slide')];
     const dots = [...card.querySelectorAll<HTMLButtonElement>('.recent-card__dot')];
     // More than SHOWN only when projects to come are in the markup.

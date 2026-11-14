@@ -85,30 +85,48 @@ export const interests = [
 /** The sidebar groups, in the CV's order. */
 export const skills = [
   {
-    heading: 'Geospatial',
+    heading: 'Surveying & Geodesy',
     items: [
-      'ArcGIS Pro',
-      'QGIS',
-      'GDAL/OGR',
-      'Leaflet',
-      'Coordinate Reference Systems (CRS)',
-      'Raster and vector data processing',
-      'Viewshed and terrain analysis',
-      'WMS/WFS',
+      'Total station and traversing',
+      'Levelling and trigonometric heighting',
+      'GNSS processing (RTKLIB)',
+      'Coordinate systems and transformations',
       'AutoCAD',
     ],
   },
   {
-    heading: 'Remote Sensing',
-    items: ['Photogrammetry', 'Agisoft Metashape', 'ERDAS Imagine', '3D Modeling', 'Digital Terrain Models (DTM)'],
+    heading: 'GIS & Cartography',
+    items: [
+      'ArcGIS Pro',
+      'QGIS',
+      'GDAL/OGR',
+      'Raster and vector processing',
+      'Viewshed and terrain analysis',
+      'Map layout and symbology',
+    ],
   },
   {
-    heading: 'Automation & Scripting',
-    items: ['Python (NumPy, geopandas, shapely, pyproj, GDAL, scikit-learn, osmnx, arcpy)', 'Data quality control'],
+    heading: 'Photogrammetry & Remote Sensing',
+    items: [
+      'Agisoft Metashape',
+      'ERDAS Imagine',
+      'Point clouds',
+      'Digital Terrain Models (DTM)',
+      '3D modeling',
+      'Copernicus satellite data',
+    ],
   },
   {
-    heading: 'IT & Databases',
-    items: ['SQL', 'PostGIS', 'Docker', 'Linux', 'Nginx', 'Git', 'Microsoft Office'],
+    heading: 'Programming & Data',
+    items: [
+      'Python (NumPy, geopandas, shapely, pyproj, GDAL, arcpy, scikit-learn, osmnx)',
+      'SQL and PostGIS',
+      'Data quality control',
+    ],
+  },
+  {
+    heading: 'Web & Tools',
+    items: ['Leaflet', 'WMS/WFS', 'Git', 'Docker', 'Linux', 'Nginx', 'Microsoft Office'],
   },
   // Languages are their own section on the About page rather than a skills
   // group, so they are deliberately absent here.

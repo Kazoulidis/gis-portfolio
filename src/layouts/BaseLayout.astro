@@ -74,6 +74,14 @@ const isHome = path === '/';
       site.analytics.websiteId && (
         <>
           <script is:inline>
+            // Opening any page with ?umami=off stops this browser being
+            // counted (the tracker itself skips sending while umami.disabled is
+            // set); ?umami=on undoes it. Once per browser and device.
+            try {
+              const umami = new URLSearchParams(location.search).get('umami');
+              if (umami === 'off') localStorage.setItem('umami.disabled', '1');
+              if (umami === 'on') localStorage.removeItem('umami.disabled');
+            } catch {}
             window.umamiBeforeSend = (type, payload) =>
               navigator.webdriver ? null : payload;
           </script>
