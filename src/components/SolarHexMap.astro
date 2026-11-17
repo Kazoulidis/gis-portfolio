@@ -1,0 +1,184 @@
+---
+/**
+ * Day 20 (Hexagons): Greece's sun and its solar parks on a Leaflet map. The 7 km hexagons of the printed sheet, tinted by
+ * PVGIS solar yield, each with a dark hexagon for the MW of parks still alive in RAAEY's register and an outline for every
+ * MW asked; a year slider shows the register as it had grown by the end of that year. Zoomed in, the parks themselves.
+ * Day_20/prep/page_data.py writes both files.
+ *
+ * `src`: the hexagons (30dmc-2026-day-20-sun.json); the parks file sits beside it (-parks.json).
+ */
+interface Props {
+  src: string;
+  caption?: string;
+}
+const { src, caption } = Astro.props;
+---
+
+<figure class="map-figure">
+  <div class="sun" data-sun data-src={src}>
+    <div class="sun__bar">
+      <button type="button" class="sun__play" data-sun-play aria-label="Play the years">&#9654;</button>
+      <input type="range" data-sun-year aria-label="Year of application" />
+      <span class="sun__year" data-sun-label></span>
+    </div>
+    <p class="sun__sum" data-sun-sum aria-live="polite"></p>
+    <div class="sun__stage">
+      <div class="sun__map" data-sun-map role="img" aria-label="Map of Greece in hexagons: solar yield, and the solar parks asked for and still alive in each"></div>
+    </div>
+    <div class="sun__legend" aria-hidden="true">
+      <span class="sun__ramp" data-sun-ramp></span>
+      <span><svg viewBox="-10 -10 20 20"><polygon points="8.7,5 0,10 -8.7,5 -8.7,-5 0,-10 8.7,-5" fill="#f0b458" stroke="#faf7f0" /><polygon points="5.2,3 0,6 -5.2,3 -5.2,-3 0,-6 5.2,-3" fill="none" stroke="#1e1a1c" stroke-width="1" /><polygon points="3,1.7 0,3.4 -3,1.7 -3,-1.7 0,-3.4 3,-1.7" fill="#1e1a1c" /></svg>solid: MW still alive; outline: all MW asked (full at 1 GW)</span>
+    </div>
+    <p class="sun__hint">Click a hexagon for its numbers. Zoom in to see the parks themselves.</p>
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<style is:global>
+  /* global: the legend and the popups are written by the script, which scoped styles do not reach */
+  .sun { max-width: 760px; margin: 0 auto; }
+  .sun__bar { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.3rem; }
+  .sun__bar input { flex: 1; accent-color: #c45820; }
+  .sun__play { width: 2rem; height: 2rem; border: 1px solid var(--rule, #d9d4c8); background: var(--bg-surface, #fff); cursor: pointer; font-size: 0.8rem; }
+  .sun__year { min-width: 3.2rem; font: 700 1.05rem/1 'Times New Roman', serif; font-variant-numeric: tabular-nums; }
+  .sun__sum { margin: 0 0 0.5rem; text-align: center; font-size: 0.85rem; min-height: 1.3em; }
+  .sun__stage { position: relative; width: 100%; aspect-ratio: 1 / 1; max-height: 640px; border: 1px solid var(--rule, #d9d4c8); }
+  .sun__map { position: absolute; inset: 0; background: #dfe6ea; }
+  .sun__legend { display: flex; flex-wrap: wrap; gap: 0.35rem 1.1rem; justify-content: center; align-items: center; margin-top: 0.55rem; font-size: 0.75rem; }
+  .sun__legend > span { display: inline-flex; align-items: center; gap: 0.35rem; }
+  .sun__legend svg { width: 1.2rem; height: 1.2rem; }
+  .sun__ramp i { display: inline-block; width: 1.4rem; height: 0.7rem; }
+  .sun__ramp em { font-style: normal; margin: 0 0.3rem; }
+  .sun__hint { margin: 0.35rem 0 0; text-align: center; font-size: 0.78rem; opacity: 0.75; }
+  .sun__pop { font-size: 0.82rem; line-height: 1.4; }
+  .sun__pop b { display: block; margin-bottom: 0.15rem; }
+  .sun__pop table { border-collapse: collapse; }
+  .sun__pop td { padding: 0 0.6rem 0 0; }
+  .sun__pop td + td { font-variant-numeric: tabular-nums; text-align: right; }
+  .sun__pop .muted { opacity: 0.7; }
+</style>
+
+<script>
+  import * as L from 'leaflet';
+  import 'leaflet/dist/leaflet.css';
+  import { whenNear } from '../lazy';
+
+  type Hex = { id: number; k: number | null; ring: [number, number][]; y: [number, number, number][] };
+  type Meta = { hexes: Hex[]; years: [number, number]; full_mw: number;
+    stats: { asked_mw: number; alive_mw: number; gone_mw: number; gone_pct: number; big_claims_mw: number } };
+
+  const BASEMAP = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+  const ATTRIBUTION = 'Tiles &copy; Esri &middot; Solar parks: RAAEY register &middot; Solar yield: EU JRC PVGIS 5.3';
+  const BINS = [1300, 1400, 1500, 1600, 1700];
+  const SUN = ['#faf0ce', '#f8d892', '#f0b458', '#e08632', '#c45820', '#923016'];
+  const INK = '#1e1a1c', GONE = '#8a8278', PAPER = '#faf7f0';
+  const sunCol = (k: number | null) => k === null ? '#e8e2d6' : SUN[BINS.filter((b) => k >= b).length];
+  const gw = (mw: number) => mw >= 1000 ? `${(mw / 1000).toFixed(1)} GW` : `${Math.round(mw).toLocaleString('en-GB')} MW`;
+  const mwFmt = (mw: number) => `${mw < 10 ? mw.toFixed(1) : Math.round(mw).toLocaleString('en-GB')} MW`;
+  const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+
+  const box = document.querySelector<HTMLElement>('[data-sun]');
+  if (box) whenNear(box, () => { void start(box); });
+
+  async function start(root: HTMLElement) {
+    const $ = <T extends Element>(n: string) => root.querySelector<T>(`[data-sun-${n}]`)!;
+    const src = root.dataset.src!;
+    const meta: Meta = await (await fetch(src)).json();
+    const [Y0, Y1] = meta.years;
+
+    const map = L.map($<HTMLElement>('map'), { scrollWheelZoom: true, zoomSnap: 0.25, preferCanvas: true,
+      maxBounds: L.latLngBounds([[33.5, 18], [42.6, 30.5]]), maxBoundsViscosity: 0.8 });
+    L.tileLayer(BASEMAP, { attribution: ATTRIBUTION, maxZoom: 15, maxNativeZoom: 16 }).addTo(map);
+    L.control.scale({ imperial: false }).addTo(map);
+    const fit = () => map.getBoundsZoom(L.latLngBounds([[34.8, 19.4], [41.75, 28.3]]));
+    map.setView([38.3, 23.8], fit(), { animate: false });
+    map.setMinZoom(fit() - 0.5);
+    const renderer = L.canvas({ padding: 0.3 });
+
+    // each hexagon: its tint, then the asked outline and the alive core, rescaled as the year moves
+    const ll = (r: [number, number][]) => r.map(([x, y]) => L.latLng(y, x));
+    const cells = meta.hexes.map((h) => {
+      const cx = h.ring.reduce((s, p) => s + p[0], 0) / 6, cy = h.ring.reduce((s, p) => s + p[1], 0) / 6;
+      const scaled = (f: number) => ll(h.ring.map(([x, y]) => [cx + (x - cx) * f, cy + (y - cy) * f] as [number, number]));
+      const base = L.polygon(ll(h.ring), { renderer, fillColor: sunCol(h.k), fillOpacity: 0.92, color: PAPER, weight: 0.6 }).addTo(map);
+      const asked = L.polygon(scaled(0), { renderer, fill: false, color: INK, weight: 0.9, interactive: false }).addTo(map);
+      const alive = L.polygon(scaled(0), { renderer, fillColor: INK, fillOpacity: 1, stroke: false, interactive: false }).addTo(map);
+      return { h, base, asked, alive, scaled, a: 0, g: 0 };
+    });
+    const size = (mw: number) => mw < 0.5 ? 0 : Math.min(1, Math.sqrt(mw / meta.full_mw)) * 0.94;
+
+    let year = Y1;
+    function draw(y: number) {
+      year = y;
+      let A = 0, G = 0;
+      for (const c of cells) {
+        c.a = 0; c.g = 0;
+        for (const [yy, a, g] of c.h.y) if (yy <= y) { c.a += a; c.g += g; }
+        A += c.a; G += c.g;
+        c.asked.setLatLngs(c.scaled(size(c.a + c.g)));
+        c.alive.setLatLngs(c.scaled(size(c.a)));
+      }
+      $<HTMLElement>('label').textContent = String(y);
+      $<HTMLElement>('sum').textContent = `Asked for by the end of ${y}: ${gw(A + G)}. Still alive today: ${gw(A)}; withdrawn, rejected or lapsed: ${gw(G)}.`;
+    }
+
+    for (const c of cells) {
+      c.base.on('click', (ev: L.LeafletMouseEvent) => {
+        if (map.getZoom() >= PARK_ZOOM) return;                       // zoomed in, the parks answer clicks
+        const html = `<div class="sun__pop"><b>${c.h.k ? `${c.h.k.toLocaleString('en-GB')} kWh a year from 1 kWp` : 'No solar yield here'}</b>`
+          + (c.a + c.g > 0
+            ? `<table><tr><td>Asked for, to ${year}</td><td>${mwFmt(c.a + c.g)}</td></tr><tr><td>Still alive</td><td>${mwFmt(c.a)}</td></tr>`
+              + `<tr><td>Withdrawn, rejected, lapsed</td><td>${mwFmt(c.g)}</td></tr></table>`
+            : `<span class="muted">No solar parks asked for here${year < Y1 ? ` by ${year}` : ''}.</span>`)
+          + `</div>`;
+        L.popup({ maxWidth: 300 }).setLatLng(ev.latlng).setContent(html).openOn(map);
+      });
+    }
+
+    // the parks, closer in
+    const PARK_ZOOM = 10;
+    let parks: L.GeoJSON | null = null, loading = false;
+    async function showParks() {
+      const on = map.getZoom() >= PARK_ZOOM;
+      if (on && !parks && !loading) {
+        loading = true;
+        const fc = await (await fetch(src.replace('-sun.json', '-parks.json'))).json();
+        parks = L.geoJSON(fc, {
+          renderer,
+          style: (f) => f!.properties.a ? { color: INK, weight: 1, fillColor: INK, fillOpacity: 0.55 } : { color: GONE, weight: 1, dashArray: '3 3', fillColor: GONE, fillOpacity: 0.12 },
+          onEachFeature: (f, layer) => {
+            const p = f.properties;
+            layer.bindPopup(`<div class="sun__pop"><b>${esc(p.at || 'Solar park')}</b><table>`
+              + `<tr><td>Power</td><td>${p.mw == null ? 'not given' : mwFmt(p.mw)}</td></tr><tr><td>Stage</td><td>${esc(p.s)}</td></tr>`
+              + (p.y ? `<tr><td>Applied</td><td>${p.y}</td></tr>` : '')
+              + `</table><span class="muted">${esc(p.co)}<br>RAAEY ${esc(p.n)}</span></div>`, { maxWidth: 320 });
+          },
+        });
+        loading = false;
+      }
+      if (parks) { if (on && !map.hasLayer(parks)) parks.addTo(map); if (!on && map.hasLayer(parks)) parks.remove(); }
+    }
+    map.on('zoomend', () => { void showParks(); });
+
+    // the legend's sun ramp
+    const ramp = $<HTMLElement>('ramp');
+    ramp.innerHTML = '<em>sun, kWh/kWp:</em>' + SUN.map((c) => `<i style="background:${c}"></i>`).join('') + '<em>1,300 to 1,700 +</em>';
+
+    // the slider and the play button
+    const slider = $<HTMLInputElement>('year');
+    slider.min = String(Y0); slider.max = String(Y1); slider.step = '1'; slider.value = String(Y1);
+    slider.addEventListener('input', () => draw(Number(slider.value)));
+    const play = $<HTMLButtonElement>('play');
+    let timer: number | undefined;
+    const stop = () => { window.clearInterval(timer); timer = undefined; play.innerHTML = '&#9654;'; play.setAttribute('aria-label', 'Play the years'); };
+    play.addEventListener('click', () => {
+      if (timer) { stop(); return; }
+      let y = Number(slider.value) >= Y1 ? 2006 : Number(slider.value);
+      play.innerHTML = '&#10074;&#10074;'; play.setAttribute('aria-label', 'Pause');
+      const step = () => { slider.value = String(y); draw(y); if (y >= Y1) stop(); y++; };
+      step(); timer = window.setInterval(step, 700);
+    });
+    draw(Y1);
+    (window as any).__sun = { map, draw };
+  }
+</script>
