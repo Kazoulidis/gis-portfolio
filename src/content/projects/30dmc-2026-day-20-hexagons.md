@@ -1,5 +1,5 @@
 ---
-title: 'Day 20 - Hexagons: Too Much Sun?'
+title: 'Day 20 - Hexagons: Where the Sun Is Not'
 summary: 'Greece in 7 km hexagons: the sun each one gets, and the solar parks asked for in it. Since 2000, 117.6 GW of solar has been asked of the regulator, and 58% of it has since been withdrawn, rejected or lapsed. What is left crowds into Macedonia and Thessaly, while the sunniest quarter of the land holds 6% of it. Play the years to watch the rush.'
 date: 2026-11-20
 created: 2026-11-15
@@ -8,7 +8,7 @@ context: '#30DayMapChallenge 2026 · Day 20'
 tags: ['ArcGIS Pro', 'Python', 'Leaflet', 'Renewable energy', 'Hexagons']
 image: '/images/30dmc-2026-day-20-wide.webp'
 imageFull: '/images/30dmc-2026-day-20-full.webp'
-imageAlt: 'Printed A4 sheet titled Too Much Sun?: Greece drawn as small hexagons tinted from pale yellow in the northern mountains to deep orange and red on Crete, the Cyclades and the Dodecanese, with black hexagons inside them, largest in Thessaly, western Macedonia and around Kozani, and thin outlines for the parks asked for; notes mark two 7 GW claims and Crete, with the most sun and almost no parks; Kastellorizo in an inset; the side panel holds a legend, a bar chart of the solar parks asked for by year, a chart of land and parks by sun class and three figures'
+imageAlt: 'Printed A4 sheet titled Where the Sun Is Not: Greece drawn as small hexagons tinted from pale yellow in the northern mountains to deep orange and red on Crete, the Cyclades and the Dodecanese, with black hexagons inside them, largest in Thessaly, western Macedonia and around Kozani, and thin outlines for the parks asked for; notes mark two 7 GW claims and Crete, with the most sun and almost no parks; Kastellorizo in an inset; the side panel holds a legend, a bar chart of the solar parks asked for by year, a chart of land and parks by sun class and three figures'
 thumbnail: '/images/30dmc-2026-day-20-square.webp'
 thumbnailAlt: 'Greece in hexagons tinted by sun, pale in the north and deep orange on the islands, with black hexagons for solar parks clustered in Thessaly and Macedonia'
 dataSource:
