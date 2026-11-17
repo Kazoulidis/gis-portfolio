@@ -30,6 +30,7 @@ import EclipsePaths from '../../components/EclipsePaths.astro';
 import SignalMap from '../../components/SignalMap.astro';
 import SmellMap from '../../components/SmellMap.astro';
 import SolarHexMap from '../../components/SolarHexMap.astro';
+import SaintsMap from '../../components/SaintsMap.astro';
 import { projectCategories } from '../../site';
 import { isPublic } from '../../projects';
 import { plainTitle } from '../../cv';
@@ -67,6 +68,7 @@ const CUSTOM_MAPS: Record<string, typeof ProjectMap> = {
   'signal-map': SignalMap,
   'smell-map': SmellMap,
   'solar-hexagons': SolarHexMap,
+  'saints-map': SaintsMap,
 };
 
 // Every project gets its page, drafts included: a draft is unlisted, reachable

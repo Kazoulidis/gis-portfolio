@@ -1,0 +1,131 @@
+---
+/**
+ * Day 21 (OpenStreetMap): where Greece's chapels stand, on a Leaflet map. Pick a saint and its chapels show, those on a hilltop and
+ * those on the shore marked, with the saint's figures against all chapels; click a chapel for its name and height and a link to it on
+ * OpenStreetMap. Day_21/prep/page_data.py writes the file.
+ *
+ * `src`: 30dmc-2026-day-21-saints.json (the saints, all chapels' figures, every chapel).
+ */
+interface Props {
+  src: string;
+  caption?: string;
+}
+const { src, caption } = Astro.props;
+---
+
+<figure class="map-figure">
+  <div class="sts" data-sts data-src={src}>
+    <label class="sts__pick">Show the chapels of
+      <select data-sts-saint aria-label="Saint"></select>
+    </label>
+    <p class="sts__sum" data-sts-sum aria-live="polite"></p>
+    <div class="sts__stage">
+      <div class="sts__map" data-sts-map role="img" aria-label="Map of Greece: the churches and chapels of the saint chosen, from OpenStreetMap"></div>
+    </div>
+    <div class="sts__legend" data-sts-legend aria-hidden="true"></div>
+    <p class="sts__hint">Click a chapel for its name and height, and a link to it on OpenStreetMap.</p>
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<style is:global>
+  /* global: the legend and the popups are written by the script, which scoped styles do not reach */
+  .sts { max-width: 760px; margin: 0 auto; }
+  .sts__pick { display: flex; justify-content: center; align-items: center; gap: 0.5rem; font-size: 0.9rem; margin-bottom: 0.35rem; }
+  .sts__pick select { font: inherit; padding: 0.15rem 0.3rem; }
+  .sts__sum { margin: 0 0 0.5rem; text-align: center; font-size: 0.84rem; min-height: 2.6em; }
+  .sts__sum b { font-weight: 700; }
+  .sts__stage { position: relative; width: 100%; aspect-ratio: 1 / 1; max-height: 640px; border: 1px solid var(--rule, #d9d4c8); }
+  .sts__map { position: absolute; inset: 0; background: #dfe6ea; }
+  .sts__legend { display: flex; flex-wrap: wrap; gap: 0.35rem 1.1rem; justify-content: center; margin-top: 0.55rem; font-size: 0.75rem; }
+  .sts__legend span { display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap; }
+  .sts__legend svg { width: 0.9rem; height: 0.9rem; }
+  .sts__hint { margin: 0.35rem 0 0; text-align: center; font-size: 0.78rem; opacity: 0.75; }
+  .sts__pop { font-size: 0.82rem; line-height: 1.45; }
+  .sts__pop b { display: block; margin-bottom: 0.1rem; }
+  .sts__pop .muted { opacity: 0.7; }
+</style>
+
+<script>
+  import * as L from 'leaflet';
+  import 'leaflet/dist/leaflet.css';
+  import { whenNear } from '../lazy';
+
+  type Saint = { key: string; name: string; n: number; top: number; shore: number; z: number };
+  type Meta = { osm_date: string; saints: Saint[]; all: { n: number; top: number; shore: number; z: number };
+    pts: [number, number, number, number | null, number, string, string][] };
+
+  const BASEMAP = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}';
+  const ATTRIBUTION = 'Relief &copy; Esri &middot; Churches and chapels &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+  const COL: Record<string, string> = { 'Prophet Elias': '#c0281c', 'St Nicholas': '#1f5fa0' };
+  const OTHER = '#6b4a8c', ALL = '#5d554c', INK = '#23232a', PAPER = '#faf7f0';
+  const fmt = (v: number) => v.toLocaleString('en-GB');
+  const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+  const OSM = { n: 'node', w: 'way', r: 'relation' } as Record<string, string>;
+
+  const box = document.querySelector<HTMLElement>('[data-sts]');
+  if (box) whenNear(box, () => { void start(box); });
+
+  async function start(root: HTMLElement) {
+    const $ = <T extends Element>(n: string) => root.querySelector<T>(`[data-sts-${n}]`)!;
+    const meta: Meta = await (await fetch(root.dataset.src!)).json();
+
+    const map = L.map($<HTMLElement>('map'), { scrollWheelZoom: true, zoomSnap: 0.25, preferCanvas: true,
+      maxBounds: L.latLngBounds([[33.5, 18], [42.6, 30.5]]), maxBoundsViscosity: 0.8 });
+    L.tileLayer(BASEMAP, { attribution: ATTRIBUTION, maxZoom: 15, maxNativeZoom: 13 }).addTo(map);
+    L.control.scale({ imperial: false }).addTo(map);
+    const fit = () => map.getBoundsZoom(L.latLngBounds([[34.8, 19.4], [41.75, 28.3]]));
+    map.setView([38.3, 23.8], fit(), { animate: false });
+    map.setMinZoom(fit() - 0.5);
+    const renderer = L.canvas({ padding: 0.3 });
+    let layer: L.LayerGroup | null = null;
+
+    const sel = $<HTMLSelectElement>('saint');
+    for (const [i, s] of meta.saints.entries()) sel.add(new Option(`${s.name} (${fmt(s.n)})`, String(i)));
+    sel.add(new Option(`All churches and chapels (${fmt(meta.all.n)})`, 'all'));
+
+    function popup(p: Meta['pts'][number]) {
+      const [, , s, z, f, osm, name] = p;
+      const where = [f & 1 ? 'on a hilltop' : '', f & 2 ? 'on the shore' : ''].filter(Boolean).join(', ');
+      const url = `https://www.openstreetmap.org/${OSM[osm[0]]}/${osm.slice(1)}`;
+      return `<div class="sts__pop"><b>${esc(name || 'Unnamed church or chapel')}</b>`
+        + (s >= 0 ? `${esc(meta.saints[s].name)}<br>` : '')
+        + (z !== null ? `${fmt(z)} m above sea level` : '') + (where ? `, ${where}` : '')
+        + `<br><a href="${url}" target="_blank" rel="noopener">Open in OpenStreetMap</a></div>`;
+    }
+
+    function show(v: string) {
+      layer?.remove();
+      layer = L.layerGroup().addTo(map);
+      const all = v === 'all';
+      const si = all ? -1 : Number(v);
+      const s = all ? null : meta.saints[si];
+      const col = all ? ALL : COL[s!.key] ?? OTHER;
+      // the plain ones first, then those on the shore and on a hilltop, so the marked ones draw on top
+      const pts = meta.pts.filter((p) => all || p[2] === si).sort((a, b) => (a[4] ? 1 : 0) - (b[4] ? 1 : 0));
+      for (const p of pts) {
+        const top = !all && p[4] & 1, shore = !all && p[4] & 2;
+        const m = L.circleMarker([p[1], p[0]], top || shore
+          ? { renderer, radius: 5, fillColor: col, fillOpacity: 1, color: top ? INK : PAPER, weight: top ? 1.6 : 1.4 }
+          : { renderer, radius: all ? 1.8 : 3, fillColor: col, fillOpacity: all ? 0.55 : 0.6, stroke: false });
+        m.bindPopup(() => popup(p), { maxWidth: 280 });
+        m.addTo(layer);
+      }
+      const A = meta.all;
+      $<HTMLElement>('sum').innerHTML = all
+        ? `<b>${fmt(A.n)} churches and chapels</b> in OpenStreetMap: ${A.top}% on a hilltop, ${A.shore}% on the shore, median height ${A.z} m.`
+        : `<b>${esc(s!.name)}: ${fmt(s!.n)} chapels.</b> On a hilltop ${s!.top}% (all chapels ${A.top}%); on the shore ${s!.shore}% (${A.shore}%); `
+          + `median height ${s!.z} m (${A.z} m).`;
+      const dot = (fill: string, stroke: string, w: number, r: number) =>
+        `<svg viewBox="-6 -6 12 12"><circle r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="${w}"/></svg>`;
+      $<HTMLElement>('legend').innerHTML = all
+        ? `<span>${dot(ALL, 'none', 0, 2.5)}Church or chapel</span>`
+        : `<span>${dot(col, 'none', 0, 3)}${esc(s!.name)}</span><span>${dot(col, INK, 1.6, 4.5)}on a hilltop</span>`
+          + `<span>${dot(col, '#9aa', 1.4, 4.5)}on the shore (within 200 m)</span>`;
+    }
+
+    sel.addEventListener('change', () => show(sel.value));
+    show('0');
+    (window as any).__sts = { map, show };
+  }
+</script>
