@@ -157,7 +157,13 @@ const { src, caption } = Astro.props;
         loading = false;
       }
       if (parks) { if (on && !map.hasLayer(parks)) parks.addTo(map); if (!on && map.hasLayer(parks)) parks.remove(); }
+      // zoomed in, the parks are the subject: the hexagons' own MW symbols fade so they do not cover them
+      if (on !== faded) {
+        faded = on;
+        for (const c of cells) { c.alive.setStyle({ fillOpacity: on ? 0.12 : 1 }); c.asked.setStyle({ opacity: on ? 0.25 : 1 }); }
+      }
     }
+    let faded = false;
     map.on('zoomend', () => { void showParks(); });
 
     // the legend's sun ramp
