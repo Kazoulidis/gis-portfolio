@@ -46,7 +46,13 @@ RUN npm run build \
       done; \
       mv dist/$dir /layers/rest/$dir; \
     done \
- && find /layers dist -exec touch -h -d @0 {} +
+ && find /layers dist -type d -exec touch -h -d @0 {} + \
+ && find /layers dist -type f -exec sh -c 'for f; do touch -h -d "@$((0x$(md5sum "$f" | cut -c1-7)))" "$f"; done' sh {} +
+# Each file is stamped with a time taken from its own contents (the first 7 hex digits of its MD5, a date before 1979), not with 0.
+# nginx builds its ETag and Last-Modified from the time and the size, so with every file at 0 a corrected file of the same size kept
+# its old ETag and browsers went on using their cached copy. Stamped from its contents, a file's time changes exactly when the file
+# does, so an unchanged file still leaves its layer byte for byte the same. The workflow's SOURCE_DATE_EPOCH sits above every such
+# time (2^28), so rewrite-timestamp leaves them alone.
 
 FROM nginx:1.29-alpine
 # Shown on the package page on GitHub.

@@ -52,9 +52,13 @@ jobs:
 
       # Timestamps are rewritten so that a layer whose files did not change comes
       # out byte for byte the same, and the server does not fetch it again.
+      # rewrite-timestamp only lowers times later than SOURCE_DATE_EPOCH. 2^28
+      # (1978) is above every content-derived time the Dockerfile gives the site's
+      # files, which must survive (nginx's ETags come from them), and below any
+      # real build or checkout time, which it still flattens.
       - uses: docker/build-push-action@v6
         env:
-          SOURCE_DATE_EPOCH: 0
+          SOURCE_DATE_EPOCH: 268435456
         with:
           context: .
           platforms: linux/arm64
