@@ -1,6 +1,6 @@
 ---
 title: 'Day 20 - Hexagons: Too Much Sun?'
-summary: 'Greece in 7 km hexagons: the sun each one gets, and the solar parks asked for in it. Since 2006, 117.6 GW of solar has been asked of the regulator, and 58% of it has since been withdrawn, rejected or lapsed. What is left crowds into Macedonia and Thessaly, while the sunniest quarter of the land holds 6% of it. Play the years to watch the rush.'
+summary: 'Greece in 7 km hexagons: the sun each one gets, and the solar parks asked for in it. Since 2000, 117.6 GW of solar has been asked of the regulator, and 58% of it has since been withdrawn, rejected or lapsed. What is left crowds into Macedonia and Thessaly, while the sunniest quarter of the land holds 6% of it. Play the years to watch the rush.'
 date: 2026-11-20
 created: 2026-11-15
 category: '30-day-map-challenge'
@@ -49,9 +49,9 @@ for in it.
 
 The tint is the yearly output of 1 kWp of solar panels at the best tilt, from
 the EU's PVGIS model (SARAH-3 satellite data, 2005-2023), averaged over the land
-in each hexagon. It runs from about 1,150 kWh in the northern mountains to over
-1,700 kWh in the south-east. The best of it is on Crete, the Cyclades and the
-Dodecanese.
+in each hexagon. It runs from about 1,150 kWh in the Pindus mountains to over
+1,700 kWh on the south coast of Crete and in the Dodecanese, and the islands of
+the south Aegean as a whole get the most.
 
 ## The parks
 
@@ -64,17 +64,17 @@ is full at 1 GW.
 
 | | Power | Share |
 | --- | ---: | ---: |
-| Asked for since 2006 | 117.6 GW | 100% |
+| Asked for since 2000 | 117.6 GW | 100% |
 | Withdrawn, rejected or lapsed | 68.1 GW | 58% |
 | Still alive | 49.6 GW | 42% |
 
-Almost all of it came in one rush: 89% of the power in the register was asked
+Almost all of it came in one rush: 88% of the power in the register was asked
 for between 2019 and 2024. The slider on the web map shows it arriving.
 
 ## Not where the sun is
 
-What is alive crowds into the plains of Thessaly and Macedonia, and around
-Kozani and Ptolemaida, where solar parks are being built on the old lignite
+Apart from the two claims below, what is alive crowds into the plains of
+Thessaly and Macedonia, and around Kozani and Ptolemaida, where solar parks are being built on the old lignite
 mines. These are places with flat, open land and with the big power lines and
 substations that once served the lignite plants. The sunniest quarter of the
 land, at 1,500 kWh/kWp and more, holds only 6% of the power still alive.
@@ -94,8 +94,8 @@ Crete has the most sun and almost no parks.
 Two applications from 2024 stand out. Two energy communities each ask for
 7,000 MW, one in Boeotia and Evia, one at Boukka on the Amvrakikos Gulf. Both are
 still under review, so they count as alive: together 14 of the 49.6 GW. The
-map labels them. An earlier 11.65 GW application by one of them, from 2023, has
-been withdrawn.
+map labels them. Both had applied in 2023 as well, for 7 GW at Boukka and
+11.65 GW in Boeotia, Evia and Phthiotis, and withdrawn those applications.
 
 ## What the register does not show
 
