@@ -1,0 +1,157 @@
+---
+/**
+ * Day 23 (Senses: taste): Greece's 33 wine PDOs on a Leaflet map, filled by style (red, white, both, sweet only hatched). Pick a grape
+ * and the PDOs that allow it stand out; click anywhere for every PDO at that spot (several overlap), with its grapes, wine types and
+ * maximum yield. Day_23/prep/page_data.py writes the file.
+ *
+ * `src`: 30dmc-2026-day-23-wines.json (every PDO with its outline, every grape with its PDOs).
+ */
+interface Props {
+  src: string;
+  caption?: string;
+}
+const { src, caption } = Astro.props;
+---
+
+<figure class="map-figure">
+  <div class="wn" data-wn data-src={src}>
+    <label class="wn__pick">Show
+      <select data-wn-grape aria-label="Grape"></select>
+    </label>
+    <p class="wn__sum" data-wn-sum aria-live="polite"></p>
+    <div class="wn__stage">
+      <div class="wn__map" data-wn-map role="img" aria-label="Map of Greece: the 33 wine areas with a protected designation of origin, by style"></div>
+    </div>
+    <div class="wn__legend" aria-hidden="true">
+      <span><i style="background:#8c1c2c"></i>Red</span>
+      <span><i style="background:#d9b84a"></i>White</span>
+      <span><i style="background:#b5654a"></i>Red and white</span>
+      <span><i class="wn__hatch"></i>Sweet only</span>
+    </div>
+    <p class="wn__hint">Click anywhere on an area for every PDO there: several overlap.</p>
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<style is:global>
+  /* global: the popups are written by the script, which scoped styles do not reach */
+  .wn { max-width: 760px; margin: 0 auto; }
+  .wn__pick { display: flex; justify-content: center; align-items: center; gap: 0.5rem; font-size: 0.9rem; margin-bottom: 0.35rem; }
+  .wn__pick select { font: inherit; padding: 0.15rem 0.3rem; max-width: 100%; }
+  .wn__sum { margin: 0 0 0.5rem; text-align: center; font-size: 0.84rem; min-height: 2.6em; }
+  .wn__stage { position: relative; width: 100%; aspect-ratio: 1 / 1; max-height: 640px; border: 1px solid var(--rule, #d9d4c8); }
+  .wn__map { position: absolute; inset: 0; background: #dfe6ea; }
+  .wn__map .leaflet-interactive { cursor: pointer; }
+  .wn__legend { display: flex; flex-wrap: wrap; gap: 0.35rem 1.1rem; justify-content: center; margin-top: 0.55rem; font-size: 0.75rem; }
+  .wn__legend span { display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap; }
+  .wn__legend i { display: inline-block; width: 1rem; height: 0.7rem; }
+  .wn__hatch { background: repeating-linear-gradient(135deg, #6b3a7a 0 1.5px, #ded0e4 1.5px 4px); outline: 1px solid #6b3a7a; }
+  .wn__hint { margin: 0.35rem 0 0; text-align: center; font-size: 0.78rem; opacity: 0.75; }
+  .wn__pop { font-size: 0.82rem; line-height: 1.45; max-height: 260px; overflow-y: auto; }
+  .wn__pop section + section { margin-top: 0.5rem; padding-top: 0.45rem; border-top: 1px solid #ddd; }
+  .wn__pop b { display: block; }
+  .wn__pop .muted { opacity: 0.7; }
+</style>
+
+<script>
+  import * as L from 'leaflet';
+  import 'leaflet/dist/leaflet.css';
+  import { whenNear } from '../lazy';
+
+  type Ring = [number, number][];
+  type Geom = { type: 'Polygon'; coordinates: Ring[] } | { type: 'MultiPolygon'; coordinates: Ring[][] };
+  type Pdo = { en: string; gr: string; style: string; grape: string; grapes: string[]; cats: string[]; yield: number; reg: string;
+    km2: number; units: number; geom: Geom };
+  type Grape = { name: string; berry: string; pdos: string[] };
+  type Meta = { pdos: Pdo[]; grapes: Grape[] };
+
+  const BASEMAP = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}';
+  const ATTRIBUTION = 'Relief &copy; Esri &middot; PDO areas: Candiago et al. 2022 (CC0)';
+  const COL: Record<string, string> = { red: '#8c1c2c', white: '#d9b84a', both: '#b5654a', sweet: '#6b3a7a' };
+  const STYLE: Record<string, string> = { red: 'Red', white: 'White', both: 'Red and white', sweet: 'Sweet only' };
+  const PAPER = '#faf7f0', FADED = '#9a948a';
+  const fmt = (v: number) => v.toLocaleString('en-GB');
+  const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+  const list = (a: string[]) => (a.length < 2 ? a.join('') : `${a.slice(0, -1).join(', ')} and ${a[a.length - 1]}`);
+
+  const box = document.querySelector<HTMLElement>('[data-wn]');
+  if (box) whenNear(box, () => { void start(box); });
+
+  // point in polygon (even-odd over every ring, so holes count), in lon/lat
+  function inRings(x: number, y: number, rings: Ring[]) {
+    let inside = false;
+    for (const r of rings)
+      for (let i = 0, j = r.length - 1; i < r.length; j = i++)
+        if ((r[i][1] > y) !== (r[j][1] > y) && x < ((r[j][0] - r[i][0]) * (y - r[i][1])) / (r[j][1] - r[i][1]) + r[i][0]) inside = !inside;
+    return inside;
+  }
+  const contains = (g: Geom, x: number, y: number) =>
+    g.type === 'Polygon' ? inRings(x, y, g.coordinates) : g.coordinates.some((p) => inRings(x, y, p));
+
+  async function start(root: HTMLElement) {
+    const $ = <T extends Element>(n: string) => root.querySelector<T>(`[data-wn-${n}]`)!;
+    const meta: Meta = await (await fetch(root.dataset.src!)).json();
+
+    const map = L.map($<HTMLElement>('map'), { scrollWheelZoom: true, zoomSnap: 0.25,
+      maxBounds: L.latLngBounds([[33.5, 18], [42.6, 30.5]]), maxBoundsViscosity: 0.8 });
+    L.tileLayer(BASEMAP, { attribution: ATTRIBUTION, maxZoom: 13, maxNativeZoom: 13 }).addTo(map);
+    L.control.scale({ imperial: false }).addTo(map);
+    const fit = () => map.getBoundsZoom(L.latLngBounds([[34.8, 19.4], [41.75, 28.3]]));
+    map.setView([38.3, 23.8], fit(), { animate: false });
+    map.setMinZoom(fit() - 0.5);
+    const renderer = L.svg({ padding: 0.3 }).addTo(map);
+
+    // the sweet-only hatch, as on the printed map: an SVG pattern in the overlay's own <svg>
+    const svg = (renderer as any)._container as SVGSVGElement;
+    const NS = 'http://www.w3.org/2000/svg';
+    const defs = document.createElementNS(NS, 'defs');
+    defs.innerHTML = `<pattern id="wn-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">`
+      + `<rect width="6" height="6" fill="#ded0e4"/><rect width="2" height="6" fill="${COL.sweet}"/></pattern>`;
+    svg.prepend(defs);
+
+    const layers = meta.pdos.map((p) => {
+      const lyr = L.geoJSON(p.geom as any, { renderer, interactive: false } as any);
+      lyr.addTo(map);
+      return lyr;
+    });
+
+    const sel = $<HTMLSelectElement>('grape');
+    sel.add(new Option(`all ${meta.pdos.length} PDOs, by style`, ''));
+    for (const g of meta.grapes) sel.add(new Option(`${g.name} (${g.pdos.length} PDO${g.pdos.length > 1 ? 's' : ''})`, g.name));
+
+    function show(grape: string) {
+      const g = meta.grapes.find((q) => q.name === grape);
+      meta.pdos.forEach((p, i) => {
+        const on = !g || p.grapes.includes(grape);
+        const sweet = p.style === 'sweet';
+        layers[i].setStyle({ color: on ? (sweet ? COL.sweet : PAPER) : FADED, weight: on ? (sweet ? 1.4 : 0.8) : 0.6,
+          fillColor: on ? COL[p.style] : FADED, fillOpacity: on ? (sweet ? 1 : 0.85) : 0.15, opacity: on ? 1 : 0.5 });
+        layers[i].eachLayer((l: any) => {
+          if (on && sweet) l._path.setAttribute('fill', 'url(#wn-hatch)');
+          if (on) l.bringToFront();
+        });
+      });
+      const n = meta.pdos.length;
+      const c = (s: string) => meta.pdos.filter((p) => p.style === s).length;
+      $<HTMLElement>('sum').innerHTML = !g
+        ? `<b>${n} wine PDOs:</b> ${c('red')} red, ${c('white')} white, ${c('both')} red and white, and ${c('sweet')} for sweet wine only.`
+        : `<b>${esc(g.name)}</b>, a ${g.berry} grape, is allowed in ${g.pdos.length === 1 ? 'one PDO' : `${g.pdos.length} PDOs`}: ${esc(list(g.pdos))}.`;
+    }
+
+    function popup(p: Pdo) {
+      return `<section><b>${esc(p.en)}</b><span class="muted">${esc(p.gr)}</span><br>`
+        + `${STYLE[p.style]}: ${esc(list(p.cats))}<br>`
+        + `Grapes: ${esc(list(p.grapes))}<br>`
+        + `At most ${fmt(p.yield)} hl per hectare<br>`
+        + `<span class="muted">${fmt(p.km2)} km², ${p.units} municipal unit${p.units > 1 ? 's' : ''}; registered ${p.reg.slice(0, 4)}</span></section>`;
+    }
+    map.on('click', (e: L.LeafletMouseEvent) => {
+      const hits = meta.pdos.filter((p) => contains(p.geom, e.latlng.lng, e.latlng.lat)).sort((a, b) => a.km2 - b.km2);
+      if (hits.length) L.popup({ maxWidth: 300 }).setLatLng(e.latlng).setContent(`<div class="wn__pop">${hits.map(popup).join('')}</div>`).openOn(map);
+    });
+
+    sel.addEventListener('change', () => show(sel.value));
+    show('');
+    (window as any).__wn = { map, show };
+  }
+</script>
