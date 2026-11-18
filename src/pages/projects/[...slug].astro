@@ -33,6 +33,7 @@ import SolarHexMap from '../../components/SolarHexMap.astro';
 import SaintsMap from '../../components/SaintsMap.astro';
 import CoordsMap from '../../components/CoordsMap.astro';
 import WineMap from '../../components/WineMap.astro';
+import SlimeTimelapse from '../../components/SlimeTimelapse.astro';
 import { projectCategories } from '../../site';
 import { isPublic } from '../../projects';
 import { plainTitle } from '../../cv';
@@ -73,6 +74,7 @@ const CUSTOM_MAPS: Record<string, typeof ProjectMap> = {
   'saints-map': SaintsMap,
   'greek-coordinates': CoordsMap,
   'wine-pdos': WineMap,
+  'slime-timelapse': SlimeTimelapse,
 };
 
 // Every project gets its page, drafts included: a draft is unlisted, reachable

@@ -1,0 +1,190 @@
+---
+/**
+ * Day 24 (Network): a timelapse of the slime mould growing over Greece (Tero model, I0 = 6), on a dark canvas like the printed
+ * sheet. Every tube of the random mesh is drawn at each snapshot, brighter and wider for a thicker tube, fading as it withers;
+ * between snapshots the thickness is interpolated. Play, pause or scrub; show or hide the real motorways.
+ * Day_24/prep/page_data.py writes the files.
+ *
+ * `src`: 30dmc-2026-day-24-slime.json (frame, land, cities, motorways, steps, scorecard); the tubes and their thickness at every
+ * snapshot are in the .bin beside it (same name, gzip).
+ */
+interface Props {
+  src: string;
+  caption?: string;
+}
+const { src, caption } = Astro.props;
+---
+
+<figure class="map-figure">
+  <div class="slm" data-slm data-src={src}>
+    <div class="slm__stage">
+      <canvas class="slm__canvas" data-slm-canvas role="img" aria-label="Animated map of mainland Greece: a slime mould model spreading between 47 cities and thinning into a network of tubes"></canvas>
+      <p class="slm__step" data-slm-step aria-live="off"></p>
+      <p class="slm__loading" data-slm-loading>Loading the mould&hellip;</p>
+    </div>
+    <div class="slm__controls">
+      <button type="button" class="slm__play" data-slm-play aria-label="Play">&#9654;</button>
+      <input type="range" class="slm__scrub" data-slm-scrub min="0" max="1" step="0.01" value="0" aria-label="Step of the growth" />
+      <label class="slm__toggle"><input type="checkbox" data-slm-roads /> Motorways</label>
+    </div>
+    <p class="slm__hint">The mould starts everywhere, grows veins between the cities, and lets the rest wither. Drag the slider to move through the growth.</p>
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<style>
+  .slm { max-width: 760px; margin: 0 auto; }
+  .slm__stage { position: relative; width: 100%; background: #0b0f0c; border: 1px solid var(--rule, #d9d4c8); }
+  .slm__canvas { display: block; width: 100%; height: auto; }
+  .slm__step { position: absolute; left: 0.8rem; bottom: 0.6rem; margin: 0; color: #e6e2c8; font-size: 0.82rem; font-variant-numeric: tabular-nums; pointer-events: none; }
+  .slm__loading { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; color: #e6e2c8; font-size: 0.9rem; }
+  .slm__controls { display: flex; align-items: center; gap: 0.7rem; margin-top: 0.55rem; }
+  .slm__play { font: inherit; width: 2.2rem; height: 2rem; border: 1px solid var(--rule, #d9d4c8); background: transparent; cursor: pointer; }
+  .slm__scrub { flex: 1; min-width: 0; }
+  .slm__toggle { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.85rem; white-space: nowrap; }
+  .slm__hint { margin: 0.35rem 0 0; text-align: center; font-size: 0.78rem; opacity: 0.75; }
+</style>
+
+<script>
+  import { whenNear } from '../lazy';
+
+  type Meta = {
+    frame: { x0: number; y0: number; w: number; h: number };
+    i0: string; steps: number[];
+    land: { type: string; coordinates: any }[];
+    motorways: number[][][];
+    cities: { name: string; pop: number; x: number; y: number }[];
+  };
+
+  const DISH = '#0b0f0c', LAND = '#18201b', SHORE = '#2c362f', WEB = [176, 232, 74], CORE = [238, 255, 170], FOOD = '#ffcc48';
+  const BUCKETS = 16;
+  const box = document.querySelector<HTMLElement>('[data-slm]');
+  if (box) whenNear(box, () => { void start(box); });
+
+  async function start(root: HTMLElement) {
+    const $ = <T extends Element>(n: string) => root.querySelector<T>(`[data-slm-${n}]`)!;
+    const src = root.dataset.src!;
+    const [meta, buf] = await Promise.all([
+      fetch(src).then((r) => r.json() as Promise<Meta>),
+      // the file is gzip; a server may already have unzipped it on the way (Content-Encoding), so unzip only if it still is
+      fetch(src.replace(/\.json$/, '.bin')).then(async (r) => {
+        const raw = await r.arrayBuffer();
+        const b = new Uint8Array(raw, 0, 2);
+        if (b[0] !== 0x1f || b[1] !== 0x8b) return raw;
+        return new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+      }),
+    ]);
+    const head = new Uint32Array(buf, 0, 2);
+    const E = head[0], F = head[1];
+    const xy = new Uint16Array(buf, 8, E * 4);
+    const val = new Uint8Array(buf, 8 + E * 8, E * F);
+    $<HTMLElement>('loading').remove();
+
+    const canvas = $<HTMLCanvasElement>('canvas');
+    const ctx = canvas.getContext('2d')!;
+    const { w: W, h: H } = meta.frame;
+    let s = 1, dpr = 1;
+    const size = () => {
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const cw = canvas.parentElement!.clientWidth;
+      const ch = Math.min(cw * H / W, 720);
+      const cw2 = ch * W / H;
+      canvas.style.width = `${cw2}px`; canvas.style.margin = '0 auto';
+      canvas.width = Math.round(cw2 * dpr); canvas.height = Math.round(ch * dpr);
+      s = canvas.width / W;
+      drawBase(); draw();
+    };
+
+    // the dish, the land and the motorways change only with size, so they are drawn once to an offscreen canvas
+    const base = document.createElement('canvas');
+    const bctx = base.getContext('2d')!;
+    const px = (x: number) => x * s, py = (y: number) => (H - y) * s;
+    function ring(c: CanvasRenderingContext2D, r: number[][]) {
+      r.forEach(([x, y], k) => (k ? c.lineTo(px(x), py(y)) : c.moveTo(px(x), py(y))));
+      c.closePath();
+    }
+    function drawBase() {
+      base.width = canvas.width; base.height = canvas.height;
+      bctx.fillStyle = DISH; bctx.fillRect(0, 0, base.width, base.height);
+      bctx.beginPath();
+      for (const g of meta.land) {
+        const polys = g.type === 'Polygon' ? [g.coordinates] : g.coordinates;
+        for (const p of polys) for (const r of p) ring(bctx, r);
+      }
+      bctx.fillStyle = LAND; bctx.fill('evenodd');
+      bctx.strokeStyle = SHORE; bctx.lineWidth = 0.6 * dpr; bctx.stroke();
+    }
+
+    let roads = false;
+    function drawRoads() {
+      ctx.save();
+      ctx.setLineDash([3 * dpr, 2.2 * dpr]); ctx.strokeStyle = 'rgba(214,220,228,0.7)'; ctx.lineWidth = 0.7 * dpr;
+      ctx.beginPath();
+      for (const line of meta.motorways) line.forEach(([x, y], k) => (k ? ctx.lineTo(px(x), py(y)) : ctx.moveTo(px(x), py(y))));
+      ctx.stroke(); ctx.restore();
+    }
+
+    const k0 = Math.max(1, canvas.clientWidth / 760);
+    let pos = 0;                                       // the frame, fractional: between two snapshots the thickness is interpolated
+    function draw() {
+      ctx.drawImage(base, 0, 0);
+      const f0 = Math.floor(pos), f1 = Math.min(f0 + 1, F - 1), t = pos - f0;
+      const o0 = f0 * E, o1 = f1 * E;
+      const paths: Path2D[] = Array.from({ length: BUCKETS }, () => new Path2D());
+      for (let e = 0; e < E; e++) {
+        const v = (val[o0 + e] * (1 - t) + val[o1 + e] * t) / 255;
+        if (v < 0.04) continue;
+        const b = Math.min(BUCKETS - 1, Math.floor(v * BUCKETS));
+        const q = e * 4;
+        paths[b].moveTo(px(xy[q]), py(xy[q + 1])); paths[b].lineTo(px(xy[q + 2]), py(xy[q + 3]));
+      }
+      ctx.lineCap = 'round';
+      for (let b = 0; b < BUCKETS; b++) {
+        const v = (b + 0.5) / BUCKETS;
+        const strong = Math.pow(v, 6);
+        if (v > 0.7) {                                 // the glow around thick tubes
+          ctx.strokeStyle = `rgba(${WEB},${0.20 * strong})`; ctx.lineWidth = (2.5 + 9 * strong) * dpr * k0; ctx.stroke(paths[b]);
+        }
+        const c = v > 0.85 ? CORE : WEB;
+        ctx.strokeStyle = `rgba(${c},${0.05 + 0.9 * Math.pow(v, 3)})`;
+        ctx.lineWidth = (0.35 + 3.2 * strong) * dpr * k0;
+        ctx.stroke(paths[b]);
+      }
+      if (roads) drawRoads();
+      for (const c of meta.cities) {
+        const r = (1.4 + Math.sqrt(c.pop) / 260) * dpr * k0;
+        ctx.fillStyle = 'rgba(255,204,72,0.16)'; ctx.beginPath(); ctx.arc(px(c.x), py(c.y), r * 2.6, 0, 7); ctx.fill();
+        ctx.fillStyle = FOOD; ctx.beginPath(); ctx.arc(px(c.x), py(c.y), r, 0, 7); ctx.fill();
+      }
+      ctx.font = `italic ${11 * dpr}px Georgia, serif`; ctx.fillStyle = 'rgba(230,226,200,0.9)';
+      for (const c of meta.cities.slice(0, 12)) ctx.fillText(c.name, px(c.x) + 5 * dpr, py(c.y) - 4 * dpr);
+      const step = pos >= F - 1 ? 3000 : Math.round(meta.steps[f0] + (meta.steps[f1] - meta.steps[f0]) * t);   // the last snapshot is after step 3,000
+      $<HTMLElement>('step').textContent = `Step ${step.toLocaleString('en-GB')} of 3,000`;
+      scrub.value = String(pos / (F - 1));
+    }
+
+    const scrub = $<HTMLInputElement>('scrub');
+    const play = $<HTMLButtonElement>('play');
+    let playing = false, last = 0;
+    const SPEED = 7;                                    // snapshots a second
+    function tick(t: number) {
+      if (!playing) return;
+      if (last) pos = Math.min(F - 1, pos + ((t - last) / 1000) * SPEED);
+      last = t; draw();
+      if (pos >= F - 1) { setPlaying(false); return; }
+      requestAnimationFrame(tick);
+    }
+    function setPlaying(on: boolean) {
+      playing = on; last = 0;
+      play.innerHTML = on ? '&#10074;&#10074;' : '&#9654;'; play.setAttribute('aria-label', on ? 'Pause' : 'Play');
+      if (on) { if (pos >= F - 1) pos = 0; requestAnimationFrame(tick); }
+    }
+    play.addEventListener('click', () => setPlaying(!playing));
+    scrub.addEventListener('input', () => { setPlaying(false); pos = Number(scrub.value) * (F - 1); draw(); });
+    $<HTMLInputElement>('roads').addEventListener('change', (ev) => { roads = (ev.target as HTMLInputElement).checked; draw(); });
+    new ResizeObserver(size).observe(root.querySelector('.slm__stage')!);
+    size();
+    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) setPlaying(true);
+    (window as any).__slm = { get pos() { return pos; }, set pos(v: number) { pos = v; draw(); }, F, E, setPlaying };
+  }
+</script>
