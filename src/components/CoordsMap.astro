@@ -1,0 +1,123 @@
+---
+/**
+ * Day 22 (Projections): what happens to a coordinate anywhere in Greece, on a Leaflet map. The overlay is the sheet's main map, what
+ * 1 km on the ground becomes on the Greek Grid; a click reads, for that spot, the grid's stretch and the height's shrink, how far the
+ * default GPS conversion lands from the HEPOS model, and the geoid height. The data are two RGB PNGs on a Web Mercator grid of
+ * 1,000 Mercator metres (Day_22/prep/page_data.py writes them and their JSON).
+ *
+ * `src`: 30dmc-2026-day-22-coords.json.
+ */
+interface Props {
+  src: string;
+  caption?: string;
+}
+const { src, caption } = Astro.props;
+---
+
+<figure class="map-figure">
+  <div class="crd" data-crd data-src={src}>
+    <div class="crd__stage">
+      <div class="crd__map" data-crd-map role="img" aria-label="Map of Greece: what 1 km on the ground becomes on the Greek Grid; click for the figures at any spot"></div>
+    </div>
+    <div class="crd__legend" data-crd-legend aria-hidden="true"></div>
+    <p class="crd__hint">What 1 km on the ground becomes on the Greek Grid. Click anywhere for that spot's figures.</p>
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<style is:global>
+  /* global: the legend and the popups are written by the script, which scoped styles do not reach */
+  .crd { max-width: 760px; margin: 0 auto; }
+  .crd__stage { position: relative; width: 100%; aspect-ratio: 1 / 1; max-height: 640px; border: 1px solid var(--rule, #d9d4c8); }
+  .crd__map { position: absolute; inset: 0; background: #dfe6ea; }
+  .crd__legend { display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; justify-content: center; margin-top: 0.55rem; font-size: 0.75rem; }
+  .crd__legend span { display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap; }
+  .crd__legend i { display: inline-block; width: 0.9rem; height: 0.7rem; border: 1px solid rgba(35, 35, 40, 0.35); }
+  .crd__hint { margin: 0.35rem 0 0; text-align: center; font-size: 0.78rem; opacity: 0.75; }
+  .crd__pop { font-size: 0.82rem; line-height: 1.45; }
+  .crd__pop b { display: block; margin-bottom: 0.2rem; }
+  .crd__pop p { margin: 0 0 0.35rem; }
+  .crd__pop .muted { opacity: 0.7; font-size: 0.76rem; }
+  .crd__overlay { image-rendering: auto; }
+</style>
+
+<script>
+  import * as L from 'leaflet';
+  import 'leaflet/dist/leaflet.css';
+  import { whenNear } from '../lazy';
+
+  type Meta = { size: [number, number]; origin: [number, number]; res: number; bounds: [[number, number], [number, number]];
+    a: string; b: string; R: number; classes: [number, string, [number, number, number]][] };
+
+  const BASEMAP = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+  const ATTRIBUTION = 'Tiles &copy; Esri &middot; Elevation: Copernicus DEM &middot; Geoid: NGA EGM2008 &middot; HEPOS model via Esri';
+  const COMPASS = ['north', 'north-north-east', 'north-east', 'east-north-east', 'east', 'east-south-east', 'south-east', 'south-south-east',
+    'south', 'south-south-west', 'south-west', 'west-south-west', 'west', 'west-north-west', 'north-west', 'north-north-west'];
+  const signed = (cm: number) => `${cm < 0 ? '−' : '+'}${Math.abs(cm) >= 100 ? (Math.abs(cm) / 100).toFixed(2) + ' m' : Math.round(Math.abs(cm)) + ' cm'}`;
+
+  const box = document.querySelector<HTMLElement>('[data-crd]');
+  if (box) whenNear(box, () => { void start(box); });
+
+  async function pixels(url: string, w: number, h: number) {
+    const img = new Image(); img.src = url; await img.decode();
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const x = c.getContext('2d', { willReadFrequently: true })!; x.drawImage(img, 0, 0);
+    return x.getImageData(0, 0, w, h).data;
+  }
+
+  async function start(root: HTMLElement) {
+    const $ = <T extends Element>(n: string) => root.querySelector<T>(`[data-crd-${n}]`)!;
+    const meta: Meta = await (await fetch(root.dataset.src!)).json();
+    const [W, H] = meta.size;
+    const [A, B] = await Promise.all([pixels(meta.a, W, H), pixels(meta.b, W, H)]);
+
+    const crs = L.CRS.EPSG3857;
+    const nw = crs.unproject(L.point(meta.origin[0], meta.origin[1]));
+    const se = crs.unproject(L.point(meta.origin[0] + W * meta.res, meta.origin[1] - H * meta.res));
+    const bounds = L.latLngBounds(se, nw);
+    const map = L.map($<HTMLElement>('map'), { scrollWheelZoom: true, zoomSnap: 0.25, maxBounds: bounds.pad(0.05), maxBoundsViscosity: 0.8 });
+    L.tileLayer(BASEMAP, { attribution: ATTRIBUTION, maxZoom: 13, maxNativeZoom: 16 }).addTo(map);
+    L.control.scale({ imperial: false }).addTo(map);
+    const fit = () => map.getBoundsZoom(L.latLngBounds([[34.8, 19.4], [41.75, 28.3]]));
+    map.setView([38.3, 23.8], fit(), { animate: false });
+    map.setMinZoom(fit() - 0.5);
+
+    // the overlay, in the sheet's classes; neighbouring countries left clear
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const cx = cv.getContext('2d')!, img = cx.createImageData(W, H), d = img.data;
+    for (let k = 0; k < W * H; k++) {
+      const o = k * 4;
+      if (A[o] === 255 && A[o + 1] === 255) { d[o + 3] = 0; continue; }
+      const cm = ((A[o] << 8 | A[o + 1]) - 1000) / 10;
+      const c = meta.classes.find(([up]) => cm < up)![2];
+      d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = A[o + 2] === 255 ? 70 : 215;   // the sea faded, as on the sheet
+    }
+    cx.putImageData(img, 0, 0);
+    L.imageOverlay(cv.toDataURL(), bounds, { className: 'crd__overlay', interactive: false }).addTo(map);
+    $<HTMLElement>('legend').innerHTML = meta.classes.map(([, t, c]) => `<span><i style="background:rgb(${c.join(',')})"></i>${t}</span>`).join('');
+
+    map.on('click', (ev: L.LeafletMouseEvent) => {
+      const p = crs.project(ev.latlng);
+      const i = Math.floor((p.x - meta.origin[0]) / meta.res), j = Math.floor((meta.origin[1] - p.y) / meta.res);
+      if (i < 0 || j < 0 || i >= W || j >= H) return;
+      const o = (j * W + i) * 4;
+      if (A[o] === 255 && A[o + 1] === 255) return;                   // another country
+      const ppm = (A[o] << 8 | A[o + 1]) - 1000, h = A[o + 2] === 255 ? 0 : A[o + 2] * 12, N = B[o + 2] * 0.2;   // 255: the sea
+      const heightPpm = -(h + N) / meta.R * 1e6, gridPpm = ppm - heightPpm;
+      let datum = '<span class="muted">Outside the HEPOS model.</span>';
+      if (B[o] || B[o + 1]) {
+        const dE = (B[o] - 128) * 2, dN = (B[o + 1] - 128) * 2, dist = Math.hypot(dE, dN);
+        const dir = COMPASS[Math.round(((Math.atan2(dE, dN) * 180 / Math.PI + 360) % 360) / 22.5) % 16];
+        datum = `The default GPS conversion lands <b style="display:inline">${(dist / 100).toFixed(2)} m</b> from the official HEPOS position, which lies to the ${dir}.`;
+      }
+      const html = `<div class="crd__pop"><b>${ev.latlng.lat.toFixed(3)}° N, ${ev.latlng.lng.toFixed(3)}° E</b>`
+        + `<p>1 km on the ground becomes 1 km <b style="display:inline">${signed(ppm / 10)}</b> on the Greek Grid: `
+        + `the grid ${signed(gridPpm / 10)}, the height ${signed(heightPpm / 10)}${h > 0 ? ` (ground at about ${h.toLocaleString('en-GB')} m)` : ''}.</p>`
+        + `<p>${datum}</p>`
+        + `<p>A GPS height here is ${N.toFixed(1)} m more than the height above sea level (EGM2008 geoid).</p>`
+        + `<span class="muted">Values for a cell of about 800 m.</span></div>`;
+      L.popup({ maxWidth: 320 }).setLatLng(ev.latlng).setContent(html).openOn(map);
+    });
+    (window as any).__crd = { map };
+  }
+</script>
