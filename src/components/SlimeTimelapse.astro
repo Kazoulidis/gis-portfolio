@@ -1,6 +1,6 @@
 ---
 /**
- * Day 24 (Network): a timelapse of the slime mould growing over Greece (Tero model, I0 = 6), on a dark canvas like the printed
+ * Day 24 (Network): a timelapse of the slime mold growing over Greece (Tero model, I0 = 6), on a dark canvas like the printed
  * sheet. Every tube of the random mesh is drawn at each snapshot, brighter and wider for a thicker tube, fading as it withers;
  * between snapshots the thickness is interpolated. Play, pause or scrub; show or hide the real motorways.
  * Day_24/prep/page_data.py writes the files.
@@ -18,16 +18,16 @@ const { src, caption } = Astro.props;
 <figure class="map-figure">
   <div class="slm" data-slm data-src={src}>
     <div class="slm__stage">
-      <canvas class="slm__canvas" data-slm-canvas role="img" aria-label="Animated map of mainland Greece: a slime mould model spreading between 47 cities and thinning into a network of tubes"></canvas>
+      <canvas class="slm__canvas" data-slm-canvas role="img" aria-label="Animated map of mainland Greece: a slime mold model spreading between 47 cities and thinning into a network of tubes"></canvas>
       <p class="slm__step" data-slm-step aria-live="off"></p>
-      <p class="slm__loading" data-slm-loading>Loading the mould&hellip;</p>
+      <p class="slm__loading" data-slm-loading>Loading the mold&hellip;</p>
     </div>
     <div class="slm__controls">
       <button type="button" class="slm__play" data-slm-play aria-label="Play">&#9654;</button>
       <input type="range" class="slm__scrub" data-slm-scrub min="0" max="1" step="0.01" value="0" aria-label="Step of the growth" />
       <label class="slm__toggle"><input type="checkbox" data-slm-roads /> Motorways</label>
     </div>
-    <p class="slm__hint">The mould starts everywhere, grows veins between the cities, and lets the rest wither. Drag the slider to move through the growth.</p>
+    <p class="slm__hint">The mold starts everywhere, grows veins between the cities, and lets the rest wither. Drag the slider to move through the growth.</p>
   </div>
   {caption && <figcaption>{caption}</figcaption>}
 </figure>
