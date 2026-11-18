@@ -8,7 +8,7 @@ context: '#30DayMapChallenge 2026 · Day 23'
 tags: ['ArcGIS Pro', 'Python', 'Leaflet', 'Wine', 'EU geographical indications']
 image: '/images/30dmc-2026-day-23-wide.webp'
 imageFull: '/images/30dmc-2026-day-23-full.webp'
-imageAlt: 'Printed A4 sheet titled Where Greece''s Wines Come From: Greece pale under a hillshade with blue seas, the 33 wine PDO areas filled dark red, gold or brown by style and the sweet-only ones hatched purple, each labelled with its name and grape, from Naoussa and Amyntaio in the north to Santorini, Rhodes and Crete; the side panel holds a legend, a list of grapes and their places, close-ups of the Patras and Heraklion areas, and a dot chart of the maximum yields'
+imageAlt: 'Printed A4 sheet titled Where Greece''s Wines Come From: Greece pale under a hillshade with blue seas, the 33 wine PDO areas filled dark red, gold or brown by style and the sweet-only ones hatched purple, each labeled with its name and grape, from Naoussa and Amyntaio in the north to Santorini, Rhodes and Crete; the side panel holds a legend, a list of grapes and their places, close-ups of the Patras and Heraklion areas, and a dot chart of the maximum yields'
 thumbnail: '/images/30dmc-2026-day-23-square.webp'
 thumbnailAlt: 'Map of Greece with its wine PDO areas in red, gold and brown, and the sweet-wine areas hatched purple'
 dataSource:
@@ -67,7 +67,7 @@ widely allowed, in 8 PDOs each, followed by Mandilaria in 7.
 
 Twelve PDOs, more than a third, are for sweet wine alone: liqueur wines and
 wines from sun-dried grapes. All of them but Monemvasia lie on an island or
-on the Gulf of Patras. They come from three old families: Muscat (Samos,
+in the northwest Peloponnese around Patras. They come from three old families: Muscat (Samos,
 Patras, Rio Patras, Kefalonia, Rhodes and Limnos), Mavrodaphne (Patras and
 Kefalonia), and Malvasia, the sweet wine that Venetian ships carried from
 Monemvasia and Crete across medieval Europe. The Malvasia names came back as
@@ -86,7 +86,7 @@ and Rhodes, at 114.4.
 The areas and their rules come from a dataset by Candiago and colleagues
 (2022), who read the product specification of every wine PDO in the EU register
 (eAmbrosia) and mapped each one to the municipalities it names. The Greek part
-has 33 PDOs, as registered on 4 November 2021. In Python I matched each PDO to
+has 33 PDOs, as the register stood on 4 November 2021. In Python I matched each PDO to
 an English name, a style from its wine types and its signature grapes from the
 varieties listed; the printed map was made in ArcGIS Pro, and the web map draws
 the areas with Leaflet.
@@ -96,8 +96,9 @@ the areas with Leaflet.
   or both by their grapes.
 - **The areas overlap.** Candia and Malvasia of Candia share one area, as do
   Limnos and Muscat of Limnos, Paros and Malvasia of Paros, and Sitia and
-  Malvasia of Sitia; three sweet PDOs sit inside the Patras area, and Archanes,
-  Peza and Dafnes inside Candia.
+  Malvasia of Sitia. Around Patras, Muscat of Patras lies almost wholly inside
+  Mavrodaphne of Patras, and the three sweet PDOs overlap the white Patras by a
+  third to a half. Archanes and Peza lie inside Candia, and most of Dafnes.
 - **The areas are coarse.** They follow whole municipal units, as the rules
   name them, so they include towns, forests and mountains as well as the
   vineyards. Together they cover 8,810 km², far more than is planted.
