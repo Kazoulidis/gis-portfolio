@@ -2,7 +2,7 @@
 /**
  * Day 24 (Network): a timelapse of the slime mold growing over Greece (Tero model, I0 = 6), on a dark canvas like the printed
  * sheet. Every tube of the random mesh is drawn at each snapshot, brighter and wider for a thicker tube, fading as it withers;
- * between snapshots the thickness is interpolated. Play, pause or scrub; show or hide the real motorways.
+ * between snapshots the thickness is interpolated. Play, pause or scrub; the real motorways are drawn in blue, and can be hidden.
  * Day_24/prep/page_data.py writes the files.
  *
  * `src`: 30dmc-2026-day-24-slime.json (frame, land, cities, motorways, steps, scorecard); the tubes and their thickness at every
@@ -25,9 +25,9 @@ const { src, caption } = Astro.props;
     <div class="slm__controls">
       <button type="button" class="slm__play" data-slm-play aria-label="Play">&#9654;</button>
       <input type="range" class="slm__scrub" data-slm-scrub min="0" max="1" step="0.01" value="0" aria-label="Step of the growth" />
-      <label class="slm__toggle"><input type="checkbox" data-slm-roads /> Motorways</label>
+      <label class="slm__toggle"><input type="checkbox" data-slm-roads checked /><span class="slm__swatch" aria-hidden="true"></span> Motorways</label>
     </div>
-    <p class="slm__hint">The mold starts everywhere, grows veins between the cities, and lets the rest wither. Drag the slider to move through the growth.</p>
+    <p class="slm__hint">Green: the mold, which starts everywhere, grows veins between the cities and lets the rest wither. Blue: the real motorways. Drag the slider to move through the growth.</p>
   </div>
   {caption && <figcaption>{caption}</figcaption>}
 </figure>
@@ -42,6 +42,7 @@ const { src, caption } = Astro.props;
   .slm__play { font: inherit; width: 2.2rem; height: 2rem; border: 1px solid var(--rule, #d9d4c8); background: transparent; cursor: pointer; }
   .slm__scrub { flex: 1; min-width: 0; }
   .slm__toggle { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.85rem; white-space: nowrap; }
+  .slm__swatch { display: inline-block; width: 1.1rem; height: 2px; background: #6eb2ff; margin-right: 0.15rem; }
   .slm__hint { margin: 0.35rem 0 0; text-align: center; font-size: 0.78rem; opacity: 0.75; }
 </style>
 
@@ -115,10 +116,10 @@ const { src, caption } = Astro.props;
       bctx.strokeStyle = SHORE; bctx.lineWidth = 0.6 * dpr; bctx.stroke();
     }
 
-    let roads = false;
+    let roads = true;                                  // shown from the start, as on the printed map: green against blue
     function drawRoads() {
       ctx.save();
-      ctx.setLineDash([3 * dpr, 2.2 * dpr]); ctx.strokeStyle = 'rgba(214,220,228,0.7)'; ctx.lineWidth = 0.7 * dpr;
+      ctx.strokeStyle = 'rgba(110,178,255,0.85)'; ctx.lineWidth = 1.1 * dpr;
       ctx.beginPath();
       for (const line of meta.motorways) line.forEach(([x, y], k) => (k ? ctx.lineTo(px(x), py(y)) : ctx.moveTo(px(x), py(y))));
       ctx.stroke(); ctx.restore();
@@ -142,8 +143,8 @@ const { src, caption } = Astro.props;
       for (let b = 0; b < BUCKETS; b++) {
         const v = (b + 0.5) / BUCKETS;
         const strong = Math.pow(v, 6);
-        if (v > 0.7) {                                 // the glow around thick tubes
-          ctx.strokeStyle = `rgba(${WEB},${0.20 * strong})`; ctx.lineWidth = (2.5 + 9 * strong) * dpr * k0; ctx.stroke(paths[b]);
+        if (v > 0.7) {                                 // a soft glow around thick tubes
+          ctx.strokeStyle = `rgba(${WEB},${0.10 * strong})`; ctx.lineWidth = (2 + 5 * strong) * dpr * k0; ctx.stroke(paths[b]);
         }
         const c = v > 0.85 ? CORE : WEB;
         ctx.strokeStyle = `rgba(${c},${0.05 + 0.9 * Math.pow(v, 3)})`;
@@ -166,7 +167,7 @@ const { src, caption } = Astro.props;
     const scrub = $<HTMLInputElement>('scrub');
     const play = $<HTMLButtonElement>('play');
     let playing = false, last = 0;
-    const SPEED = 7;                                    // snapshots a second
+    const SPEED = 4;                                    // snapshots a second: slow enough to follow
     function tick(t: number) {
       if (!playing) return;
       if (last) pos = Math.min(F - 1, pos + ((t - last) / 1000) * SPEED);

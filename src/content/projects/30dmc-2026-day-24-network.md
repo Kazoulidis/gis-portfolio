@@ -8,7 +8,7 @@ context: '#30DayMapChallenge 2026 · Day 24'
 tags: ['ArcGIS Pro', 'Python', 'Network analysis', 'Simulation', 'OpenStreetMap']
 image: '/images/30dmc-2026-day-24-wide.webp'
 imageFull: '/images/30dmc-2026-day-24-full.webp'
-imageAlt: 'Printed A4 sheet titled If Slime Mold Built Greece''s Motorways: mainland Greece in near-black like a petri dish, glowing yellow-green slime mold tubes joining amber dots for 47 cities, with a faint web of abandoned veins around them and the real motorways as thin pale dashes; the side panel holds a legend, four small maps of the mold growing, a scorecard against the motorways and a chart of length against fault tolerance'
+imageAlt: 'Printed A4 sheet titled If Slime Mold Built Greece''s Motorways: mainland Greece in near-black like a petri dish, glowing yellow-green slime mold tubes joining amber dots for 47 cities, with a faint web of abandoned veins around them and the real motorways as thin blue lines, with a note on how to read it; the side panel holds a legend, four small maps of the mold growing, a scorecard against the motorways and a chart of length against fault tolerance'
 thumbnail: '/images/30dmc-2026-day-24-square.webp'
 thumbnailAlt: 'Glowing yellow-green slime mold network joining the cities of mainland Greece on a dark background'
 dataSource:
@@ -33,7 +33,7 @@ downloads:
     note: 'JPEG · 4724 × 4724 · 1.2 MB'
 map: '/data/30dmc-2026-day-24-slime.json'
 mapComponent: 'slime-timelapse'
-mapCaption: 'The slime mold model growing over 3,000 steps. Every tube starts the same; the ones that carry flow between the cities thicken and glow, the rest fade. Tick Motorways to compare it with the real network.'
+mapCaption: 'The slime mold model growing over 3,000 steps. Every tube starts the same; the ones that carry flow between the cities thicken and glow, the rest fade. The real motorways are drawn in blue; untick them to see the mold alone.'
 draft: true
 ---
 
