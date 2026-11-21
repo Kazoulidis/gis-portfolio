@@ -32,7 +32,7 @@ downloads:
     note: 'FLAC · 5:42 · 14.8 MB · open it in any spectrogram viewer'
 map: '/data/30dmc-2026-day-25-spectro.json'
 mapComponent: 'hidden-map-player'
-mapCaption: 'The spectrogram is drawn by your browser as it plays the recording: it splits the sound into pitches about sixty times a second and paints how loud each one is. Nothing is drawn in advance unless you ask for it.'
+mapCaption: 'The spectrogram is drawn by your browser as it plays the recording: it splits the sound into pitches about thirty times a second and paints how loud each one is. Nothing is drawn in advance unless you ask for it.'
 draft: true
 ---
 
@@ -80,9 +80,9 @@ are all true. Greece plays from 0:05 to 1:10, between 10 and 19 kHz.
 - **Into the music**: the result was mixed in 36 dB below the music, between
   10 and 19 kHz, where the flute and piano are quietest and the ear is least
   sensitive. In a listening test the two versions could not be told apart.
-- **For the web**, the recording is an MP3 at 256 kbit/s, the smallest file
-  tested that keeps the map sharp. AAC and Opus, at the sizes tried, blurred
-  it. The lossless FLAC is in the downloads.
+- **For the web**, the recording is an MP3 at 256 kbit/s, the format that
+  kept the map sharpest of those tested; AAC, Opus and smaller MP3s blurred it
+  more. The lossless FLAC is in the downloads.
 
 The printed map was made in ArcGIS Pro and the sound in Python. Enescu
 dedicated the piece to Paul Taffanel, who taught the flute at the Paris
