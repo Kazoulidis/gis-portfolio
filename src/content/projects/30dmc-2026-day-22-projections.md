@@ -1,6 +1,6 @@
 ---
 title: 'Day 22 - Projections: Greek Coordinates'
-summary: 'What the Greek map grid, GPS conversion and height reference do to a coordinate. On the grid, 1 km on the ground comes out up to 78 cm shorter or 2.7 m longer; the default GPS conversion lands up to 2 m from the official model; and GPS heights sit 15 to 45 m away from heights above sea level.'
+summary: 'What the Greek map grid, GPS conversion and height reference do to a coordinate. On the grid, 1 km on the ground comes out up to 78 cm shorter or 2.8 m longer; the default GPS conversion lands up to 2 m from the official model; and GPS heights sit 15 to 45 m away from heights above sea level.'
 date: 2026-11-22
 featured: true
 created: 2026-10-26
@@ -66,8 +66,8 @@ the edges. Distances come out true along two lines about 180 km either side of
 
 The main map shows what 1 km measured on the ground becomes on the grid, in
 centimeters. On the meridian it is 40 cm short at sea level. Towards the edges
-it grows: 1.1 m long at Corfu town, 1.4 m on Rhodes, 1.5 m on the islands off
-north-west Corfu and 2.7 m on Kastellorizo, the farthest east, in the inset. Height works the other way. A distance measured
+it grows: 1.1 m long at Corfu town, 1.4 m at Rhodes town, 1.5 m on the islands off
+north-west Corfu, 2.7 m on Kastellorizo, in the inset, and 2.8 m on Strongyli, the islet just east of it and the farthest east point of Greece. Height works the other way. A distance measured
 up a mountain is reduced to sea level before it is projected, about 16 cm per
 km for every 1,000 m of height, so the high ground near the meridian is the
 most shrunk of all: 78 cm per km on the peaks of the Lefka Ori in Crete. The
@@ -97,8 +97,7 @@ north-west the official positions lie to the west of the default ones, in Crete
 to the north, so a single shift cannot fit the whole country.
 
 HTRS07 itself is fixed at 2007.5. Greece moves a few centimeters a year, so a
-point measured today sits away from its HTRS07 coordinates, by up to about
-57 cm in Crete ([Day 1](/projects/30dmc-2026-day-01-points)).
+point measured today sits away from its HTRS07 coordinates: about 57 cm at Chania, and more in much of the south ([Day 1](/projects/30dmc-2026-day-01-points)).
 
 ## C. Heights
 
@@ -106,12 +105,12 @@ GPS measures heights from the ellipsoid, a smooth mathematical shape of the
 earth. Heights on maps are measured from mean sea level, which follows the
 geoid, an uneven surface set by gravity. Panel C shows the gap between the two
 from EGM2008: the geoid lies 15 to 45 m above the ellipsoid across Greece,
-lowest in the south-west and highest in the north. A GPS height has to be
+lowest around Crete and the islets south of it, and highest in the north. A GPS height has to be
 corrected by that amount before it means height above sea level.
 
 | Step | Default | Official or better | Difference here |
 | --- | --- | --- | ---: |
-| Map grid | Greek Grid, 24° E, 0.9996 | - | −78 cm to +2.7 m per km |
+| Map grid | Greek Grid, 24° E, 0.9996 | - | −78 cm to +2.8 m per km |
 | GPS to GGRS87 | EPSG:1272, about 1 m | HEPOS model, about 8 cm | up to 2 m |
 | Height reference | ellipsoid | EGM2008 geoid | 15 to 45 m |
 
@@ -119,5 +118,4 @@ The computations were done in a Python notebook with pyproj (PROJ 9.8), arcpy
 and GDAL: scale factors from the projection, the ground correction from the
 elevation model, both conversions over the test grid and the geoid from
 EGM2008. A Greek geoid model shipped with the Esri grids, hg2023, was read too
-but left out: it differs from EGM2008 by 1.5 to 3.4 m off the Ionian coast and
-its source is not documented. The map was made in ArcGIS Pro on the Greek Grid.
+but left out: it differs from EGM2008 by up to 1.1 m on land and 3.4 m at sea, most off the Ionian coast, and its source is not documented. The map was made in ArcGIS Pro on the Greek Grid.
