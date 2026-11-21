@@ -1,0 +1,246 @@
+---
+/**
+ * Day 25 (Is this a map?): a player for the recording with Greece hidden in it. The spectrogram is not a picture: the browser
+ * analyses the audio as it plays (Web Audio AnalyserNode) and draws what it hears, time left to right and pitch bottom to top,
+ * so Greece appears west to east from 0:05 to 1:10. Two strips are painted at once, 9-20 kHz (Greece in its true shape) and
+ * 0-22 kHz (all pitches, the music below); "Show it all" paints the first 75 s from images made with the same analysis.
+ * Day_25/prep/page_data.py writes the files.
+ *
+ * `src`: 30dmc-2026-day-25-spectro.json (audio, dB scale, bands, the map's window, the magma colours, the reveal images).
+ */
+interface Props {
+  src: string;
+  caption?: string;
+}
+const { src, caption } = Astro.props;
+---
+
+<figure class="map-figure">
+  <div class="hmp" data-hmp data-src={src}>
+    <div class="hmp__stage">
+      <canvas class="hmp__canvas" data-hmp-canvas role="img" aria-label="Spectrogram of the recording, drawn as it plays: a map of Greece appears in the high, inaudible pitches during the first minute"></canvas>
+      <p class="hmp__wait" data-hmp-wait>Press play: the page listens to the recording and draws what it hears.</p>
+    </div>
+    <div class="hmp__controls">
+      <button type="button" class="hmp__play" data-hmp-play aria-label="Play" disabled>&#9654;</button>
+      <input type="range" class="hmp__scrub" data-hmp-scrub min="0" max="1" step="0.1" value="0" aria-label="Position in the recording" disabled />
+      <span class="hmp__time" data-hmp-time>0:00</span>
+    </div>
+    <div class="hmp__options">
+      <label class="hmp__toggle"><input type="checkbox" data-hmp-full /> All pitches, 0 to 22 kHz</label>
+      <button type="button" class="hmp__reveal" data-hmp-reveal disabled>Show the first 75 seconds at once</button>
+    </div>
+    <p class="hmp__hint" data-hmp-hint>Across: time. Up: pitch, 9 to 20 kHz. Brightness: loudness. Greece plays from 0:05 to 1:10, between 10 and 19 kHz: too high and too quiet to notice.</p>
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<style>
+  .hmp { max-width: 760px; margin: 0 auto; }
+  .hmp__stage { position: relative; width: 100%; background: #000004; border: 1px solid var(--rule, #d9d4c8); }
+  .hmp__canvas { display: block; width: 100%; height: auto; }
+  .hmp__wait { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; padding: 1rem; text-align: center; color: #ece4d6; font-size: 0.95rem; pointer-events: none; }
+  .hmp__wait[hidden] { display: none; }
+  .hmp__controls { display: flex; align-items: center; gap: 0.7rem; margin-top: 0.55rem; }
+  .hmp__play { font: inherit; width: 2.2rem; height: 2rem; border: 1px solid var(--rule, #d9d4c8); background: transparent; cursor: pointer; }
+  .hmp__scrub { flex: 1; min-width: 0; }
+  .hmp__time { font-size: 0.85rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .hmp__options { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.4rem 1rem; margin-top: 0.45rem; font-size: 0.85rem; }
+  .hmp__toggle { display: inline-flex; align-items: center; gap: 0.35rem; }
+  .hmp__reveal { font: inherit; font-size: 0.85rem; padding: 0.2rem 0.6rem; border: 1px solid var(--rule, #d9d4c8); background: transparent; cursor: pointer; }
+  .hmp__reveal:disabled, .hmp__play:disabled { cursor: default; opacity: 0.5; }
+  .hmp__hint { margin: 0.4rem 0 0; text-align: center; font-size: 0.78rem; opacity: 0.75; }
+</style>
+
+<script>
+  import { whenNear } from '../lazy';
+
+  type Meta = {
+    audio: string; duration: number; fft: number; pps: number; rows: number; window: number;
+    dbMin: number; dbMax: number; dbMinFull: number; dbMaxFull: number; band: [number, number];
+    map: { start: number; end: number; fLo: number; fHi: number };
+    kmPerS: number; kmPerKhz: number;
+    reveal: { band: string; full: string };
+    magma: string;
+  };
+
+  const INK = 'rgba(236,228,214,0.92)';
+  const box = document.querySelector<HTMLElement>('[data-hmp]');
+  if (box) whenNear(box, () => { void start(box); });
+
+  const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+  async function start(root: HTMLElement) {
+    const $ = <T extends Element>(n: string) => root.querySelector<T>(`[data-hmp-${n}]`)!;
+    const meta: Meta = await fetch(root.dataset.src!).then((r) => r.json());
+    const lut = new Uint8Array(256 * 3);
+    for (let i = 0; i < 256 * 3; i++) lut[i] = parseInt(meta.magma.slice(i * 2, i * 2 + 2), 16);
+
+    const canvas = $<HTMLCanvasElement>('canvas');
+    const ctx = canvas.getContext('2d')!;
+    const play = $<HTMLButtonElement>('play'), scrub = $<HTMLInputElement>('scrub'), time = $<HTMLElement>('time');
+    const fullBox = $<HTMLInputElement>('full'), reveal = $<HTMLButtonElement>('reveal'), hint = $<HTMLElement>('hint');
+    const wait = $<HTMLElement>('wait');
+    scrub.max = String(meta.duration);
+    const TOTAL = mmss(Math.round(meta.duration));                           // 341.6 s reads 5:42, as on the sheet
+    time.textContent = `0:00 / ${TOTAL}`;
+    play.disabled = false; scrub.disabled = false; reveal.disabled = false;
+
+    // two strips of the whole piece, PPS columns a second: what has been heard, 9-20 kHz and 0-22 kHz
+    const STRIP_W = Math.ceil(meta.duration * meta.pps), ROWS = meta.rows;
+    const mk = () => {
+      const c = document.createElement('canvas'); c.width = STRIP_W; c.height = ROWS;
+      const g = c.getContext('2d')!; g.fillStyle = '#000004'; g.fillRect(0, 0, STRIP_W, ROWS); return { c, g };
+    };
+    const strips = { band: mk(), full: mk() };
+    let full = false;
+
+    // the view keeps Greece in its true shape on the 9-20 kHz strip: as wide (km) per second as it is tall per kHz
+    const span = (meta.map.end - meta.map.start);
+    const greeceW = (span / meta.window);                                     // share of the view's width
+    const greeceH = (meta.map.fHi - meta.map.fLo) / (meta.band[1] - meta.band[0]);
+    const kmW = meta.kmPerS * span, kmH = meta.kmPerKhz * (meta.map.fHi - meta.map.fLo) / 1000;
+    const ASPECT = (greeceW / greeceH) * (kmH / kmW);                         // view height / width
+    let dpr = 1, cw = 0, ch = 0;
+    const size = () => {
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const w = canvas.parentElement!.clientWidth;
+      const h = Math.min(w * ASPECT, window.innerHeight * 0.75);
+      canvas.style.height = `${h}px`;
+      cw = canvas.width = Math.round(w * dpr); ch = canvas.height = Math.round(h * dpr);
+      render();
+    };
+
+    // the audio and its analysis start on the first press of play (browsers allow sound only after a gesture)
+    const audio = new Audio(); audio.preload = 'none'; audio.src = meta.audio;
+    let analyser: AnalyserNode | null = null, db = new Float32Array(0), rowsBand: Int32Array, rowsFull: Int32Array;
+    const colBand = new ImageData(1, ROWS), colFull = new ImageData(1, ROWS);
+    function rowsFor(fmin: number, fmax: number, nyq: number) {
+      const n = meta.fft / 2, binw = nyq / n, out = new Int32Array(ROWS * 2);
+      for (let r = 0; r < ROWS; r++) {
+        const hi = fmax - (fmax - fmin) * r / ROWS, lo = fmax - (fmax - fmin) * (r + 1) / ROWS;
+        const b0 = Math.min(n - 1, Math.floor(lo / binw)); const b1 = Math.min(n, Math.max(b0 + 1, Math.floor(hi / binw)));
+        out[r * 2] = b0; out[r * 2 + 1] = b1;
+      }
+      return out;
+    }
+    function setup() {
+      const ac = new AudioContext();
+      const srcNode = ac.createMediaElementSource(audio);
+      analyser = ac.createAnalyser();
+      analyser.fftSize = meta.fft; analyser.smoothingTimeConstant = 0;
+      srcNode.connect(analyser); analyser.connect(ac.destination);
+      db = new Float32Array(analyser.frequencyBinCount);
+      rowsBand = rowsFor(meta.band[0], meta.band[1], ac.sampleRate / 2);
+      rowsFull = rowsFor(0, Math.min(22050, ac.sampleRate / 2), ac.sampleRate / 2);
+      return ac;
+    }
+    let ac: AudioContext | null = null;
+
+    // each view has its own dB scale: 9-20 kHz the map's range, 0-22 kHz a wider one, as the music is some 40 dB louder
+    function paintColumn(img: ImageData, rows: Int32Array, lo: number, hi: number) {
+      const d = img.data, k = 255 / (hi - lo);
+      for (let r = 0; r < ROWS; r++) {
+        let v = -Infinity;
+        for (let b = rows[r * 2]; b < rows[r * 2 + 1]; b++) if (db[b] > v) v = db[b];
+        const o = r * 4, l = Math.max(0, Math.min(255, Math.round((v - lo) * k))) * 3;
+        d[o] = lut[l]; d[o + 1] = lut[l + 1]; d[o + 2] = lut[l + 2]; d[o + 3] = 255;
+      }
+    }
+    let lastX = -1;
+    function listen() {
+      if (!analyser) return;
+      analyser.getFloatFrequencyData(db);
+      const x = Math.floor(audio.currentTime * meta.pps);
+      paintColumn(colBand, rowsBand, meta.dbMin, meta.dbMax); paintColumn(colFull, rowsFull, meta.dbMinFull, meta.dbMaxFull);
+      // fill the gap since the last frame (up to 2 s, for slow or throttled frames); after a seek, just this column
+      const from = lastX >= 0 && x > lastX && x - lastX <= 2 * meta.pps ? lastX + 1 : x;
+      for (let c = from; c <= x && c < STRIP_W; c++) {
+        strips.band.g.putImageData(colBand, c, 0); strips.full.g.putImageData(colFull, c, 0);
+      }
+      lastX = x;
+    }
+
+    function render() {
+      if (!cw) return;
+      const t = audio.currentTime, W = meta.window;
+      const t0 = Math.max(0, Math.min(meta.duration - W, t - (W - 4)));      // the first 71 s in place, then the view follows
+      const s = full ? strips.full : strips.band;
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(s.c, t0 * meta.pps, 0, W * meta.pps, ROWS, 0, 0, cw, ch);
+      // the playhead
+      const px = (t - t0) / W * cw;
+      ctx.fillStyle = 'rgba(236,228,214,0.55)'; ctx.fillRect(Math.round(px), 0, Math.max(1, dpr), ch);
+      // axes: seconds along the bottom, kHz up the left
+      ctx.font = `${11 * dpr}px Georgia, serif`; ctx.fillStyle = INK; ctx.textBaseline = 'bottom';
+      for (let k = Math.ceil(t0 / 10) * 10; k <= t0 + W; k += 10) {
+        const x = (k - t0) / W * cw;
+        ctx.fillRect(Math.round(x), ch - 5 * dpr, Math.max(1, dpr), 5 * dpr);
+        if (x > 20 * dpr && x < cw - 30 * dpr) { ctx.textAlign = 'center'; ctx.fillText(mmss(k), x, ch - 6 * dpr); }
+      }
+      const [f0, f1] = full ? [0, 22050] : meta.band;
+      const step = full ? 5000 : 2000;
+      ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+      for (let f = Math.ceil(f0 / step) * step; f <= f1; f += step) {
+        const y = (1 - (f - f0) / (f1 - f0)) * ch;
+        if (y < 8 * dpr || y > ch - 18 * dpr) continue;
+        ctx.fillRect(0, Math.round(y), 5 * dpr, Math.max(1, dpr));
+        ctx.fillText(`${f / 1000} kHz`, 7 * dpr, y);
+      }
+      const now = `${mmss(t)} / ${TOTAL}`;
+      if (time.textContent !== now) time.textContent = now;
+      if (document.activeElement !== scrub) scrub.value = String(t);
+    }
+
+    // listening runs on its own clock, faster than the columns, so a slow or dropped screen frame never leaves a gap;
+    // the screen is redrawn on animation frames
+    let playing = false, timer = 0;
+    function loop() {
+      if (!playing) return;
+      render();
+      requestAnimationFrame(loop);
+    }
+    function setPlaying(on: boolean) {
+      play.innerHTML = on ? '&#10074;&#10074;' : '&#9654;'; play.setAttribute('aria-label', on ? 'Pause' : 'Play');
+      if (on && !playing) { playing = true; timer = window.setInterval(listen, 1000 / meta.pps / 2); requestAnimationFrame(loop); }
+      if (!on) { playing = false; window.clearInterval(timer); render(); }
+    }
+    play.addEventListener('click', async () => {
+      if (!ac) ac = setup();
+      if (ac.state === 'suspended') await ac.resume();
+      wait.hidden = true;
+      if (audio.paused) {
+        play.disabled = true;
+        try { await audio.play(); } catch { wait.hidden = false; wait.textContent = 'The recording could not be played here.'; }
+        play.disabled = false;
+      } else audio.pause();
+    });
+    audio.addEventListener('play', () => setPlaying(true));
+    audio.addEventListener('pause', () => setPlaying(false));
+    audio.addEventListener('ended', () => setPlaying(false));
+    scrub.addEventListener('input', () => {
+      if (!ac) ac = setup();
+      wait.hidden = true;
+      audio.currentTime = Number(scrub.value); lastX = -1; render();
+    });
+    fullBox.addEventListener('change', () => {
+      full = fullBox.checked;
+      hint.textContent = full
+        ? 'All pitches, 0 to 22 kHz: the flute and piano below, Greece squeezed into the top half, where the music hardly reaches.'
+        : 'Across: time. Up: pitch, 9 to 20 kHz. Brightness: loudness. Greece plays from 0:05 to 1:10, between 10 and 19 kHz: too high and too quiet to notice.';
+      render();
+    });
+    reveal.addEventListener('click', async () => {
+      reveal.disabled = true;
+      const load = (u: string) => new Promise<HTMLImageElement>((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = u; });
+      const [b, f] = await Promise.all([load(meta.reveal.band), load(meta.reveal.full)]);
+      strips.band.g.drawImage(b, 0, 0); strips.full.g.drawImage(f, 0, 0);
+      wait.hidden = true;
+      if (audio.currentTime > meta.window - 4) audio.currentTime = 0;
+      render();
+    });
+    new ResizeObserver(size).observe(root.querySelector('.hmp__stage')!);
+    size();
+    (window as any).__hmp = { audio, render, strips, meta };
+  }
+</script>
