@@ -20,6 +20,8 @@ dataSource:
     href: 'https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM'
   - label: 'EMODnet Bathymetry DTM 2024 - the seabed'
     href: 'https://emodnet.ec.europa.eu/en/bathymetry'
+  - label: 'Hellenic Statistical Authority (ELSTAT) - the Greek coast and boundaries, which separate Greece from its neighbors'
+    href: 'https://www.statistics.gr/en/digital-cartographical-data'
 downloads:
   - label: 'Full-resolution map'
     href: '/downloads/30dmc-2026-day-25-map.jpg'
