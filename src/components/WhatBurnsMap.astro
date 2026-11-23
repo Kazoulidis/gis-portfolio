@@ -1,0 +1,254 @@
+---
+/**
+ * Day 29 (Raster): what burns in Greece, on a Leaflet map. The data are one PNG of class values in Web Mercator, 300 m a pixel
+ * (Day_29/prep/page_data.py): wildfire seasons 2001-2025 with flags for farm burning and the 2026 wildfires, the CORINE land cover,
+ * and the slope and its direction. The page colours it for what is picked (everything, one land cover, one slope direction or one
+ * slope band), and a click reads every value at that spot.
+ *
+ * `src`: the JSON written by page_data.py (bounds, grid origin and cell, the PNG, the classes and their figures, the notes).
+ */
+interface Props {
+  src: string;
+  caption?: string;
+}
+const { src, caption } = Astro.props;
+---
+
+<figure class="map-figure">
+  <div class="wb" data-wb data-src={src}>
+    <div class="wb__controls">
+      <label class="wb__pick">Show
+        <select data-wb-pick aria-label="What to show"></select>
+      </label>
+      <label class="wb__toggle"><input type="checkbox" data-wb-farm checked /> farm burning</label>
+      <label class="wb__toggle"><input type="checkbox" data-wb-y26 checked /> 2026 wildfires</label>
+    </div>
+    <p class="wb__sum" data-wb-sum aria-live="polite"></p>
+    <div class="wb__stage">
+      <div class="wb__map" data-wb-map role="img" aria-label="Map of Greece: land burned by wildfire in 2001-2025, farm burning, and the 2026 wildfires, with the land cover or terrain picked highlighted"></div>
+    </div>
+    <div class="wb__legend" data-wb-legend aria-hidden="true"></div>
+    <p class="wb__hint">Click anywhere on the land for its cover, slope and fire record. The map is at 300 m; the figures above come from the 100 m analysis.</p>
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<style is:global>
+  /* global: the legend and the popups are written by the script, which scoped styles do not reach */
+  .wb { max-width: 760px; margin: 0 auto; }
+  .wb__controls { display: flex; flex-wrap: wrap; gap: 0.4rem 1.1rem; justify-content: center; align-items: center; font-size: 0.9rem; margin-bottom: 0.35rem; }
+  .wb__pick { display: inline-flex; align-items: center; gap: 0.5rem; }
+  .wb__pick select { font: inherit; padding: 0.15rem 0.3rem; max-width: 19rem; }
+  .wb__toggle { white-space: nowrap; cursor: pointer; font-size: 0.85rem; }
+  .wb__toggle input { accent-color: #762ca8; }
+  .wb__sum { margin: 0 0 0.5rem; text-align: center; font-size: 0.84rem; min-height: 2.6em; }
+  .wb__sum b { font-weight: 700; }
+  .wb__stage { position: relative; width: 100%; aspect-ratio: 1 / 1; max-height: 640px; border: 1px solid var(--rule, #d9d4c8); }
+  .wb__map { position: absolute; inset: 0; background: #dfe6ea; }
+  .wb__legend { display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; justify-content: center; margin-top: 0.55rem; font-size: 0.75rem; }
+  .wb__legend span { display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap; }
+  .wb__legend i { display: inline-block; width: 0.9rem; height: 0.7rem; border: 1px solid rgba(35, 35, 40, 0.35); }
+  .wb__legend i.hatch { background: repeating-linear-gradient(135deg, #762ca8 0 2px, transparent 2px 4px) !important; border-color: #762ca8; }
+  .wb__hint { margin: 0.35rem 0 0; text-align: center; font-size: 0.78rem; opacity: 0.75; }
+  .wb__label { background: none; border: 0; }
+  .wb__label div { transform: translate(-50%, -50%); font: italic 0.78rem/1.15 'Times New Roman', serif; color: #23232a; white-space: nowrap;
+    text-align: center; text-shadow: 0 0 3px #f7f4ec, 0 0 3px #f7f4ec, 0 0 2px #f7f4ec; }
+  .wb__pop { font-size: 0.82rem; line-height: 1.4; }
+  .wb__pop b { display: block; margin-bottom: 0.15rem; }
+  .wb__pop table { border-collapse: collapse; }
+  .wb__pop td { padding: 0 0.6rem 0 0; vertical-align: top; }
+  .wb__overlay { image-rendering: auto; }
+</style>
+
+<script>
+  import * as L from 'leaflet';
+  import 'leaflet/dist/leaflet.css';
+  import { whenNear } from '../lazy';
+
+  type Cls = { code: number; name: string; pick: boolean; land_pct: number | null; wild_pct: number | null; times: number | null; natural: boolean };
+  type Meta = { bounds: [[number, number], [number, number]]; size: [number, number]; origin: [number, number]; res: number; png: string;
+    classes: Cls[]; aspect: { sector: string; km2: number; vs_natural: number }[]; slope: { range: string; km2: number; vs_natural: number }[];
+    natural_times: number; totals: { land_km2: number; once_km2: number; farm_share: number; y2026: number; built500: number };
+    notes: { name: string; lat: number; lon: number }[] };
+  type RGB = [number, number, number];
+
+  const BASEMAP = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}';
+  const ATTRIBUTION = 'Relief &copy; Esri &middot; Burned area: NASA MODIS MCD64A1 &middot; Land cover: Copernicus CORINE 2018 &middot; Terrain: Copernicus GLO-90';
+  const FIRE: RGB[] = [[238, 176, 104], [208, 104, 44], [134, 38, 24]];       // burned once, twice, 3 or more seasons (as the sheet)
+  const FARM: RGB = [186, 180, 146], P26: RGB = [118, 44, 168], OTHER: RGB = [150, 146, 140], AREA: RGB = [40, 92, 140];
+  const SECTORS = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
+  const BANDS = ['0-5', '5-10', '10-15', '15-20', '20-25', '25-30', '30-35', '35 or more'];
+  const fmt = (v: number) => v.toLocaleString('en-US');
+  const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+
+  const box = document.querySelector<HTMLElement>('[data-wb]');
+  if (box) whenNear(box, () => { void start(box); });
+
+  async function pixels(url: string, w: number, h: number) {
+    const img = new Image(); img.src = url; await img.decode();
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const x = c.getContext('2d', { willReadFrequently: true })!; x.drawImage(img, 0, 0);
+    return x.getImageData(0, 0, w, h).data;
+  }
+
+  async function start(root: HTMLElement) {
+    const $ = <T extends Element>(n: string) => root.querySelector<T>(`[data-wb-${n}]`)!;
+    const meta: Meta = await (await fetch(root.dataset.src!)).json();
+    const [W, H] = meta.size, N = W * H;
+    const A = await pixels(meta.png, W, H);
+    const cls = meta.classes, natural = cls.map((c) => c.natural);        // classes[i - 1] is index i in the PNG's green
+
+    // the map
+    const bounds = L.latLngBounds(meta.bounds);
+    const map = L.map($<HTMLElement>('map'), { scrollWheelZoom: true, zoomSnap: 0.25, maxBounds: bounds.pad(0.05), maxBoundsViscosity: 0.8 });
+    L.tileLayer(BASEMAP, { attribution: ATTRIBUTION, maxZoom: 13, maxNativeZoom: 13 }).addTo(map);
+    L.control.scale({ imperial: false }).addTo(map);
+    const fit = () => map.getBoundsZoom(L.latLngBounds([[34.8, 19.4], [41.75, 28.3]]));
+    map.setView([38.3, 23.8], fit(), { animate: false });
+    map.setMinZoom(fit() - 0.5);
+    for (const n of meta.notes) {
+      L.marker([n.lat, n.lon], { icon: L.divIcon({ className: 'wb__label', html: `<div>${esc(n.name)}</div>`, iconSize: [0, 0] }), interactive: false, keyboard: false }).addTo(map);
+    }
+
+    // the picker
+    const pick = $<HTMLSelectElement>('pick');
+    const group = (label: string, items: [string, string][]) => {
+      const g = document.createElement('optgroup'); g.label = label;
+      for (const [v, t] of items) g.append(new Option(t, v));
+      pick.append(g);
+    };
+    pick.append(new Option('Everything that burned', 'all'));
+    group('Land cover', cls.map((c, i) => [c, i] as const).filter(([c]) => c.pick).sort((a, b) => b[0].times! - a[0].times!)
+      .map(([c, i]) => [`c${i}`, `${c.name} (${c.times!.toFixed(1)}×)`]));
+    group('Natural land facing', meta.aspect.map((a, k) => [`a${k}`, `${SECTORS[k]} (${a.vs_natural.toFixed(2)}×)`]));
+    group('Natural land on a slope of', meta.slope.map((s, k) => [`s${k}`, `${BANDS[k]} degrees (${s.vs_natural.toFixed(2)}×)`]));
+
+    // one canvas, coloured for what is picked, laid over the map. Zoomed out, the browser would shrink it about eight times and average
+    // the burns away, so a second canvas keeps, for every 4 x 4 block, its strongest mark (2026, then the most burned) and shows below zoom 8.
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const cx = cv.getContext('2d')!, img = cx.createImageData(W, H), d = img.data;
+    const POOL = 4, PW = Math.ceil(W / POOL), PH = Math.ceil(H / POOL);
+    const pv = document.createElement('canvas'); pv.width = PW; pv.height = PH;
+    const px = pv.getContext('2d')!, pimg = px.createImageData(PW, PH), pd = pimg.data;
+    const rank = new Uint8Array(N);
+    const FULL_FROM = 8;
+    const overlays: Record<string, L.ImageOverlay> = {}, urls: Record<string, string> = {};
+    function show(key: string, canvas: HTMLCanvasElement) {
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        const u = URL.createObjectURL(blob);
+        if (overlays[key]) overlays[key].setUrl(u);
+        else overlays[key] = L.imageOverlay(u, bounds, { className: 'wb__overlay', interactive: false });
+        if (urls[key]) URL.revokeObjectURL(urls[key]);
+        urls[key] = u;
+        zoomed();
+      });
+    }
+    function zoomed() {
+      const full = map.getZoom() >= FULL_FROM, on = overlays[full ? 'full' : 'pool'], off = overlays[full ? 'pool' : 'full'];
+      if (off && map.hasLayer(off)) off.remove();
+      if (on && !map.hasLayer(on)) on.addTo(map);
+    }
+    map.on('zoomend', zoomed);
+    const legend = $<HTMLElement>('legend');
+    function swatches(items: [string, RGB | 'hatch', number?][]) {
+      legend.replaceChildren(...items.map(([t, c, a]) => {
+        const s = document.createElement('span'); const i = document.createElement('i');
+        if (c === 'hatch') i.className = 'hatch'; else i.style.background = `rgba(${c.join(',')},${a ?? 1})`;
+        s.append(i, document.createTextNode(t)); return s;
+      }));
+    }
+    function paint() {
+      const v = pick.value, kind = v === 'all' ? '' : v[0], k = v === 'all' ? -1 : Number(v.slice(1));
+      const showFarm = $<HTMLInputElement>('farm').checked, show26 = $<HTMLInputElement>('y26').checked;
+      for (let p = 0; p < N; p++) {
+        const o = p * 4;
+        rank[p] = 0;
+        if (A[o + 3] === 0) { d[o + 3] = 0; continue; }
+        const r = A[o], g = A[o + 1], b = A[o + 2], seasons = r & 7, farm = r & 8, y26 = r & 16;
+        const nat = g > 0 && natural[g - 1];
+        const match = kind === 'a' ? (nat && b >> 3 === k) : kind === 's' ? (nat && (b & 7) === k) : kind === 'c' ? g - 1 === k : true;
+        let c: RGB | null = null, a = 0, rk = 0;
+        if (show26 && y26 && match) {
+          rk = 7;                                                                                  // a diagonal hatch, as on the sheet
+          if (((p % W) + Math.floor(p / W)) % 6 < 3) { c = P26; a = 240; }
+          else if (seasons) { c = FIRE[Math.min(seasons, 3) - 1]; a = 235; }
+        }
+        else if (seasons) { if (match) { c = FIRE[Math.min(seasons, 3) - 1]; a = 235; rk = 3 + Math.min(seasons, 3); } else { c = OTHER; a = 120; rk = 2; } }
+        else if (farm && showFarm) { c = FARM; a = match ? 215 : 90; rk = match ? 3 : 1; }
+        else if (v !== 'all' && match) { c = AREA; a = 85; rk = 1; }                                // where the cover or terrain picked lies
+        rank[p] = rk;
+        if (!c) { d[o + 3] = 0; continue; }
+        d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = a;
+      }
+      for (let j = 0; j < PH; j++) for (let i = 0; i < PW; i++) {
+        let best = -1, br = 0;
+        for (let jj = j * POOL; jj < Math.min(H, j * POOL + POOL); jj++) for (let ii = i * POOL; ii < Math.min(W, i * POOL + POOL); ii++) {
+          const p = jj * W + ii;
+          if (rank[p] > br) { br = rank[p]; best = p; }
+        }
+        const q = (j * PW + i) * 4;
+        if (best < 0) { pd[q + 3] = 0; continue; }
+        const o = best * 4;
+        if (br === 7) { pd[q] = P26[0]; pd[q + 1] = P26[1]; pd[q + 2] = P26[2]; pd[q + 3] = 240; }   // too small to hatch: solid purple
+        else { pd[q] = d[o]; pd[q + 1] = d[o + 1]; pd[q + 2] = d[o + 2]; pd[q + 3] = d[o + 3]; }
+      }
+      cx.putImageData(img, 0, 0); px.putImageData(pimg, 0, 0);
+      show('full', cv); show('pool', pv);
+
+      const T = meta.totals, sum = $<HTMLElement>('sum');
+      const fireKeys: [string, RGB][] = [['wildfire once', FIRE[0]], ['twice', FIRE[1]], ['3 to 7 times', FIRE[2]]];
+      const extra: [string, RGB | 'hatch', number?][] = [...(showFarm ? [['farm burning', FARM] as [string, RGB]] : []),
+        ...(show26 ? [['2026 wildfires, to September', 'hatch'] as [string, 'hatch']] : [])];
+      if (v === 'all') {
+        sum.innerHTML = `<b>Wildfire burned ${fmt(T.once_km2)} km² of Greece at least once in 2001-2025</b>, `
+          + `${(T.once_km2 / T.land_km2 * 100).toFixed(0)}% of the land. ${T.farm_share.toFixed(0)}% of what MODIS marks as burned is farm burning, `
+          + `set apart here. 2026 to September: ${fmt(T.y2026)} km² of wildfire.`;
+        swatches([...fireKeys, ...extra]);
+      } else {
+        let lead: string, land: string;
+        if (kind === 'c') {
+          const c = cls[k];
+          lead = `<b>${esc(c.name)}</b>: ${c.land_pct!.toFixed(1)}% of the land, ${c.wild_pct!.toFixed(1)}% of the wildfire; it burns `
+            + `<b>${c.times!.toFixed(1)} times</b> its share.`;
+          land = c.name.toLowerCase();
+        } else {
+          const s = kind === 'a' ? meta.aspect[k] : meta.slope[k];
+          const what = kind === 'a' ? `facing ${SECTORS[k]}` : `on a slope of ${BANDS[k]} degrees`;
+          lead = `<b>Natural land ${what}</b>: ${fmt(s.km2)} km²; it burns <b>${s.vs_natural.toFixed(2)} times</b> the rate of all natural land.`;
+          land = `natural land ${what}`;
+        }
+        sum.innerHTML = lead;
+        swatches([['burned here once', FIRE[0]], ['twice', FIRE[1]], ['3 to 7 times', FIRE[2]],
+          ['wildfire elsewhere', OTHER, 0.5], [land, AREA, 0.35], ...extra]);
+      }
+    }
+
+    // a click: everything at that spot
+    const crs = L.CRS.EPSG3857;
+    map.on('click', (ev: L.LeafletMouseEvent) => {
+      const p = crs.project(ev.latlng);
+      const i = Math.floor((p.x - meta.origin[0]) / meta.res), j = Math.floor((meta.origin[1] - p.y) / meta.res);
+      if (i < 0 || j < 0 || i >= W || j >= H) return;
+      const o = (j * W + i) * 4;
+      if (A[o + 3] === 0) return;                                      // the sea, a lake, or outside Greece
+      const r = A[o], g = A[o + 1], b = A[o + 2], seasons = r & 7;
+      const c = cls[g - 1], sec = b >> 3;
+      const fire = seasons === 0 ? 'no wildfire recorded' : seasons === 1 ? 'burned in 1 season' : `burned in ${seasons} seasons`;
+      const html = `<div class="wb__pop"><b>${esc(c.name)}</b><table>`
+        + `<tr><td>Wildfire, 2001-2025</td><td>${fire}</td></tr>`
+        + (r & 8 ? `<tr><td>Farm burning</td><td>recorded</td></tr>` : '')
+        + (r & 16 ? `<tr><td>2026</td><td>burned by a wildfire</td></tr>` : '')
+        + `<tr><td>Slope</td><td>${BANDS[b & 7]} degrees${sec < 8 ? `, facing ${SECTORS[sec]}` : ', flat'}</td></tr>`
+        + (c.times !== null ? `<tr><td>This cover</td><td>burns ${c.times.toFixed(1)}× its share of Greece</td></tr>` : '')
+        + `</table></div>`;
+      L.popup({ maxWidth: 320 }).setLatLng(ev.latlng).setContent(html).openOn(map);
+    });
+
+    pick.addEventListener('change', paint);
+    $<HTMLInputElement>('farm').addEventListener('change', paint);
+    $<HTMLInputElement>('y26').addEventListener('change', paint);
+    paint();
+    (window as any).__wb = { map, paint };
+  }
+</script>

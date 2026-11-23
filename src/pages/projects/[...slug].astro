@@ -35,6 +35,7 @@ import CoordsMap from '../../components/CoordsMap.astro';
 import WineMap from '../../components/WineMap.astro';
 import SlimeTimelapse from '../../components/SlimeTimelapse.astro';
 import HiddenMapPlayer from '../../components/HiddenMapPlayer.astro';
+import WhatBurnsMap from '../../components/WhatBurnsMap.astro';
 import { projectCategories } from '../../site';
 import { isPublic } from '../../projects';
 import { plainTitle } from '../../cv';
@@ -77,6 +78,7 @@ const CUSTOM_MAPS: Record<string, typeof ProjectMap> = {
   'wine-pdos': WineMap,
   'slime-timelapse': SlimeTimelapse,
   'hidden-map-player': HiddenMapPlayer,
+  'what-burns': WhatBurnsMap,
 };
 
 // Every project gets its page, drafts included: a draft is unlisted, reachable
