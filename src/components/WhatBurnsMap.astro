@@ -20,7 +20,7 @@ const { src, caption } = Astro.props;
       <label class="wb__pick">Show
         <select data-wb-pick aria-label="What to show"></select>
       </label>
-      <label class="wb__toggle"><input type="checkbox" data-wb-farm checked /> farm burning</label>
+      <label class="wb__toggle"><input type="checkbox" data-wb-farm checked /> likely farm burning</label>
       <label class="wb__toggle"><input type="checkbox" data-wb-y26 checked /> 2026 wildfires</label>
     </div>
     <p class="wb__sum" data-wb-sum aria-live="polite"></p>
@@ -28,7 +28,7 @@ const { src, caption } = Astro.props;
       <div class="wb__map" data-wb-map role="img" aria-label="Map of Greece: land burned by wildfire in 2001-2025, farm burning, and the 2026 wildfires, with the land cover or terrain picked highlighted"></div>
     </div>
     <div class="wb__legend" data-wb-legend aria-hidden="true"></div>
-    <p class="wb__hint">Click anywhere on the land for its cover, slope and fire record. The map is at 300 m; the figures above come from the 100 m analysis.</p>
+    <p class="wb__hint">Click anywhere on the land for its cover, slope and fire record. The map is at 300 m and shows all 25 seasons; the land cover figures count only 2019-2025, after the land cover map, on the 100 m grid.</p>
   </div>
   {caption && <figcaption>{caption}</figcaption>}
 </figure>
@@ -118,7 +118,7 @@ const { src, caption } = Astro.props;
       pick.append(g);
     };
     pick.append(new Option('Everything that burned', 'all'));
-    group('Land cover', cls.map((c, i) => [c, i] as const).filter(([c]) => c.pick).sort((a, b) => b[0].times! - a[0].times!)
+    group('Land cover (fires of 2019-2025)', cls.map((c, i) => [c, i] as const).filter(([c]) => c.pick).sort((a, b) => b[0].times! - a[0].times!)
       .map(([c, i]) => [`c${i}`, `${c.name} (${c.times!.toFixed(1)}×)`]));
     group('Natural land facing', meta.aspect.map((a, k) => [`a${k}`, `${SECTORS[k]} (${a.vs_natural.toFixed(2)}×)`]));
     group('Natural land on a slope of', meta.slope.map((s, k) => [`s${k}`, `${BANDS[k]} degrees (${s.vs_natural.toFixed(2)}×)`]));
@@ -202,14 +202,14 @@ const { src, caption } = Astro.props;
         ...(show26 ? [['2026 wildfires, to September', 'hatch'] as [string, 'hatch']] : [])];
       if (v === 'all') {
         sum.innerHTML = `<b>Wildfire burned ${fmt(T.once_km2)} km² of Greece at least once in 2001-2025</b>, `
-          + `${(T.once_km2 / T.land_km2 * 100).toFixed(0)}% of the land. ${T.farm_share.toFixed(0)}% of what MODIS marks as burned is farm burning, `
+          + `${(T.once_km2 / T.land_km2 * 100).toFixed(0)}% of the land. ${T.farm_share.toFixed(0)}% of the burned area is in patches mostly on arable land, likely farm burning, `
           + `set apart here. 2026 to September: ${fmt(T.y2026)} km² of wildfire.`;
         swatches([...fireKeys, ...extra]);
       } else {
         let lead: string, land: string;
         if (kind === 'c') {
           const c = cls[k];
-          lead = `<b>${esc(c.name)}</b>: ${c.land_pct!.toFixed(1)}% of the land, ${c.wild_pct!.toFixed(1)}% of the wildfire; it burns `
+          lead = `<b>${esc(c.name)}</b>: ${c.land_pct!.toFixed(1)}% of the land, ${c.wild_pct!.toFixed(1)}% of the wildfire of 2019-2025, after the land cover map; it burned `
             + `<b>${c.times!.toFixed(1)} times</b> its share.`;
           land = c.name.toLowerCase();
         } else {
@@ -240,7 +240,7 @@ const { src, caption } = Astro.props;
         + (r & 8 ? `<tr><td>Farm burning</td><td>recorded</td></tr>` : '')
         + (r & 16 ? `<tr><td>2026</td><td>burned by a wildfire</td></tr>` : '')
         + `<tr><td>Slope</td><td>${BANDS[b & 7]} degrees${sec < 8 ? `, facing ${SECTORS[sec]}` : ', flat'}</td></tr>`
-        + (c.times !== null ? `<tr><td>This cover</td><td>burns ${c.times.toFixed(1)}× its share of Greece</td></tr>` : '')
+        + (c.times !== null ? `<tr><td>This cover, 2019-2025</td><td>burned ${c.times.toFixed(1)}× its share</td></tr>` : '')
         + `</table></div>`;
       L.popup({ maxWidth: 320 }).setLatLng(ev.latlng).setContent(html).openOn(map);
     });
