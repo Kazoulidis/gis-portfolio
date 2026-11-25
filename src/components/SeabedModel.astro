@@ -95,7 +95,7 @@ const { src, caption } = Astro.props;
     const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio)); renderer.setClearColor(0xe9eef1);
     stage.append(renderer.domElement);
-    const labelR = new CSS2DRenderer(); Object.assign(labelR.domElement.style, { position: 'absolute', inset: '0', pointerEvents: 'none' });
+    const labelR = new CSS2DRenderer(); Object.assign(labelR.domElement.style, { position: 'absolute', inset: '0', pointerEvents: 'none', zIndex: '1' });
     stage.append(labelR.domElement);
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(32, 1, 50, 90000);
