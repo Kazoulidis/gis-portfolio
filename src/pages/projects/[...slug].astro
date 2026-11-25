@@ -37,6 +37,7 @@ import SlimeTimelapse from '../../components/SlimeTimelapse.astro';
 import HiddenMapPlayer from '../../components/HiddenMapPlayer.astro';
 import WhatBurnsMap from '../../components/WhatBurnsMap.astro';
 import SeabedModel from '../../components/SeabedModel.astro';
+import FloodMap from '../../components/FloodMap.astro';
 import { projectCategories } from '../../site';
 import { isPublic } from '../../projects';
 import { plainTitle } from '../../cv';
@@ -81,6 +82,7 @@ const CUSTOM_MAPS: Record<string, typeof ProjectMap> = {
   'hidden-map-player': HiddenMapPlayer,
   'what-burns': WhatBurnsMap,
   'seabed-model': SeabedModel,
+  'flood-map': FloodMap,
 };
 
 // Every project gets its page, drafts included: a draft is unlisted, reachable

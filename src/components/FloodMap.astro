@@ -1,0 +1,171 @@
+---
+/**
+ * Day 27 (New tool): Storm Daniel's flood on the plain of Thessaly, on a Leaflet map. Sentinel-2 natural colour for four dates in 2023, the water found on each
+ * (MNDWI over 0, mapped in ESA SNAP and again in Python), Copernicus EMS's standing water of 10 September for comparison, and a divider that compares any date
+ * with 21 August. A click reads the water history of the spot and its land cover.
+ *
+ * `src`: the JSON written by Day_27/prep/page_data.py (bounds, the flags PNG, the images, the classes, the figures).
+ */
+interface Props {
+  src: string;
+  caption?: string;
+}
+const { src, caption } = Astro.props;
+---
+
+<figure class="map-figure">
+  <div class="fm" data-fm data-src={src}>
+    <div class="fm__controls">
+      <div class="fm__dates" role="group" aria-label="Date" data-fm-dates></div>
+      <label class="fm__toggle"><input type="checkbox" data-fm-water checked /> water</label>
+      <label class="fm__toggle"><input type="checkbox" data-fm-ems /> what EMS adds</label>
+      <label class="fm__toggle"><input type="checkbox" data-fm-swipe /> compare with 21 Aug</label>
+    </div>
+    <p class="fm__sum" data-fm-sum aria-live="polite"></p>
+    <div class="fm__stage">
+      <div class="fm__map" data-fm-map role="img" aria-label="Map of the plain of Thessaly in Sentinel-2 natural colour, with the water of the date chosen"></div>
+      <div class="fm__divider" data-fm-divider hidden><span>21 Aug</span><b aria-hidden="true"></b><span data-fm-right></span></div>
+    </div>
+    <div class="fm__legend" aria-hidden="true">
+      <span><i style="background:#1b3a6b"></i>water on 21 August</span>
+      <span><i style="background:#2f9be0"></i>new water on the date</span>
+      <span><i class="ems"></i>water only in Copernicus EMS, 10 Sep</span>
+      <span><i class="area"></i>area studied</span>
+    </div>
+    <p class="fm__hint">Click anywhere for the water there on each date. With "compare", drag the line.</p>
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<style is:global>
+  /* global: the popups, labels and buttons are written by the script, which scoped styles do not reach */
+  .fm { max-width: 800px; margin: 0 auto; }
+  .fm__controls { display: flex; flex-wrap: wrap; gap: 0.45rem 1rem; justify-content: center; align-items: center; font-size: 0.88rem; margin-bottom: 0.4rem; }
+  .fm__dates { display: flex; flex-wrap: wrap; }
+  .fm__dates button { padding: 0.3rem 0.65rem; border: 1px solid #b9b2a3; background: #f6f4ee; color: #23282e; font: inherit; font-size: 0.84rem; cursor: pointer; }
+  .fm__dates button + button { border-left: 0; }
+  .fm__dates button[aria-pressed='true'] { background: #1f5f8b; border-color: #1f5f8b; color: #fff; }
+  .fm__toggle { white-space: nowrap; cursor: pointer; font-size: 0.85rem; }
+  .fm__toggle input { accent-color: #1f5f8b; }
+  .fm__sum { margin: 0 0 0.5rem; text-align: center; font-size: 0.84rem; min-height: 2.6em; }
+  .fm__stage { position: relative; width: 100%; aspect-ratio: 4 / 3; max-height: 640px; border: 1px solid var(--rule, #d9d4c8); overflow: hidden; }
+  .fm__map { position: absolute; inset: 0; background: #dfe6ea; }
+  .fm__divider { position: absolute; top: 0; bottom: 0; left: 50%; z-index: 500; width: 0; cursor: ew-resize; touch-action: none; }
+  .fm__divider b { position: absolute; top: 0; bottom: 0; left: -1.5px; width: 3px; background: #fff; box-shadow: 0 0 3px rgba(0, 0, 0, 0.6); }
+  .fm__divider b::after { content: ''; position: absolute; top: 50%; left: -10px; width: 20px; height: 20px; margin-top: -10px; border-radius: 50%; background: #fff; box-shadow: 0 0 3px rgba(0, 0, 0, 0.6); }
+  .fm__divider span { position: absolute; top: 0.5rem; padding: 0.1rem 0.4rem; background: rgba(255, 255, 255, 0.88); font-size: 0.75rem; white-space: nowrap; }
+  .fm__divider span:first-child { right: 0.6rem; }
+  .fm__divider span:last-child { left: 0.6rem; }
+  .fm__legend { display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; justify-content: center; margin-top: 0.55rem; font-size: 0.75rem; }
+  .fm__legend span { display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap; }
+  .fm__legend i { display: inline-block; width: 0.9rem; height: 0.7rem; border: 1px solid rgba(35, 35, 40, 0.35); }
+  .fm__legend i.ems { background: #de3622; }
+  .fm__legend i.area { background: #8a8a86; border: 1.5px dashed #fff; }
+  .fm__hint { margin: 0.35rem 0 0; text-align: center; font-size: 0.78rem; opacity: 0.75; }
+  .fm__label { background: none; border: 0; }
+  .fm__label div { transform: translate(-50%, -50%); font: italic 0.8rem/1.15 'Times New Roman', serif; color: #fff; white-space: nowrap; text-shadow: 0 0 3px #000, 0 0 2px #000; }
+  .fm__pop { font-size: 0.82rem; line-height: 1.4; }
+  .fm__pop b { display: block; margin-bottom: 0.15rem; }
+  .fm__pop table { border-collapse: collapse; }
+  .fm__pop td { padding: 0 0.6rem 0 0; }
+  @media (max-width: 640px) { .fm__stage { aspect-ratio: 4 / 5; } }
+</style>
+
+<script>
+  import * as L from 'leaflet';
+  import 'leaflet/dist/leaflet.css';
+  import { whenNear } from '../lazy';
+
+  type Meta = { bounds: [[number, number], [number, number]]; origin: [number, number]; res: number; size: [number, number]; flags: string;
+    dates: { id: string; label: string; image: string }[]; area: GeoJSON.FeatureCollection; classes: string[]; area_km2: number; new_km2: Record<string, number>; left: Record<string, number>;
+    ems: { hit: number; precision: number; iou: number; ems_km2: number; s1_7sep_in_area_km2: number }; places: { name: string; lat: number; lon: number }[] };
+  const BASEMAP = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}';
+  const ATTRIBUTION = 'Relief &copy; Esri &middot; Contains modified Copernicus Sentinel data 2023 &middot; Flood maps: Copernicus EMS (&copy; European Union), EMSR692 &middot; CORINE 2018';
+  const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+  const box = document.querySelector<HTMLElement>('[data-fm]');
+  if (box) whenNear(box, () => { void start(box); });
+
+  async function start(root: HTMLElement) {
+    const $ = <T extends Element>(n: string) => root.querySelector<T>(`[data-fm-${n}]`)!;
+    const meta: Meta = await (await fetch(root.dataset.src!)).json();
+    const bounds = L.latLngBounds(meta.bounds);
+    const map = L.map($<HTMLElement>('map'), { scrollWheelZoom: true, zoomSnap: 0.25, maxBounds: bounds.pad(0.15), maxBoundsViscosity: 0.8, minZoom: 8 });
+    L.tileLayer(BASEMAP, { attribution: ATTRIBUTION, maxZoom: 15, maxNativeZoom: 13 }).addTo(map);
+    L.control.scale({ imperial: false }).addTo(map);
+    map.fitBounds(bounds.pad(-0.02));
+
+    // the flags, read once into a canvas
+    const img = new Image(); img.src = meta.flags; await img.decode();
+    const [TW, TH] = meta.size, cv = document.createElement('canvas'); cv.width = TW; cv.height = TH;
+    const cx = cv.getContext('2d', { willReadFrequently: true })!; cx.drawImage(img, 0, 0);
+    const px = cx.getImageData(0, 0, TW, TH).data;
+
+    // a water picture for a date: water before dark blue, new water bright blue, EMS of 10 Sep and the area's edge as outlines
+    function water(k: number, emsOn: boolean) {
+      const out = new ImageData(TW, TH), o = out.data;
+      for (let i = 0, j = 0; i < TW * TH; i++, j += 4) {
+        if (!px[j + 3]) continue;
+        const f = px[j], before = f & 1, now = k >= 0 ? (f >> k) & 1 : 0;
+        const inside = f & 32;
+        if (inside && now && before) { o[j] = 27; o[j + 1] = 58; o[j + 2] = 107; o[j + 3] = 235; }
+        else if (inside && now) { o[j] = 47; o[j + 1] = 155; o[j + 2] = 224; o[j + 3] = 215; }
+        if (emsOn && f & 16 && inside && !o[j + 3]) { o[j] = 222; o[j + 1] = 54; o[j + 2] = 34; o[j + 3] = 225; }      // water EMS drew and this map did not
+      }
+      const c = document.createElement('canvas'); c.width = TW; c.height = TH; c.getContext('2d')!.putImageData(out, 0, 0);
+      return c.toDataURL();
+    }
+    let date = 1, waterOn = true, emsOn = false, swipe = false;
+    const imgs: Record<string, L.ImageOverlay> = {};
+    const photo = (d: number) => (imgs[d] ??= L.imageOverlay(meta.dates[d].image, bounds, { interactive: false }));
+    let waterLayer: L.ImageOverlay | null = null, base: L.ImageOverlay | null = null, top: L.ImageOverlay | null = null;
+    L.geoJSON(meta.area, { interactive: false, style: { color: '#ffffff', weight: 1.6, dashArray: '6 4', fill: false, opacity: 0.95 } }).addTo(map);
+    for (const p of meta.places) L.marker([p.lat, p.lon], { icon: L.divIcon({ className: 'fm__label', html: `<div>${esc(p.name)}</div>`, iconSize: [0, 0] }), interactive: false, keyboard: false, zIndexOffset: 1000 }).addTo(map);
+
+    const div = $<HTMLElement>('divider'); let at = 0.5;
+    function clip() {
+      if (!top) return;
+      const el = top.getElement()!; if (!swipe) { el.style.clipPath = ''; if (waterLayer) waterLayer.getElement()!.style.clipPath = ''; return; }
+      const sr = $<HTMLElement>('map').getBoundingClientRect(), r = el.getBoundingClientRect(), x = sr.left + sr.width * at - r.left, sc = r.width / el.offsetWidth || 1;
+      el.style.clipPath = `inset(0 0 0 ${Math.max(0, x / sc)}px)`;
+      if (waterLayer) { const w = waterLayer.getElement()!, wr = w.getBoundingClientRect(), ws = wr.width / w.offsetWidth || 1; w.style.clipPath = `inset(0 0 0 ${Math.max(0, (sr.left + sr.width * at - wr.left) / ws)}px)`; }
+      div.style.left = `${at * 100}%`;
+    }
+    function draw() {
+      for (const o of [base, top, waterLayer]) if (o) map.removeLayer(o);
+      base = swipe && date !== 0 ? photo(0).addTo(map) : null;
+      top = photo(date).addTo(map);
+      waterLayer = L.imageOverlay(water(waterOn ? date : -1, emsOn), bounds, { interactive: false, className: 'fm__water' }).addTo(map);
+      root.querySelectorAll<HTMLButtonElement>('[data-fm-dates] button').forEach((b, i) => b.setAttribute('aria-pressed', String(i === date)));
+      div.hidden = !swipe || date === 0; $<HTMLElement>('right').textContent = meta.dates[date].label.replace(' 2023', '');
+      const d = meta.dates[date].id, nk = meta.new_km2[d];
+      $<HTMLElement>('sum').innerHTML = date === 0 ? `21 August 2023, before the storm: the water of the plain's reservoirs, rivers and Lake Karla's reservoir.`
+        : `${esc(meta.dates[date].label)}: <b>${nk.toLocaleString('en-US', { maximumFractionDigits: 0 })} km²</b> of new water since 21 August in the ${meta.area_km2.toLocaleString('en-US', { maximumFractionDigits: 0 })} km² studied.` +
+          (date === 1 ? ` The map finds ${Math.round(meta.ems.hit * 100)}% of the standing water Copernicus EMS drew that day.` : ` ${(meta.left[d] ?? 0).toFixed(0)} km² of it is left from 10 September.`);
+      requestAnimationFrame(clip);
+    }
+    const dates = $<HTMLElement>('dates');
+    meta.dates.forEach((d, i) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = d.label.replace(' 2023', ''); b.addEventListener('click', () => { date = i; draw(); }); dates.append(b); });
+    $<HTMLInputElement>('water').addEventListener('change', (e) => { waterOn = (e.target as HTMLInputElement).checked; draw(); });
+    $<HTMLInputElement>('ems').addEventListener('change', (e) => { emsOn = (e.target as HTMLInputElement).checked; draw(); });
+    $<HTMLInputElement>('swipe').addEventListener('change', (e) => { swipe = (e.target as HTMLInputElement).checked; if (swipe && date === 0) date = 1; draw(); });
+    map.on('move zoom zoomend moveend resize', clip); map.on('zoomanim', () => requestAnimationFrame(clip));
+    div.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); e.stopPropagation(); div.setPointerCapture(e.pointerId); map.dragging.disable();
+      const mv = (ev: PointerEvent) => { const r = $<HTMLElement>('map').getBoundingClientRect(); at = Math.min(0.98, Math.max(0.02, (ev.clientX - r.left) / r.width)); clip(); };
+      const end = () => { div.removeEventListener('pointermove', mv); map.dragging.enable(); };
+      div.addEventListener('pointermove', mv); div.addEventListener('pointerup', end, { once: true }); div.addEventListener('pointercancel', end, { once: true });
+    });
+    draw();
+
+    // a click: the water at the spot on each date
+    const crs = L.CRS.EPSG3857;
+    map.on('click', (ev: L.LeafletMouseEvent) => {
+      const p = crs.project(ev.latlng), i = Math.floor((p.x - meta.origin[0]) / meta.res), j = Math.floor((meta.origin[1] - p.y) / meta.res);
+      if (i < 0 || j < 0 || i >= TW || j >= TH || !px[(j * TW + i) * 4 + 3]) return;
+      const k = (j * TW + i) * 4, f = px[k], cls = px[k + 1] ? meta.classes[px[k + 1] - 1] : 'not mapped';
+      const rows = meta.dates.map((d, n) => `<tr><td>${esc(d.label.replace(' 2023', ''))}</td><td>${(f >> n) & 1 ? (n > 0 && f & 1 ? 'water, as before' : n === 0 ? 'water' : '<b style="display:inline">water</b>') : 'dry'}</td></tr>`).join('');
+      L.popup({ maxWidth: 300 }).setLatLng(ev.latlng).setContent(`<div class="fm__pop"><b>${esc(cls)}</b><table>${rows}<tr><td>EMS, 10 Sep</td><td>${f & 16 ? 'standing water' : 'no water drawn'}</td></tr></table>${f & 64 ? '<i>Cloud on 10 Sep</i>' : ''}</div>`).openOn(map);
+    });
+    (window as any).__fm = { map, draw, set: (d: number, s = swipe, e = emsOn) => { date = d; swipe = s; emsOn = e; draw(); } };
+  }
+</script>
