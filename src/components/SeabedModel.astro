@@ -1,0 +1,248 @@
+---
+/**
+ * Day 26: the sea floor off Milos in 3D. A 15 m grid holds the survey and EMODnet (12 bits each, 0.1 m, in one PNG), draped with the shaded
+ * surfaces. Three.js; drag to turn, scroll to zoom, click for the depths; buttons swap the surface, a slider sets the vertical exaggeration.
+ *
+ * `src`: the JSON written by Day_26/prep/page_data.py.
+ */
+interface Props {
+  src: string;
+  caption?: string;
+}
+const { src, caption } = Astro.props;
+---
+
+<figure class="map-figure">
+  <div class="seabed" data-seabed data-src={src}>
+    <div class="seabed__stage" data-seabed-stage role="img" aria-label="A 3D model of the surveyed sea floor south-east of Milos: a shelf with pits in the west, two rises in the middle and a deep plain in the east">
+      <div class="seabed__readout" data-seabed-readout aria-live="polite">Click the sea floor for its depth</div>
+      <div class="seabed__key"><b data-seabed-keyname></b><i data-seabed-keybar></i><span data-seabed-keyticks></span></div>
+    </div>
+    <div class="seabed__controls">
+      <div class="seabed__modes" role="group" aria-label="Surface shown">
+        <button type="button" data-mode="survey" aria-pressed="true">Survey</button>
+        <button type="button" data-mode="emodnet" aria-pressed="false">EMODnet</button>
+        <button type="button" data-mode="diff" aria-pressed="false">Difference</button>
+      </div>
+      <label class="seabed__slider"><span>Height &times; <b data-seabed-exv>4</b></span><input type="range" min="1" max="10" step="0.5" value="4" data-seabed-ex aria-label="Vertical exaggeration" /></label>
+      <label class="seabed__check"><input type="checkbox" data-seabed-spin /> Turn slowly</label>
+      <button type="button" class="seabed__reset" data-seabed-reset>Reset view</button>
+    </div>
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<style is:global>
+  /* global: the labels are made by the script, which scoped styles do not reach */
+  .seabed__stage { position: relative; width: 100%; aspect-ratio: 16 / 9; max-height: 82vh; background: #e9eef1; border: 1px solid var(--rule, #d9d4c8); overflow: hidden; cursor: grab; touch-action: none; }
+  .seabed__stage:active { cursor: grabbing; }
+  .seabed__stage canvas { display: block; }
+  .seabed__readout { position: absolute; left: 0.7rem; top: 0.7rem; z-index: 2; max-width: 17rem; padding: 0.45rem 0.6rem; background: #ffffffe6; border: 1px solid #c9ced2; color: #23282e; font-size: 0.78rem; line-height: 1.4; font-variant-numeric: tabular-nums; pointer-events: none; }
+  .seabed__readout b, .seabed__readout span { display: block; }
+  .seabed__key { position: absolute; right: 0.7rem; bottom: 0.7rem; z-index: 2; width: min(15rem, 60%); padding: 0.4rem 0.6rem; background: #ffffffe6; border: 1px solid #c9ced2; color: #23282e; font-size: 0.72rem; pointer-events: none; }
+  .seabed__key b { display: block; text-align: center; }
+  .seabed__key i { display: block; height: 0.55rem; margin: 0.25rem 0; }
+  .seabed__key span { display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
+  .seabed__key em { font-style: normal; }
+  .seabed__label { padding: 0.1rem 0.3rem; background: #ffffffc8; color: #1c2227; font-size: 0.74rem; line-height: 1.15; text-align: center; white-space: nowrap; pointer-events: none; }
+  .seabed__label--axis { background: none; font-weight: 700; font-size: 0.8rem; color: #59626a; }
+  .seabed__controls { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center; margin-top: 0.6rem; font-size: 0.9rem; }
+  .seabed__modes { display: flex; flex-wrap: wrap; }
+  .seabed__modes button, .seabed__reset { padding: 0.35rem 0.7rem; border: 1px solid #b9b2a3; background: #f6f4ee; color: #23282e; font: inherit; font-size: 0.85rem; cursor: pointer; }
+  .seabed__modes button + button { border-left: 0; }
+  .seabed__modes button[aria-pressed='true'] { background: #2f4e89; border-color: #2f4e89; color: #fff; }
+  .seabed__slider { flex: 1 1 12rem; display: flex; gap: 0.6rem; align-items: center; white-space: nowrap; }
+  .seabed__slider span { min-width: 5.6rem; font-variant-numeric: tabular-nums; }
+  .seabed__slider input { flex: 1; min-width: 6rem; accent-color: #2f4e89; }
+  .seabed__check { display: flex; gap: 0.35rem; align-items: center; }
+  @media (max-width: 640px) {
+    .seabed__stage { aspect-ratio: 4 / 5; }
+    .seabed__label span, .seabed__label br { display: none; }
+  }
+</style>
+
+<script>
+  import * as THREE from 'three';
+  import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+  import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
+  import { Line2 } from 'three/examples/jsm/lines/Line2.js';
+  import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
+  import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
+  import { whenNear } from '../lazy';
+
+  type Mode = 'survey' | 'emodnet' | 'diff';
+  type Meta = { x0: number; y1: number; cell: number; nx: number; ny: number; grid: string; drape: Record<Mode, string>; cable: [number, number, number][];
+    places: { name: string; note: string; x: number; y: number; below?: boolean }[] };
+  const box = document.querySelector<HTMLElement>('[data-seabed]');
+  if (box) whenNear(box, () => { void start(box); });
+
+  async function start(root: HTMLElement) {
+    const $ = <T extends Element>(n: string) => root.querySelector<T>(`[data-seabed-${n}]`)!;
+    const meta: Meta = await (await fetch(root.dataset.src!)).json();
+    const { nx, ny, cell } = meta, W = nx * cell, H = ny * cell, BASE = 120;   // heights are exaggerated round 120 m, the middle of the survey
+
+    const img = new Image(); img.src = meta.grid; await img.decode();
+    const cv = document.createElement('canvas'); cv.width = nx; cv.height = ny;
+    const cx = cv.getContext('2d', { willReadFrequently: true })!; cx.drawImage(img, 0, 0);
+    const px = cx.getImageData(0, 0, nx, ny).data;
+    const S = new Float32Array(nx * ny), E = new Float32Array(nx * ny);          // depths in meters, 0 = no data
+    for (let k = 0; k < nx * ny; k++) {
+      const v = (px[k * 4] << 16) | (px[k * 4 + 1] << 8) | px[k * 4 + 2];
+      S[k] = (v >>> 12) / 10; E[k] = (v & 4095) / 10;
+    }
+
+    const stage = $<HTMLElement>('stage');
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio)); renderer.setClearColor(0xe9eef1);
+    stage.append(renderer.domElement);
+    const labelR = new CSS2DRenderer(); Object.assign(labelR.domElement.style, { position: 'absolute', inset: '0', pointerEvents: 'none' });
+    stage.append(labelR.domElement);
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(32, 1, 50, 90000);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true; controls.minDistance = 600; controls.maxDistance = 32000; controls.maxPolarAngle = Math.PI * 0.485; controls.autoRotateSpeed = 0.5;
+
+    // the surface: one vertex per 15 m cell, the triangles only where all three corners were surveyed
+    const geo = new THREE.BufferGeometry();
+    const pos = new Float32Array(nx * ny * 3), uv = new Float32Array(nx * ny * 2);
+    for (let j = 0, k = 0; j < ny; j++) for (let i = 0; i < nx; i++, k++) {
+      pos[k * 3] = (i + 0.5) * cell - W / 2; pos[k * 3 + 2] = (j + 0.5) * cell - H / 2;
+      uv[k * 2] = (i + 0.5) / nx; uv[k * 2 + 1] = 1 - (j + 0.5) / ny;
+    }
+    const idx: number[] = [];
+    for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
+      const a = j * nx + i, b = a + 1, c = a + nx, d = c + 1;
+      if (S[a] && S[c] && S[b]) idx.push(a, c, b);
+      if (S[b] && S[c] && S[d]) idx.push(b, c, d);
+    }
+    const attr = new THREE.BufferAttribute(pos, 3);
+    geo.setAttribute('position', attr); geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); geo.setIndex(idx);
+    const tex: Partial<Record<Mode, THREE.Texture>> = {};
+    const loader = new THREE.TextureLoader();
+    const drape = (m: Mode) => {
+      let t = tex[m];
+      if (!t) { t = loader.load(meta.drape[m]); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; tex[m] = t; }
+      return t;
+    };
+    const mat = new THREE.MeshBasicMaterial({ map: drape('survey'), side: THREE.DoubleSide });
+    const mesh = new THREE.Mesh(geo, mat); mesh.frustumCulled = false; scene.add(mesh);
+
+    // the cable, on the surface shown
+    const cgeo = new LineGeometry();
+    const cmat = new LineMaterial({ color: 0x96183c, linewidth: 3, dashed: true, dashSize: 120, gapSize: 70 });
+    const cline = new Line2(cgeo, cmat); cline.frustumCulled = false; scene.add(cline);
+    const at = (x: number, y: number) => { const i = Math.floor((x - meta.x0) / cell), j = Math.floor((meta.y1 - y) / cell); return i >= 0 && j >= 0 && i < nx && j < ny ? j * nx + i : -1; };
+    const X = (x: number) => x - meta.x0 - W / 2, Z = (y: number) => meta.y1 - y - H / 2;
+
+    const tags = meta.places.map((p) => {
+      const el = document.createElement('div'); el.className = 'seabed__label';
+      const b = document.createElement('b'); b.textContent = p.name; el.append(b);
+      if (p.note) { const s = document.createElement('span'); s.textContent = p.note; el.append(document.createElement('br'), s); }
+      const o = new CSS2DObject(el); o.center.set(0.5, p.below ? -0.15 : 1.1); scene.add(o); return { o, p };
+    });
+    const sides: [string, number, number][] = [['N', 0, -H / 2 - 500], ['E', W / 2 + 500, 0], ['S', 0, H / 2 + 500], ['W', -W / 2 - 500, 0]];
+    for (const [t, x, z] of sides) {
+      const el = document.createElement('div'); el.className = 'seabed__label seabed__label--axis'; el.textContent = t;
+      const o = new CSS2DObject(el); o.position.set(x, 0, z); scene.add(o);
+    }
+    // the point clicked
+    const pin = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), new THREE.MeshBasicMaterial({ color: 0xffffff })); pin.visible = false; scene.add(pin);
+    pin.add(new THREE.Mesh(new THREE.SphereGeometry(1.35, 20, 14), new THREE.MeshBasicMaterial({ color: 0x16202a, side: THREE.BackSide })));
+    let picked = -1;
+
+    let mode: Mode = 'survey', ex = 4;
+    const depthAt = (k: number) => (mode === 'emodnet' ? E[k] : S[k]);
+    const h = (d: number) => (BASE - d) * ex;
+    const cur = new Float32Array(nx * ny);                                     // the depths shown now, eased to the surface chosen
+    let from: Float32Array | null = null, t0 = 0;
+    function lift(f: number) {
+      for (let k = 0; k < cur.length; k++) {
+        if (!S[k]) continue;
+        const goal = depthAt(k); cur[k] = from ? from[k] + (goal - from[k]) * f : goal;
+        pos[k * 3 + 1] = h(cur[k]);
+      }
+      attr.needsUpdate = true;
+      const cp: number[] = [];
+      for (const [, x, y] of meta.cable) { const k = at(x, y); if (k >= 0 && S[k]) cp.push(X(x), h(cur[k]) + 4 * ex, Z(y)); }
+      cgeo.setPositions(cp); cline.computeLineDistances();
+      for (const { o, p } of tags) { const k = at(p.x, p.y); o.position.set(X(p.x), k >= 0 && cur[k] ? h(cur[k]) + 30 : 0, Z(p.y)); }
+      place();
+    }
+    function place() { if (picked >= 0) pin.position.set(pos[picked * 3], pos[picked * 3 + 1], pos[picked * 3 + 2]); }
+
+    const DEPTHS = 'linear-gradient(90deg,#f7ecbe,#badbbb,#6ab7b8,#3782a8,#2f4e89,#282452)';
+    const keys: Record<Mode, [string, string, string[]]> = {
+      survey: ['Survey depth, m', DEPTHS, ['20', '60', '100', '140', '180', '220']],
+      emodnet: ['EMODnet depth, m', DEPTHS, ['20', '60', '100', '140', '180', '220']],
+      diff: ['Survey minus EMODnet, m', 'linear-gradient(90deg,#214880,#6092be 25%,#d6e2ea 43.75%,#f4f2ec 50%,#f0dcce 56.25%,#ce7a58 75%,#8c2a26)', ['-40 shallower', '0', '+40 deeper']],
+    };
+    function key() {
+      const [n, g, t] = keys[mode]; $<HTMLElement>('keyname').textContent = n; $<HTMLElement>('keybar').style.background = g;
+      $<HTMLElement>('keyticks').replaceChildren(...t.map((s) => { const e = document.createElement('em'); e.textContent = s; return e; }));
+    }
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    function show(m: Mode) {
+      from = cur.slice(); mode = m; mat.map = drape(m); key(); t0 = performance.now();
+      root.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
+      if (reduce) { from = null; lift(1); }
+    }
+    root.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((b) => b.addEventListener('click', () => show(b.dataset.mode as Mode)));
+    const exIn = $<HTMLInputElement>('ex');
+    exIn.addEventListener('input', () => { ex = Number(exIn.value); $<HTMLElement>('exv').textContent = exIn.value; from = null; lift(1); });
+    const spin = $<HTMLInputElement>('spin'); spin.addEventListener('change', () => { controls.autoRotate = spin.checked; });
+
+    // UTM 35N to latitude and longitude, WGS 84 (Snyder's series)
+    function ll(E_: number, N_: number) {
+      const a = 6378137, f = 1 / 298.257223563, e2 = f * (2 - f), k0 = 0.9996, ep = e2 / (1 - e2), M = N_ / k0;
+      const mu = M / (a * (1 - e2 / 4 - 3 * e2 ** 2 / 64 - 5 * e2 ** 3 / 256)), e1 = (1 - Math.sqrt(1 - e2)) / (1 + Math.sqrt(1 - e2));
+      const p = mu + (3 * e1 / 2 - 27 * e1 ** 3 / 32) * Math.sin(2 * mu) + (21 * e1 ** 2 / 16 - 55 * e1 ** 4 / 32) * Math.sin(4 * mu) + (151 * e1 ** 3 / 96) * Math.sin(6 * mu);
+      const s = Math.sin(p), c = Math.cos(p), t = Math.tan(p), C = ep * c * c, T = t * t, n = a / Math.sqrt(1 - e2 * s * s), r = a * (1 - e2) / (1 - e2 * s * s) ** 1.5, D = (E_ - 500000) / (n * k0);
+      const lat = p - (n * t / r) * (D * D / 2 - (5 + 3 * T + 10 * C - 4 * C * C - 9 * ep) * D ** 4 / 24 + (61 + 90 * T + 298 * C + 45 * T * T - 252 * ep - 3 * C * C) * D ** 6 / 720);
+      const lon = (D - (1 + 2 * T + C) * D ** 3 / 6 + (5 - 2 * C + 28 * T - 3 * C * C + 8 * ep + 24 * T * T) * D ** 5 / 120) / c;
+      return [lat * 180 / Math.PI, 27 + lon * 180 / Math.PI];
+    }
+    const read = $<HTMLElement>('readout');
+    function pick(k: number) {
+      picked = k; pin.visible = true; place();
+      const x = meta.x0 + (k % nx + 0.5) * cell, y = meta.y1 - (Math.floor(k / nx) + 0.5) * cell, [la, lo] = ll(x, y), d = S[k] - E[k];
+      read.replaceChildren();
+      const row = (s: string, tag = 'span') => { const e = document.createElement(tag); e.textContent = s; read.append(e); };
+      row(`Survey ${S[k].toFixed(1)} m`, 'b'); row(`EMODnet ${E[k].toFixed(1)} m`);
+      row(Math.abs(d) < 0.05 ? 'The same depth' : `The survey is ${Math.abs(d).toFixed(1)} m ${d > 0 ? 'deeper' : 'shallower'}`);
+      row(`${la.toFixed(5)}° N, ${lo.toFixed(5)}° E`); row(`UTM 35N ${Math.round(x).toLocaleString('en-US')} E, ${Math.round(y).toLocaleString('en-US')} N`);
+    }
+    const ray = new THREE.Raycaster(); let down = [0, 0];
+    renderer.domElement.addEventListener('pointerdown', (e) => { down = [e.clientX, e.clientY]; });
+    renderer.domElement.addEventListener('pointerup', (e) => {
+      if (Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 5) return;          // a drag, not a click
+      const r = renderer.domElement.getBoundingClientRect();
+      ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, 1 - ((e.clientY - r.top) / r.height) * 2), camera);
+      geo.computeBoundingSphere();
+      const hit = ray.intersectObject(mesh, false)[0];
+      if (!hit) return;
+      const i = Math.min(nx - 1, Math.max(0, Math.round((hit.point.x + W / 2) / cell - 0.5))), j = Math.min(ny - 1, Math.max(0, Math.round((hit.point.z + H / 2) / cell - 0.5)));
+      if (S[j * nx + i]) pick(j * nx + i);
+    });
+
+    function home() {
+      const far = stage.clientWidth / stage.clientHeight < 1 ? 2.15 : 1.1;
+      controls.target.set(0, -100, 100); camera.position.set(2300 * far, 8600 * far, 100 + 10400 * far); controls.update();
+    }
+    $<HTMLButtonElement>('reset').addEventListener('click', home);
+    function resize() {
+      const w = stage.clientWidth, hh = stage.clientHeight;
+      renderer.setSize(w, hh, false); Object.assign(renderer.domElement.style, { width: '100%', height: '100%' });
+      labelR.setSize(w, hh); camera.aspect = w / hh; camera.updateProjectionMatrix(); cmat.resolution.set(w, hh);
+    }
+    new ResizeObserver(resize).observe(stage); resize(); home(); key(); lift(1);
+    (window as any).__seabed = { show, pick, at, ll, S, E, camera, controls, draw: () => { controls.update(); renderer.render(scene, camera); labelR.render(scene, camera); } };
+
+    function frame(now: number) {
+      if (from) { const f = Math.min(1, (now - t0) / 900); lift(f * f * (3 - 2 * f)); if (f >= 1) from = null; }
+      if (pin.visible) pin.scale.setScalar(camera.position.distanceTo(pin.position) * 0.006);
+      controls.update(); renderer.render(scene, camera); labelR.render(scene, camera);
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  }
+</script>
