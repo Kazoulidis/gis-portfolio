@@ -1,0 +1,169 @@
+---
+/**
+ * Day 28 (Senses: Feeling): the shaking Greece should expect, on a Leaflet map. ESHM20's 475-year shaking as felt intensity, in the sheet's classes; a click reads
+ * what that would feel like there. A switch adds the Samos earthquake of 30 October 2020: the USGS ShakeMap on land and the "Did You Feel It?" reports, each
+ * against the 475-year level. The strongest earthquakes since 1900 and the Hellenic slab can be shown too.
+ *
+ * `src`: the JSON written by Day_28/prep/page_data.py (the two value images and their grids, the reports, the earthquakes, the slab, the figures).
+ */
+interface Props {
+  src: string;
+  caption?: string;
+}
+const { src, caption } = Astro.props;
+---
+
+<figure class="map-figure">
+  <div class="sm" data-sm data-src={src}>
+    <div class="sm__controls">
+      <label class="sm__toggle"><input type="checkbox" data-sm-samos /> Samos 2020: what was felt</label>
+      <label class="sm__toggle"><input type="checkbox" data-sm-quakes checked /> earthquakes since 1900</label>
+      <label class="sm__toggle"><input type="checkbox" data-sm-slab checked /> Hellenic slab</label>
+    </div>
+    <p class="sm__sum" data-sm-sum aria-live="polite"></p>
+    <div class="sm__stage">
+      <div class="sm__map" data-sm-map role="img" aria-label="Map of Greece colored by the earthquake shaking expected once in 475 years, as felt intensity"></div>
+    </div>
+    <div class="sm__legend" aria-hidden="true" data-sm-legend></div>
+    <p class="sm__hint">Click anywhere on land for what that shaking would feel like. With Samos on, click a square for what people reported.</p>
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<style is:global>
+  /* global: the popups, markers and the legend are written by the script, which scoped styles do not reach */
+  .sm { max-width: 800px; margin: 0 auto; }
+  .sm__controls { display: flex; flex-wrap: wrap; gap: 0.45rem 1.1rem; justify-content: center; align-items: center; font-size: 0.86rem; margin-bottom: 0.4rem; }
+  .sm__toggle { white-space: nowrap; cursor: pointer; }
+  .sm__toggle input { accent-color: #ac3e2e; }
+  .sm__sum { margin: 0 0 0.5rem; text-align: center; font-size: 0.84rem; min-height: 2.6em; }
+  .sm__stage { position: relative; width: 100%; aspect-ratio: 1 / 1; max-height: 700px; border: 1px solid var(--rule, #d9d4c8); overflow: hidden; }
+  .sm__map { position: absolute; inset: 0; background: #dfe6ea; }
+  .sm__legend { display: flex; flex-wrap: wrap; gap: 0.3rem 0.8rem; justify-content: center; margin-top: 0.55rem; font-size: 0.75rem; }
+  .sm__legend span { display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap; }
+  .sm__legend i { display: inline-block; width: 1.4rem; height: 0.7rem; border: 1px solid rgba(35, 35, 40, 0.3); }
+  .sm__legend i.ring { width: 0.7rem; border-radius: 50%; border: 1.5px solid #232328; background: rgba(255, 255, 255, 0.5); }
+  .sm__legend i.slab { height: 0; border: 0; border-top: 1.5px dashed #46405a; }
+  .sm__legend i.felt { width: 0.65rem; height: 0.65rem; background: #eeb66e; border: 1px solid #232328; }
+  .sm__hint { margin: 0.35rem 0 0; text-align: center; font-size: 0.78rem; opacity: 0.75; }
+  .sm__label { background: none; border: 0; }
+  .sm__label div { transform: translate(-50%, -50%); font: italic 0.78rem/1.15 'Times New Roman', serif; color: #23232a; white-space: nowrap; text-shadow: 0 0 3px #faf7f0, 0 0 2px #faf7f0, 0 0 1px #faf7f0; }
+  .sm__sq { background: none; border: 0; }
+  .sm__sq div { width: 10px; height: 10px; margin: -5px 0 0 -5px; border: 1px solid #232328; box-sizing: border-box; }
+  .sm__star { background: none; border: 0; }
+  .sm__star div { transform: translate(-50%, -52%); font-size: 22px; line-height: 1; color: #fff; -webkit-text-stroke: 1.4px #781428; }
+  .sm__pop { font-size: 0.82rem; line-height: 1.4; max-width: 270px; }
+  .sm__pop b { display: block; margin-bottom: 0.1rem; }
+  .sm__pop p { margin: 0.25rem 0 0; }
+  .sm__pop .sw { display: inline-block; width: 0.8rem; height: 0.8rem; vertical-align: -0.1rem; margin-right: 0.3rem; border: 1px solid rgba(35, 35, 40, 0.35); }
+  @media (max-width: 640px) { .sm__stage { aspect-ratio: 4 / 5; } }
+</style>
+
+<script>
+  import * as L from 'leaflet';
+  import 'leaflet/dist/leaflet.css';
+  import { whenNear } from '../lazy';
+
+  type Grid = { bounds: [[number, number], [number, number]]; origin: [number, number]; res: number; size: [number, number]; image: string };
+  type Meta = { expected: Grid; samos: Grid; epicentre: { lat: number; lon: number; mag: number };
+    felt: { lat: number; lon: number; city: string; cdi: number; n: number; km: number; expected: number | null; shakemap: number }[];
+    quakes: { lat: number; lon: number; year: number; date: string; mag: number; place: string; depth: number }[];
+    slab: GeoJSON.FeatureCollection; places: { name: string; lat: number; lon: number }[];
+    residents: Record<string, number>; residents_total: number; near: { boxes: number; reports: number; median: number } };
+  const BASEMAP = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}';
+  const ATTRIBUTION = 'Relief &copy; Esri &middot; ESHM20, EFEHR &middot; USGS &middot; EFSM20, INGV';
+  // the sheet's ramp, one color per intensity class from IV to IX
+  const RAMP: [number, number, number][] = [[246, 240, 214], [244, 222, 160], [238, 182, 110], [218, 122, 72], [172, 62, 46], [104, 26, 34]];
+  const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+  const WORD = ['', 'Not felt', 'Weak', 'Weak', 'Light', 'Moderate', 'Strong', 'Very strong', 'Severe', 'Violent', 'Extreme'];
+  // what each level feels like and does, in short (after the Modified Mercalli scale as USGS describes it)
+  const FEEL = ['', 'Not felt.', 'Felt only by a few people at rest.', 'Felt indoors, like a passing truck.', 'Felt indoors by many; dishes and windows rattle.',
+    'Felt by nearly everyone; sleepers wake, small objects fall.', 'Felt by all, many are frightened; furniture shifts, plaster cracks. Light damage.',
+    'Hard to stand. Little damage in well-built buildings, considerable damage in poorly built ones.', 'Heavy furniture overturns, chimneys and walls fall. Considerable damage in ordinary buildings.',
+    'General panic. Heavy damage even in well-designed buildings, some shift off their foundations.', 'Most masonry and frame buildings destroyed.'];
+  const cls = (v: number) => Math.min(10, Math.max(1, Math.round(v)));
+  const col = (v: number) => RAMP[Math.min(5, Math.max(0, cls(v) - 4))];
+  const css = (v: number) => `rgb(${col(v).join(',')})`;
+  const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+  const box = document.querySelector<HTMLElement>('[data-sm]');
+  if (box) whenNear(box, () => { void start(box); });
+
+  async function pixels(g: Grid) {
+    const img = new Image(); img.src = g.image; await img.decode();
+    const [W, H] = g.size, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const cx = cv.getContext('2d', { willReadFrequently: true })!; cx.drawImage(img, 0, 0);
+    const px = cx.getImageData(0, 0, W, H).data, out = new ImageData(W, H), o = out.data;
+    for (let j = 0; j < W * H * 4; j += 4) if (px[j + 3]) { const c = col(px[j] / 25); o[j] = c[0]; o[j + 1] = c[1]; o[j + 2] = c[2]; o[j + 3] = 200; }
+    const c2 = document.createElement('canvas'); c2.width = W; c2.height = H; c2.getContext('2d')!.putImageData(out, 0, 0);
+    const crs = L.CRS.EPSG3857;
+    const at = (ll: L.LatLng) => { const p = crs.project(ll), i = Math.floor((p.x - g.origin[0]) / g.res), k = Math.floor((g.origin[1] - p.y) / g.res);
+      if (i < 0 || k < 0 || i >= W || k >= H) return null; const n = (k * W + i) * 4; return px[n + 3] ? { mmi: px[n] / 25, pga: px[n + 1] / 100 } : null; };
+    return { url: c2.toDataURL(), at };
+  }
+
+  async function start(root: HTMLElement) {
+    const $ = <T extends Element>(n: string) => root.querySelector<T>(`[data-sm-${n}]`)!;
+    const meta: Meta = await (await fetch(root.dataset.src!)).json();
+    const bounds = L.latLngBounds(meta.expected.bounds);
+    const map = L.map($<HTMLElement>('map'), { scrollWheelZoom: true, zoomSnap: 0.25, maxBounds: bounds.pad(0.2), maxBoundsViscosity: 0.8, minZoom: 6 });
+    L.tileLayer(BASEMAP, { attribution: ATTRIBUTION, maxZoom: 12, maxNativeZoom: 13 }).addTo(map);
+    L.control.scale({ imperial: false }).addTo(map);
+    map.fitBounds(bounds.pad(-0.03));
+
+    const [ex, sa] = await Promise.all([pixels(meta.expected), pixels(meta.samos)]);
+    const expected = L.imageOverlay(ex.url, bounds, { interactive: false }).addTo(map);
+    const samosImg = L.imageOverlay(sa.url, L.latLngBounds(meta.samos.bounds), { interactive: false });
+    const samosSamos = L.layerGroup([samosImg]);
+
+    // the felt reports: one square per 10 km box, colored by what people reported
+    for (const f of [...meta.felt].sort((a, b) => a.n - b.n)) {
+      const m = L.marker([f.lat, f.lon], { icon: L.divIcon({ className: 'sm__sq', html: `<div style="background:${css(f.cdi)}"></div>`, iconSize: [0, 0] }), keyboard: false, title: f.city });
+      const vs = f.expected === null ? '' : `<p>Expected once in 475 years: <b style="display:inline">${ROMAN[cls(f.expected) - 1]}</b> (${f.expected.toFixed(1)}), ${f.cdi < f.expected ? `${(f.expected - f.cdi).toFixed(1)} more than was felt` : 'no more than was felt'}.</p>`;
+      m.bindPopup(`<div class="sm__pop"><b>${esc(f.city)}</b>Felt: <span class="sw" style="background:${css(f.cdi)}"></span>${ROMAN[cls(f.cdi) - 1]}, ${WORD[cls(f.cdi)].toLowerCase()} (${f.cdi.toFixed(1)}), from ${f.n} report${f.n > 1 ? 's' : ''}, ${f.km.toLocaleString('en-US')} km from the hypocenter.<p>ShakeMap there: ${f.shakemap.toFixed(1)}.</p>${vs}</div>`, { maxWidth: 290 });
+      samosSamos.addLayer(m);
+    }
+    samosSamos.addLayer(L.marker([meta.epicentre.lat, meta.epicentre.lon], { icon: L.divIcon({ className: 'sm__star', html: '<div>&#9733;</div>', iconSize: [0, 0] }), keyboard: false, zIndexOffset: 900 })
+      .bindPopup('<div class="sm__pop"><b>Samos earthquake</b>30 October 2020, M7.0, 21 km deep, north of Samos. 117 people died in Turkey, nearly all in İzmir, and two on Samos.</div>'));
+
+    // the strongest earthquakes since 1900
+    const quakes = L.layerGroup(meta.quakes.map((q) => L.circleMarker([q.lat, q.lon], { radius: 4 + (q.mag - 6.9) * 6, color: '#232328', weight: 1.5, fillColor: '#ffffff', fillOpacity: 0.45 })
+      .bindPopup(`<div class="sm__pop"><b>${esc(q.date.split('-').reverse().join(' ').replace(/^(\d+) (\d+) (\d+)$/, (_, d, m, y) => `${+d} ${['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][+m - 1]} ${y}`))}, M${q.mag.toFixed(1)}</b>${esc(q.place)}, ${Math.round(q.depth)} km deep</div>`))).addTo(map);
+    const slab = L.geoJSON(meta.slab, { interactive: false, style: (f) => f?.properties.depth === 9 ? { color: '#46405a', weight: 2.4, opacity: 0.9 } : { color: '#46405a', weight: 1.3, opacity: 0.75, dashArray: '6 5' } }).addTo(map);
+    const slabLabels = L.layerGroup(meta.slab.features.map((f) => {
+      const c = (f.geometry as GeoJSON.LineString | GeoJSON.MultiLineString), line = c.type === 'LineString' ? c.coordinates : c.coordinates[0], p = line[Math.floor(line.length * (f.properties!.depth === 9 ? 0.35 : 0.55))];
+      return L.marker([p[1], p[0]], { icon: L.divIcon({ className: 'sm__label', html: `<div style="font-size:0.7rem;color:#46405a">${esc(f.properties!.name)}</div>`, iconSize: [0, 0] }), interactive: false, keyboard: false });
+    })).addTo(map);
+    for (const p of meta.places) L.marker([p.lat, p.lon], { icon: L.divIcon({ className: 'sm__label', html: `<div>${esc(p.name)}</div>`, iconSize: [0, 0] }), interactive: false, keyboard: false, zIndexOffset: 1000 }).addTo(map);
+
+    $<HTMLElement>('legend').innerHTML = [4, 5, 6, 7, 8, 9].map((v) => `<span><i style="background:${css(v)}"></i>${ROMAN[v - 1]} ${WORD[v].toLowerCase()}</span>`).join('') +
+      '<span><i class="ring"></i>earthquake M6.9+, since 1900</span><span><i class="slab"></i>Hellenic slab depth</span><span><i class="felt"></i>felt report, 2020</span>';
+
+    const sum = $<HTMLElement>('sum'), R = meta.residents;
+    let samosOn = false;
+    function summary() {
+      sum.innerHTML = samosOn
+        ? `Samos, 30 October 2020, M7.0: the ShakeMap on land and ${meta.felt.length} places that sent reports. All ${meta.near.boxes} within 100 km felt less than their 475-year level, by ${Math.abs(meta.near.median).toFixed(1)} intensity units at the median.`
+        : `The shaking with a 10% chance of being exceeded in 50 years, about once in 475 years, as felt intensity. <b>${(R['8'] + R['9']).toFixed(0)}%</b> of Greece's ${(meta.residents_total / 1e6).toFixed(1)} million residents live where it reaches VIII, severe, or more.`;
+    }
+    $<HTMLInputElement>('samos').addEventListener('change', (e) => {
+      samosOn = (e.target as HTMLInputElement).checked;
+      if (samosOn) { samosSamos.addTo(map); expected.setOpacity(0.35); map.flyToBounds(L.latLngBounds([[37.0, 25.9], [39.0, 28.2]]), { duration: 0.8 }); }
+      else { map.removeLayer(samosSamos); expected.setOpacity(1); map.flyToBounds(bounds.pad(-0.03), { duration: 0.8 }); }
+      summary();
+    });
+    $<HTMLInputElement>('quakes').addEventListener('change', (e) => { (e.target as HTMLInputElement).checked ? quakes.addTo(map) : map.removeLayer(quakes); });
+    $<HTMLInputElement>('slab').addEventListener('change', (e) => { const on = (e.target as HTMLInputElement).checked; for (const l of [slab, slabLabels]) on ? l.addTo(map) : map.removeLayer(l); });
+    summary();
+
+    // a click on land: what the 475-year shaking would feel like there, and with Samos on, what the ShakeMap gave in 2020
+    map.on('click', (ev: L.LeafletMouseEvent) => {
+      const e = ex.at(ev.latlng), s = samosOn ? sa.at(ev.latlng) : null;
+      if (!e && !s) return;
+      let h = '';
+      if (e) { const c = cls(e.mmi); h += `<b>Once in 475 years: <span class="sw" style="background:${css(e.mmi)}"></span>${ROMAN[c - 1]}, ${WORD[c].toLowerCase()}</b>${FEEL[c]}<p>Intensity ${e.mmi.toFixed(1)}, from a peak ground acceleration of ${e.pga.toFixed(2)} g on rock; soft ground shakes harder.</p>`; }
+      if (s) { const c = cls(s.mmi); h += `<p><b style="display:inline">Samos 2020 here:</b> <span class="sw" style="background:${css(s.mmi)}"></span>${ROMAN[c - 1]}, ${WORD[c].toLowerCase()} (${s.mmi.toFixed(1)}, ShakeMap).</p>`; }
+      L.popup({ maxWidth: 290 }).setLatLng(ev.latlng).setContent(`<div class="sm__pop">${h}</div>`).openOn(map);
+    });
+    (window as any).__sm = { map };
+  }
+</script>
