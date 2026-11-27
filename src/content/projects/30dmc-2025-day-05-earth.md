@@ -4,6 +4,7 @@ summary: 'Two definitions of mountainous Greece: terrain under the EU less-favou
 date: 2025-11-05
 created: 2026-08-01
 category: '30-day-map-challenge'
+fields: ['terrain']
 context: '#30DayMapChallenge 2025 · Day 5'
 tags: ['ArcGIS Pro', 'Leaflet', 'GDAL/OGR']
 image: '/images/30dmc-2025-day-05-wide.webp'

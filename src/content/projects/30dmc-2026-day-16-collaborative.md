@@ -4,6 +4,7 @@ summary: 'Twelve years of a friend''s location history, shared for this map, as 
 date: 2026-11-16
 created: 2026-11-11
 category: '30-day-map-challenge'
+fields: ['cartography', 'geodesy']
 context: '#30DayMapChallenge 2026 · Day 16'
 tags: ['Python', 'three.js', 'Time geography', 'GNSS']
 image: '/images/30dmc-2026-day-16-wide.webp'

@@ -6,7 +6,7 @@
  */
 import type { APIRoute } from 'astro';
 import { getCollection } from 'astro:content';
-import { projectCategories } from '../site';
+import { projectCategories, projectFields } from '../site';
 import { isListed, yearsOf } from '../projects';
 
 export const GET: APIRoute = async ({ site }) => {
@@ -23,6 +23,10 @@ export const GET: APIRoute = async ({ site }) => {
     ...projectCategories
       .filter((c) => projects.some((p) => p.data.category === c.slug))
       .map((c) => ({ path: `/projects/${c.slug}` })),
+    // Areas of study with something published.
+    ...projectFields
+      .filter((f) => projects.some((p) => p.data.fields.includes(f.slug)))
+      .map((f) => ({ path: `/projects/field/${f.slug}` })),
     // Earlier years of a by-year category (the newest year is the page above).
     ...projectCategories
       .filter((c) => c.byYear)

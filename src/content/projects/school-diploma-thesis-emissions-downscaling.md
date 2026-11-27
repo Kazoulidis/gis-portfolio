@@ -5,6 +5,7 @@ summary: 'Diploma thesis, graded 10/10: spatial downscaling of gridded road-tran
 # submission or defence date.
 date: 2026-07-01
 category: 'school'
+fields: ['transport', 'energy-environment']
 context: 'Diploma thesis · Aristotle University of Thessaloniki · Graded 10/10'
 tags: ['Python', 'Floating Car Data', 'Emissions', 'GIS']
 # Kept off the site until checked. Replace every "[Add: ...]" note below, add

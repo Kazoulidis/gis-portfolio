@@ -4,6 +4,7 @@ summary: 'What Borges''s map would really take for Greece: at 1:1, its land and 
 date: 2026-11-14
 created: 2026-11-07
 category: '30-day-map-challenge'
+fields: ['cartography']
 context: '#30DayMapChallenge 2026 · Day 14'
 tags: ['ArcGIS Pro', 'Python', 'Canvas', 'Map scale']
 image: '/images/30dmc-2026-day-14-wide.webp'

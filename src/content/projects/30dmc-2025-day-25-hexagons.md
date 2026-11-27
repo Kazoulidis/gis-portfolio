@@ -4,6 +4,7 @@ summary: 'Villages with a refugee majority after the 1923 population exchange, g
 date: 2025-11-25
 created: 2026-07-18
 category: '30-day-map-challenge'
+fields: ['society', 'culture']
 context: '#30DayMapChallenge 2025 · Day 25'
 tags: ['ArcGIS Pro', 'Leaflet', 'd3-hexbin']
 image: '/images/30dmc-2025-day-25-wide.webp'

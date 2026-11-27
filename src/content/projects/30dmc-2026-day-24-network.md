@@ -4,6 +4,7 @@ summary: 'A slime mold model grown between the 47 mainland cities of Greece, aga
 date: 2026-11-24
 created: 2026-11-18
 category: '30-day-map-challenge'
+fields: ['transport']
 context: '#30DayMapChallenge 2026 · Day 24'
 tags: ['ArcGIS Pro', 'Python', 'Network analysis', 'Simulation', 'OpenStreetMap']
 image: '/images/30dmc-2026-day-24-wide.webp'

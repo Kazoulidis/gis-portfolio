@@ -4,6 +4,7 @@ summary: 'The Greek coast walked with rulers from 100 km down to 200 m. The 100 
 date: 2026-11-02
 created: 2026-10-28
 category: '30-day-map-challenge'
+fields: ['cartography']
 context: '#30DayMapChallenge 2026 · Day 2'
 tags: ['ArcGIS Pro', 'Python', 'GeoPandas', 'Shapely', 'Fractals']
 image: '/images/30dmc-2026-day-02-wide.webp'

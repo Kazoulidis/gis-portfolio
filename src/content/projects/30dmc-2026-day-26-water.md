@@ -3,7 +3,9 @@ title: 'Day 26 - Water: The Sea Floor off Milos'
 summary: 'A raw multibeam survey of 105 million soundings south-east of Milos, decoded, cleaned and gridded at 5 m in Python and checked with crosslines against IHO S-44 Order 1a. It shows two rises and about a hundred pits that the 100 m European grid misses. Turn it in 3D and click for depths.'
 date: 2026-11-26
 created: 2026-11-25
+featured: true
 category: '30-day-map-challenge'
+fields: ['bathymetry']
 context: '#30DayMapChallenge 2026 · Day 26'
 tags: ['ArcGIS Pro', 'Python', 'Three.js', 'Bathymetry', 'Hydrography']
 image: '/images/30dmc-2026-day-26-wide.webp'

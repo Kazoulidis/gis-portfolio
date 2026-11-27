@@ -4,6 +4,7 @@ summary: 'Greece''s 803 nationally designated protected areas, classified by IUC
 date: 2025-11-03
 created: 2026-07-26
 category: '30-day-map-challenge'
+fields: ['energy-environment']
 context: '#30DayMapChallenge 2025 · Day 3'
 tags: ['ArcGIS Pro', 'Leaflet', 'GDAL/OGR']
 image: '/images/30dmc-2025-day-03-wide.webp'

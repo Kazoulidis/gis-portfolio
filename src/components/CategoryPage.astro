@@ -44,7 +44,7 @@ const heading = withYears ? `${category.label} ${year}` : category.label;
     </p>
   </section>
 
-  <ProjectList projects={projects} emptyMessage={`Nothing under ${heading} yet.`} />
+  <ProjectList projects={projects} emptyMessage={`Nothing under ${heading} yet.`} plain={category.slug !== '30-day-map-challenge'} />
 </BaseLayout>
 
 <style>

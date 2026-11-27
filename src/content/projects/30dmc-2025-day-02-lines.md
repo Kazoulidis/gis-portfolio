@@ -4,6 +4,7 @@ summary: 'The Greek railway network by track gauge and operating status: an elec
 date: 2025-11-02
 created: 2026-07-19
 category: '30-day-map-challenge'
+fields: ['transport']
 context: '#30DayMapChallenge 2025 · Day 2'
 tags: ['ArcGIS Pro', 'Leaflet', 'GDAL/OGR']
 image: '/images/30dmc-2025-day-02-wide.webp'

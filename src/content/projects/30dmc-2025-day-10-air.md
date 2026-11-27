@@ -4,6 +4,7 @@ summary: 'Mean annual wind speed over Greece on a 150 m grid, at three turbine h
 date: 2025-11-10
 created: 2026-08-23
 category: '30-day-map-challenge'
+fields: ['energy-environment']
 context: '#30DayMapChallenge 2025 · Day 10'
 tags: ['ArcGIS Pro', 'Leaflet', 'GDAL/OGR']
 image: '/images/30dmc-2025-day-10-wide.webp'

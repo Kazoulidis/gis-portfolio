@@ -4,6 +4,7 @@ summary: 'Every passenger-ship crossing recorded by AIS in Greek waters during 2
 date: 2025-11-20
 created: 2026-08-10
 category: '30-day-map-challenge'
+fields: ['transport', 'bathymetry']
 context: '#30DayMapChallenge 2025 · Day 20'
 tags: ['ArcGIS Pro']
 image: '/images/30dmc-2025-day-20-wide.webp'

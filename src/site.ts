@@ -93,6 +93,29 @@ export const projectCategories = [
 
 export type ProjectCategory = (typeof projectCategories)[number];
 
+/**
+ * Areas of study: a second row of tabs on the Projects page, across the
+ * categories. A project lists any number of them in its `fields` frontmatter,
+ * so it can appear under several. Pages live at /projects/field/<slug>.
+ */
+export const projectFields = [
+  { slug: 'geodesy', label: 'Geodesy & GNSS', blurb: 'Positions, coordinate systems and the shape and motion of the ground.' },
+  { slug: 'bathymetry', label: 'Bathymetry & Hydrography', blurb: 'The sea floor, the sea and what moves on it.' },
+  { slug: 'remote-sensing', label: 'Remote Sensing', blurb: 'Satellite images and what they show over time.' },
+  { slug: 'terrain', label: 'Terrain & Relief', blurb: 'Elevation, landforms and what the land lets you see.' },
+  { slug: 'hazards', label: 'Natural Hazards', blurb: 'Earthquakes, floods and wildfires.' },
+  { slug: 'transport', label: 'Transport & Networks', blurb: 'Roads, railways, shipping and the networks between places.' },
+  { slug: 'energy-environment', label: 'Energy & Environment', blurb: 'Renewable energy, emissions and protected nature.' },
+  { slug: 'society', label: 'Population & Society', blurb: 'People, settlements and the services they reach.' },
+  { slug: 'culture', label: 'History & Culture', blurb: 'Heritage, history, wine and the saints.' },
+  { slug: 'cartography', label: 'Cartographic Experiments', blurb: 'Maps that play with scale, form, sound and time.' },
+] as const;
+
+export type ProjectField = (typeof projectFields)[number];
+
+/** The `fields` values a project may declare. Used by the content schema. */
+export const projectFieldSlugs = projectFields.map((f) => f.slug) as unknown as [string, ...string[]];
+
 /** The `category` values a project may declare. Used by the content schema. */
 export const projectCategorySlugs = projectCategories.map((c) => c.slug) as unknown as [
   string,

@@ -8,7 +8,7 @@
  * otherwise bury everything else.
  */
 import { getCollection } from 'astro:content';
-import { projectCategories } from '../site';
+import { projectCategories, projectFields } from '../site';
 import { isListed } from '../projects';
 
 interface Props {
@@ -23,9 +23,13 @@ const published = await getCollection('projects', isListed);
 const visible = projectCategories.filter((category) =>
   published.some((project) => project.data.category === category.slug),
 );
+// Areas of study, across the categories: a second, quieter row (a project can be in several).
+const fields = projectFields.filter((field) => published.some((project) => project.data.fields.includes(field.slug)));
 ---
 
-<nav class="subnav" aria-label="Project categories">
+<nav class="subnav subnav--origin" aria-label="Project categories">
+  <span class="subnav__label">Collection:</span>
+  <div class="subnav__links">
   {/* 'load' rather than the site-wide 'hover' default, matching the main nav:
       there are only a few of them and they are a few KB each, so fetching them
       up front makes every tab switch a cache hit. */}
@@ -40,4 +44,21 @@ const visible = projectCategories.filter((category) =>
       </a>
     ))
   }
+  </div>
+</nav>
+<nav class="subnav subnav--fields" aria-label="Areas of study">
+  <span class="subnav__label">Area:</span>
+  <div class="subnav__links">
+  {
+    fields.map((field) => (
+      <a
+        href={`/projects/field/${field.slug}`}
+        data-astro-prefetch="hover"
+        aria-current={current === `field/${field.slug}` ? 'page' : undefined}
+      >
+        {field.label}
+      </a>
+    ))
+  }
+  </div>
 </nav>

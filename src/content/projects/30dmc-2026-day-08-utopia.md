@@ -4,6 +4,7 @@ summary: "In the Laws, Plato sets his ideal city, Magnesia, on Crete, and gives 
 date: 2026-11-08
 created: 2026-11-05
 category: '30-day-map-challenge'
+fields: ['terrain', 'culture']
 context: '#30DayMapChallenge 2026 · Day 8'
 tags: ['ArcGIS Pro', 'Python', 'GDAL', 'Land cover', 'Cartography']
 image: '/images/30dmc-2026-day-08-wide.webp'

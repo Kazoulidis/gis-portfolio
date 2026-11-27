@@ -4,6 +4,7 @@ summary: 'All 332 Greek municipalities ranked by how close their shape comes to 
 date: 2026-11-03
 created: 2026-10-31
 category: '30-day-map-challenge'
+fields: ['cartography']
 context: '#30DayMapChallenge 2026 · Day 3'
 tags: ['ArcGIS Pro', 'Python', 'GeoPandas', 'Leaflet', 'Shape analysis']
 image: '/images/30dmc-2026-day-03-wide.webp'

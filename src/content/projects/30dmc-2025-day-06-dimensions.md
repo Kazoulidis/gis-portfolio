@@ -4,6 +4,7 @@ summary: 'Kontur''s population hexagons for Greece, extruded so that height show
 date: 2025-11-06
 created: 2026-08-06
 category: '30-day-map-challenge'
+fields: ['society']
 context: '#30DayMapChallenge 2025 · Day 6'
 tags: ['ArcGIS Pro', 'MapLibre GL', 'H3']
 image: '/images/30dmc-2025-day-06-wide.webp'

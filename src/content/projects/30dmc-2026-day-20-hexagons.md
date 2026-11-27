@@ -4,6 +4,7 @@ summary: 'Greece in 7 km hexagons: the sun each one gets, and the solar parks as
 date: 2026-11-20
 created: 2026-11-15
 category: '30-day-map-challenge'
+fields: ['energy-environment']
 context: '#30DayMapChallenge 2026 · Day 20'
 tags: ['ArcGIS Pro', 'Python', 'Leaflet', 'Renewable energy', 'Hexagons']
 image: '/images/30dmc-2026-day-20-wide.webp'

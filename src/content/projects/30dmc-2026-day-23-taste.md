@@ -4,6 +4,7 @@ summary: 'Greece protects 33 wines by place of origin, each tied to its own area
 date: 2026-11-23
 created: 2026-11-18
 category: '30-day-map-challenge'
+fields: ['culture']
 context: '#30DayMapChallenge 2026 · Day 23'
 tags: ['ArcGIS Pro', 'Python', 'Leaflet', 'Wine', 'EU geographical indications']
 image: '/images/30dmc-2026-day-23-wide.webp'

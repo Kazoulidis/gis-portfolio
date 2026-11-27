@@ -4,6 +4,7 @@ summary: 'Greece''s 21 World Heritage sites, from the Temple of Apollo Epicurius
 date: 2025-11-01
 created: 2026-08-05
 category: '30-day-map-challenge'
+fields: ['culture']
 context: '#30DayMapChallenge 2025 · Day 1'
 tags: ['ArcGIS Pro', 'Leaflet', 'GDAL/OGR']
 image: '/images/30dmc-2025-day-01-wide.webp'

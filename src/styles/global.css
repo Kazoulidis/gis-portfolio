@@ -386,6 +386,42 @@ hr {
   font-size: 0.85rem;
 }
 
+/* The two sorting rows: a bold lead-in in a column of its own, the tabs wrapping beside it, never under it. */
+.subnav--origin,
+.subnav--fields {
+  display: grid;
+  grid-template-columns: 7rem 1fr;
+  align-items: baseline;
+  column-gap: 0.75rem;
+}
+
+.subnav--fields {
+  margin-top: 0.6rem;
+}
+
+.subnav__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 1.5rem;
+}
+
+.subnav--fields .subnav__links {
+  gap: 0.15rem 1.1rem;
+}
+
+.subnav--fields a {
+  font-size: 0.85rem;
+}
+
+.subnav__label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
 /* Marks a draft on the dev server; production builds never contain one. */
 .draft-flag {
   display: inline-block;

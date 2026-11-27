@@ -4,6 +4,7 @@ summary: 'The shaking each place in Greece should expect about once in 475 years
 date: 2026-11-28
 created: 2026-11-26
 category: '30-day-map-challenge'
+fields: ['hazards']
 context: '#30DayMapChallenge 2026 · Day 28'
 tags: ['ArcGIS Pro', 'Python', 'Leaflet', 'Earthquakes', 'Hazard']
 image: '/images/30dmc-2026-day-28-wide.webp'

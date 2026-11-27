@@ -4,6 +4,7 @@ summary: 'Every total eclipse of the Sun over Greece from 500 BC to AD 2500, one
 date: 2026-11-17
 created: 2026-11-12
 category: '30-day-map-challenge'
+fields: ['cartography']
 context: '#30DayMapChallenge 2026 · Day 17'
 tags: ['ArcGIS Pro', 'Python', 'Canvas', 'Astronomy']
 image: '/images/30dmc-2026-day-17-wide.webp'

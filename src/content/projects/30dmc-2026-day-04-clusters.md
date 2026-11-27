@@ -4,6 +4,7 @@ summary: '61,449 Greek earthquakes of M2.5 and over, February 2011 to September 
 date: 2026-11-04
 created: 2026-10-31
 category: '30-day-map-challenge'
+fields: ['hazards']
 context: '#30DayMapChallenge 2026 · Day 4'
 tags: ['ArcGIS Pro', 'Python', 'scikit-learn', 'ST-DBSCAN', 'Leaflet']
 image: '/images/30dmc-2026-day-04-wide.webp'

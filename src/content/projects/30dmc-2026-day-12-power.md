@@ -4,6 +4,7 @@ summary: 'The 175 km power cable that links Crete to the mainland grid, at its c
 date: 2026-11-12
 created: 2026-10-26
 category: '30-day-map-challenge'
+fields: ['bathymetry', 'energy-environment']
 context: '#30DayMapChallenge 2026 · Day 12'
 tags: ['ArcGIS Pro', 'Python', 'GDAL', 'Cable route', 'Bathymetry']
 image: '/images/30dmc-2026-day-12-wide.webp'

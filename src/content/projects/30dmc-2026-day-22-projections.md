@@ -5,6 +5,7 @@ date: 2026-11-22
 featured: true
 created: 2026-10-26
 category: '30-day-map-challenge'
+fields: ['geodesy']
 context: '#30DayMapChallenge 2026 · Day 22'
 tags: ['ArcGIS Pro', 'Python', 'pyproj', 'Geodesy', 'Map projections']
 image: '/images/30dmc-2026-day-22-wide.webp'

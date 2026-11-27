@@ -30,6 +30,7 @@ export const roles = [
     points: [
       'Directed a team of four enumerators during the Greek Population and Housing Census of 2021.',
       'Collected demographic and structural data from 600+ households under strict quality-control protocols.',
+      'Recorded the positions of apartment building entrances with a handheld GPS device across the sector.',
     ],
   },
 ];
@@ -136,4 +137,4 @@ export const skills = [
  * Project titles here carry a "Day 5 - Earth: " prefix that means something on
  * the challenge pages and nothing on a CV. Strip it for the summary listings.
  */
-export const plainTitle = (title: string) => title.replace(/^Day \d+ - [^:]+:\s*/, '');
+export const plainTitle = (title: string) => title.replace(/^Day \d+ - (?:Senses: )?[^:]+:\s*/, '');

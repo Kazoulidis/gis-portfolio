@@ -1,6 +1,6 @@
 import { defineCollection, z } from 'astro:content';
 import { glob } from 'astro/loaders';
-import { projectCategorySlugs } from './site';
+import { projectCategorySlugs, projectFieldSlugs } from './site';
 
 /**
  * Each project is one Markdown file in src/content/projects/.
@@ -36,6 +36,8 @@ const projects = defineCollection({
     // `projectCategories` in src/site.ts; an unrecognised one fails the build
     // rather than quietly hiding the project. Defaults to 'misc'.
     category: z.enum(projectCategorySlugs).default('misc'),
+    // Areas of study (src/site.ts `projectFields`): any number, each a tab of its own.
+    fields: z.array(z.enum(projectFieldSlugs)).default([]),
     // Free text: "Thessaloniki, Greece", "MSc thesis", "Client work".
     context: z.string().optional(),
     // Software and methods. Shown as pills.

@@ -4,6 +4,7 @@ summary: 'Where Greece''s internet runs out: fiber in the cities, copper around 
 date: 2026-11-18
 created: 2026-11-13
 category: '30-day-map-challenge'
+fields: ['society']
 context: '#30DayMapChallenge 2026 · Day 18'
 tags: ['ArcGIS Pro', 'Python', 'Leaflet', 'Telecommunications']
 image: '/images/30dmc-2026-day-18-wide.webp'

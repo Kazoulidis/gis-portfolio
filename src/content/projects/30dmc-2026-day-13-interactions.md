@@ -4,6 +4,7 @@ summary: 'Wind meets sea around Mykonos, Paros and Naxos: turn the wind, and a w
 date: 2026-11-13
 created: 2026-10-30
 category: '30-day-map-challenge'
+fields: ['bathymetry']
 context: '#30DayMapChallenge 2026 · Day 13'
 tags: ['SWAN', 'Python', 'Leaflet', 'Waves', 'Bathymetry']
 image: '/images/30dmc-2026-day-13-wide.webp'

@@ -4,6 +4,7 @@ summary: 'A relief map of Greece where something is not quite right: its plains 
 date: 2026-11-15
 created: 2026-11-10
 category: '30-day-map-challenge'
+fields: ['terrain', 'cartography']
 context: '#30DayMapChallenge 2026 · Day 15'
 tags: ['ArcGIS Pro', 'Python', 'Canvas', 'Relief']
 image: '/images/30dmc-2026-day-15-wide.webp'

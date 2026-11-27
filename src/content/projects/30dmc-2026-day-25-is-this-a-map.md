@@ -4,6 +4,7 @@ summary: 'A 1904 piece for flute and piano with a map of Greece hidden in its fi
 date: 2026-11-25
 created: 2026-11-21
 category: '30-day-map-challenge'
+fields: ['cartography']
 context: '#30DayMapChallenge 2026 · Day 25'
 tags: ['ArcGIS Pro', 'Python', 'Signal processing', 'Audio', 'Copernicus', 'EMODnet']
 image: '/images/30dmc-2026-day-25-wide.webp'

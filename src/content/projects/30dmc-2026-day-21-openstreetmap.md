@@ -4,6 +4,7 @@ summary: 'OpenStreetMap holds 29,231 churches and chapels on Greek land, and the
 date: 2026-11-21
 created: 2026-11-17
 category: '30-day-map-challenge'
+fields: ['culture']
 context: '#30DayMapChallenge 2026 · Day 21'
 tags: ['ArcGIS Pro', 'Python', 'Leaflet', 'OpenStreetMap', 'Overpass']
 image: '/images/30dmc-2026-day-21-wide.webp'

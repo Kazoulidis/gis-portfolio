@@ -4,6 +4,7 @@ summary: 'Twenty-five fire seasons of MODIS burned area over Greece, laid on lan
 date: 2026-11-29
 created: 2026-11-22
 category: '30-day-map-challenge'
+fields: ['remote-sensing', 'hazards']
 context: '#30DayMapChallenge 2026 · Day 29'
 tags: ['ArcGIS Pro', 'Python', 'Leaflet', 'Wildfire', 'Remote sensing']
 image: '/images/30dmc-2026-day-29-wide.webp'

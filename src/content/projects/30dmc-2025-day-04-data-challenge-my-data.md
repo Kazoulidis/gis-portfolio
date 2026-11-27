@@ -4,6 +4,7 @@ summary: 'Twenty-eight photographs from a field trip to Edessa in March 2023, pl
 date: 2025-11-04
 created: 2026-07-30
 category: '30-day-map-challenge'
+fields: ['cartography', 'culture']
 context: '#30DayMapChallenge 2025 · Day 4'
 tags: ['ArcGIS Pro', 'Leaflet', 'EXIF', 'GDAL/OGR']
 image: '/images/30dmc-2025-day-04-wide.webp'

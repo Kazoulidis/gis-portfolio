@@ -4,6 +4,7 @@ summary: 'Seventeen maps of where the Hellenic Armed Forces'' fallen were born, 
 date: 2026-08-21
 created: 2026-08-21
 category: 'misc'
+fields: ['society', 'culture']
 context: 'Personal project'
 tags: ['ArcGIS Pro', 'Leaflet', 'GDAL/OGR']
 map: '/data/hellenic-fatalities.geojson'

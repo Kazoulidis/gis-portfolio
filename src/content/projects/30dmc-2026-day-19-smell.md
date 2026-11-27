@@ -4,6 +4,7 @@ summary: 'Why Thessaloniki''s seafront smells in summer: the bay at the closed e
 date: 2026-11-19
 created: 2026-11-13
 category: '30-day-map-challenge'
+fields: ['remote-sensing', 'energy-environment']
 context: '#30DayMapChallenge 2026 · Day 19'
 tags: ['ArcGIS Pro', 'Python', 'Leaflet', 'Remote Sensing', 'Copernicus Marine']
 image: '/images/30dmc-2026-day-19-wide.webp'

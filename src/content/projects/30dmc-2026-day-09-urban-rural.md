@@ -4,6 +4,7 @@ summary: "All 13,584 settlements in Greece, each joined to a neighbour on the ea
 date: 2026-11-09
 created: 2026-11-05
 category: '30-day-map-challenge'
+fields: ['transport', 'society']
 context: '#30DayMapChallenge 2026 · Day 9'
 tags: ['ArcGIS Pro', 'Python', 'Network analysis', 'Census', 'Cartography']
 image: '/images/30dmc-2026-day-09-wide.webp'

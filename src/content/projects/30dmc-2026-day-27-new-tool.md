@@ -4,6 +4,7 @@ summary: 'Storm Daniel''s flood on the plain of Thessaly, mapped from Sentinel-2
 date: 2026-11-27
 created: 2026-11-26
 category: '30-day-map-challenge'
+fields: ['remote-sensing', 'hazards']
 context: '#30DayMapChallenge 2026 · Day 27'
 tags: ['ESA SNAP', 'Sentinel-2', 'Python', 'Leaflet', 'Flood', 'Remote sensing']
 image: '/images/30dmc-2026-day-27-wide.webp'

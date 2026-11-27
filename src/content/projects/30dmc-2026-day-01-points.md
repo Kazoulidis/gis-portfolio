@@ -5,6 +5,7 @@ date: 2026-11-01
 featured: true
 created: 2026-10-24
 category: '30-day-map-challenge'
+fields: ['geodesy']
 context: '#30DayMapChallenge 2026 · Day 1'
 tags: ['ArcGIS Pro', 'RTKLIB', 'GNSS', 'PPP', 'Python']
 image: '/images/30dmc-2026-day-01-wide.webp'

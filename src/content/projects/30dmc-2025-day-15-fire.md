@@ -4,6 +4,7 @@ summary: 'Every burned area MODIS recorded in Greece from November 2000 to May 2
 date: 2025-11-15
 created: 2026-08-04
 category: '30-day-map-challenge'
+fields: ['remote-sensing', 'hazards']
 context: '#30DayMapChallenge 2025 · Day 15'
 tags: ['ArcGIS Pro', 'Leaflet', 'MODIS', 'GDAL/OGR']
 image: '/images/30dmc-2025-day-15-wide.webp'

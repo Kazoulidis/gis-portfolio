@@ -4,6 +4,7 @@ summary: 'A different take on the prompt: a map about running out of time. Greec
 date: 2026-11-07
 created: 2026-11-04
 category: '30-day-map-challenge'
+fields: ['cartography']
 context: '#30DayMapChallenge 2026 · Day 7'
 tags: ['ArcGIS Pro', 'Python', 'GDAL', 'Cartography']
 image: '/images/30dmc-2026-day-07-wide.webp'

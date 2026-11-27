@@ -4,6 +4,7 @@ summary: "Greece's broadcasting regulator lists 825 radio stations on air. Bigge
 date: 2026-11-11
 created: 2026-11-05
 category: '30-day-map-challenge'
+fields: ['society', 'cartography']
 context: '#30DayMapChallenge 2026 · Day 11'
 tags: ['ArcGIS Pro', 'Python', 'Web Audio', 'Choropleth', 'Cartography']
 image: '/images/30dmc-2026-day-11-wide.webp'

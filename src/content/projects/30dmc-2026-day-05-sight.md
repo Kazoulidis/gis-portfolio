@@ -4,6 +4,7 @@ summary: 'Where Mount Olympus can be seen from: a viewshed of Mytikas, 2,918 m, 
 date: 2026-11-05
 created: 2026-11-01
 category: '30-day-map-challenge'
+fields: ['terrain', 'geodesy']
 context: '#30DayMapChallenge 2026 · Day 5'
 tags: ['ArcGIS Pro', 'GDAL', 'Python', 'Viewshed', 'Leaflet']
 image: '/images/30dmc-2026-day-05-wide.webp'

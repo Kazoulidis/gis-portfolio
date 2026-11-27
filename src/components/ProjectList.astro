@@ -5,14 +5,17 @@
  */
 import type { CollectionEntry } from 'astro:content';
 import { untilPublic } from '../projects';
+import { plainTitle } from '../cv';
 
 interface Props {
   projects: CollectionEntry<'projects'>[];
   /** Shown when the list is empty - e.g. a category with nothing in it yet. */
   emptyMessage?: string;
+  /** Drop the "Day 22 - Projections: " lead from challenge titles; off only on the challenge's own tab. */
+  plain?: boolean;
 }
 
-const { projects, emptyMessage = 'No projects published yet.' } = Astro.props;
+const { projects, emptyMessage = 'No projects published yet.', plain = false } = Astro.props;
 ---
 
 {
@@ -40,13 +43,16 @@ const { projects, emptyMessage = 'No projects published yet.' } = Astro.props;
           </div>
           <div>
             <h2 class="project-item__title">
-              <a href={`/projects/${project.id}`}>{project.data.title}</a>
+              <a href={`/projects/${project.id}`}>{plain ? plainTitle(project.data.title) : project.data.title}</a>
             </h2>
             <p class="project-item__meta">
-              {/* UTC: frontmatter dates parse as UTC midnight, so the local year is
-                  wrong for a 1 January date on any machine west of Greenwich. */}
-              {project.data.date.getUTCFullYear()}
-              {project.data.context && <> &middot; {project.data.context}</>}
+              {/* The full publication date. UTC: frontmatter dates parse as UTC midnight,
+                  so a local date is a day early on any machine west of Greenwich. */}
+              <time datetime={project.data.date.toISOString().slice(0, 10)}>
+                {project.data.date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })}
+              </time>
+              {/* The challenge's "· Day 27" is left off here: the date above already places it. */}
+              {project.data.context && <> &middot; {project.data.context.replace(/\s*·\s*Day \d+$/, '')}</>}
             </p>
             <p>{project.data.summary}</p>
             {project.data.tags.length > 0 && (

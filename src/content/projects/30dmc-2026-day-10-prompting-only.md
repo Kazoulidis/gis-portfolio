@@ -4,6 +4,7 @@ summary: "A Greek island that does not exist. AI came up with its specifications
 date: 2026-11-10
 created: 2026-11-05
 category: '30-day-map-challenge'
+fields: ['cartography']
 context: '#30DayMapChallenge 2026 · Day 10'
 tags: ['ArcGIS Pro', 'Python', 'Generative', 'AI', 'Cartography']
 image: '/images/30dmc-2026-day-10-wide.webp'

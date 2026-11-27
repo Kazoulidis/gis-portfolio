@@ -4,6 +4,7 @@ summary: 'The Thermaic Gulf drawn as a British Admiralty chart of about 1850, fr
 date: 2026-11-06
 created: 2026-11-03
 category: '30-day-map-challenge'
+fields: ['bathymetry', 'cartography', 'culture']
 context: '#30DayMapChallenge 2026 · Day 6'
 tags: ['ArcGIS Pro', 'Python', 'GDAL', 'Bathymetry', 'Cartography']
 image: '/images/30dmc-2026-day-06-wide.webp'

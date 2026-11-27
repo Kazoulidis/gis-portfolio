@@ -1,0 +1,36 @@
+---
+/**
+ * One page per area of study: /projects/field/geodesy, etc. Unlike the
+ * categories, a project can sit under several of these (its `fields`
+ * frontmatter), so these pages cut across the category tabs. Newest first.
+ *
+ * The static `field` segment outranks the dynamic [category] and [...slug]
+ * routes beside it, so no project or category can take this address.
+ */
+import { getCollection } from 'astro:content';
+import CategoryPage from '../../../components/CategoryPage.astro';
+import { projectFields } from '../../../site';
+import { isInList, isListed } from '../../../projects';
+
+export async function getStaticPaths() {
+  const all = await getCollection('projects', isInList);
+  // As for the categories, an area with nothing published gets no page and no tab.
+  return projectFields
+    .filter((field) => all.some((project) => isListed(project) && project.data.fields.includes(field.slug)))
+    .map((field) => ({
+      params: { field: field.slug },
+      props: {
+        field,
+        projects: all
+          .filter((project) => project.data.fields.includes(field.slug))
+          .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf()),
+      },
+    }));
+}
+
+const { field, projects } = Astro.props;
+// CategoryPage takes a category; an area of study is shaped like one with no link and no years.
+const asCategory = { slug: `field/${field.slug}`, label: field.label, blurb: field.blurb, link: null, order: 'desc', homepage: false, byYear: false } as const;
+---
+
+<CategoryPage category={asCategory as any} projects={projects} />
