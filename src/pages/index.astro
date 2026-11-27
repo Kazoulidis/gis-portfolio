@@ -51,6 +51,11 @@ const others = candidates.filter((entry) => !entry.data.featured);
 const newestListed = new Set(others.filter(isListed).slice(0, SHOWN - featured.filter(isListed).length));
 const recent = [...featured, ...others.filter((entry) => newestListed.has(entry) || !isListed(entry))];
 
+// The sidebar card switches between two sets of its own: the featured
+// projects, and simply the newest, featured or not.
+const newestAll = new Set(candidates.filter(isListed).slice(0, SHOWN));
+const newest = candidates.filter((entry) => newestAll.has(entry) || !isListed(entry));
+
 // Day included: several of these fall in the same month, and "Aug 2026" four
 // times over says nothing.
 //
@@ -231,7 +236,7 @@ const fullDate = (d: Date) =>
     </div>
 
     <aside class="sidebar">
-      <RecentProjectsCard projects={recent} shown={SHOWN} />
+      <RecentProjectsCard featured={featured} recent={newest} shown={SHOWN} />
       <h3>Contact</h3>
       <ul>
         <li><a href={`mailto:${site.email}`}>Email</a></li>

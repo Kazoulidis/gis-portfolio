@@ -1,76 +1,101 @@
 ---
 /**
- * A small card at the top of the About page's sidebar that cycles through the
- * most recent projects, one at a time. Each slide links to its project page.
+ * A small card at the top of the About page's sidebar that cycles through
+ * projects, one at a time. Each slide links to its project page. Two buttons
+ * under it switch between the featured projects and the most recent ones.
  *
  * Cycles every few seconds, pauses while the pointer or keyboard focus is on
  * it or the tab is hidden, and never moves on its own for readers who ask for
  * reduced motion; the dots switch slides by hand either way. Without
- * JavaScript the first project shows and still links.
+ * JavaScript the first featured project shows and still links.
  */
 import type { CollectionEntry } from 'astro:content';
 import { plainTitle } from '../cv';
 import { untilPublic } from '../projects';
-import PinIcon from './PinIcon.astro';
 
 interface Props {
-  projects: CollectionEntry<'projects'>[];
+  featured: CollectionEntry<'projects'>[];
+  recent: CollectionEntry<'projects'>[];
   heading?: string;
-  /** How many slides to keep once projects to come are accounted for. */
+  /** How many slides each set keeps once projects to come are accounted for. */
   shown?: number;
 }
 
-const { projects, heading = 'Check out my recent projects', shown = 10 } = Astro.props;
+const { featured, recent, heading = 'Check out my projects', shown = 10 } = Astro.props;
+const sets = [
+  { key: 'featured', label: 'Featured', projects: featured },
+  { key: 'recent', label: 'Recent', projects: recent },
+].filter((set) => set.projects.length > 0);
 ---
 
 {
-  projects.length > 0 && (
-    <section class="recent-card" data-recent-card data-shown={shown} aria-roledescription="carousel" aria-label="Recent projects">
+  sets.length > 0 && (
+    <section class="recent-card" data-recent-card data-shown={shown} aria-roledescription="carousel" aria-label="Projects">
       <h3 class="recent-card__heading">{heading}</h3>
-      <div class="recent-card__slides">
-        {projects.map((project, i) => (
-          <a
-            class="recent-card__slide"
-            href={`/projects/${project.id}`}
-            aria-hidden={i === 0 ? undefined : 'true'}
-            tabindex={i === 0 ? undefined : -1}
-            data-umami-event="recent-card"
-            data-umami-event-project={project.id}
-            {...untilPublic(project)}
-          >
-            <span class="recent-card__image">
-              <img
-                src={project.data.thumbnail}
-                alt=""
-                width="900"
-                height="900"
-                loading={i === 0 ? 'eager' : 'lazy'}
-                decoding="async"
-              />
-              {project.data.featured && <PinIcon class="recent-card__pin" />}
-            </span>
-            <span class="recent-card__title">{plainTitle(project.data.title)}</span>
-            {project.data.context && <span class="recent-card__context">{project.data.context}</span>}
-          </a>
+      <div class="recent-card__sets">
+        {sets.map((set, s) => (
+          <div class="recent-card__set" data-set={set.key} aria-hidden={s === 0 ? undefined : 'true'}>
+            <div class="recent-card__slides">
+              {set.projects.map((project, i) => (
+                <a
+                  class="recent-card__slide"
+                  href={`/projects/${project.id}`}
+                  aria-hidden={i === 0 ? undefined : 'true'}
+                  tabindex={i === 0 && s === 0 ? undefined : -1}
+                  data-umami-event="recent-card"
+                  data-umami-event-project={project.id}
+                  data-umami-event-set={set.key}
+                  {...untilPublic(project)}
+                >
+                  <img
+                    src={project.data.thumbnail}
+                    alt=""
+                    width="900"
+                    height="900"
+                    loading={i === 0 && s === 0 ? 'eager' : 'lazy'}
+                    decoding="async"
+                  />
+                  <span class="recent-card__title">{plainTitle(project.data.title)}</span>
+                  {project.data.context && <span class="recent-card__context">{project.data.context}</span>}
+                </a>
+              ))}
+            </div>
+            {set.projects.length > 1 && (
+              <div class="recent-card__dots">
+                <button type="button" class="recent-card__arrow" aria-label="Previous project" data-step="-1">
+                  <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5" /></svg>
+                </button>
+                {set.projects.map((project, i) => (
+                  <button
+                    type="button"
+                    class="recent-card__dot"
+                    aria-label={`Show ${plainTitle(project.data.title)}`}
+                    aria-current={i === 0 ? 'true' : undefined}
+                    {...untilPublic(project)}
+                  />
+                ))}
+                <button type="button" class="recent-card__arrow" aria-label="Next project" data-step="1">
+                  <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5" /></svg>
+                </button>
+              </div>
+            )}
+          </div>
         ))}
       </div>
-      {projects.length > 1 && (
-        <div class="recent-card__dots">
-          <button type="button" class="recent-card__arrow" aria-label="Previous project" data-step="-1">
-            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5" /></svg>
-          </button>
-          {projects.map((project, i) => (
+      {sets.length > 1 && (
+        <div class="recent-card__modes" role="group" aria-label="Which projects to show">
+          {sets.map((set, s) => (
             <button
               type="button"
-              class="recent-card__dot"
-              aria-label={`Show ${plainTitle(project.data.title)}`}
-              aria-current={i === 0 ? 'true' : undefined}
-              {...untilPublic(project)}
-            />
+              class="recent-card__mode"
+              data-mode={set.key}
+              aria-pressed={s === 0 ? 'true' : 'false'}
+              data-umami-event="recent-card-mode"
+              data-umami-event-set={set.key}
+            >
+              {set.label}
+            </button>
           ))}
-          <button type="button" class="recent-card__arrow" aria-label="Next project" data-step="1">
-            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5" /></svg>
-          </button>
         </div>
       )}
     </section>
@@ -79,53 +104,106 @@ const { projects, heading = 'Check out my recent projects', shown = 10 } = Astro
 
 <script>
   const INTERVAL = 3000;
+
+  type Set = {
+    root: HTMLElement;
+    key: string | undefined;
+    current: number;
+    on: boolean;
+    moves: boolean;
+    show: (index: number) => void;
+  };
+
   for (const card of document.querySelectorAll<HTMLElement>('[data-recent-card]')) {
     const SHOWN = Number(card.dataset.shown) || 10;
-    const slides = [...card.querySelectorAll<HTMLElement>('.recent-card__slide')];
-    const dots = [...card.querySelectorAll<HTMLButtonElement>('.recent-card__dot')];
-    // More than SHOWN only when projects to come are in the markup.
-    for (const extra of [...slides.splice(SHOWN), ...dots.splice(SHOWN)]) extra.remove();
-    if (slides.length < 2) continue;
-
-    let current = 0;
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     let timer: number | undefined;
     let paused = false;
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-    const show = (index: number) => {
-      current = (index + slides.length) % slides.length;
-      slides.forEach((slide, i) => {
-        const on = i === current;
-        slide.classList.toggle('is-active', on);
-        if (on) {
-          slide.removeAttribute('aria-hidden');
-          slide.removeAttribute('tabindex');
-        } else {
-          slide.setAttribute('aria-hidden', 'true');
-          slide.setAttribute('tabindex', '-1');
-        }
-      });
-      dots.forEach((dot, i) => (i === current ? dot.setAttribute('aria-current', 'true') : dot.removeAttribute('aria-current')));
-    };
+    let active: Set;
 
     const stop = () => window.clearInterval(timer);
     const start = () => {
       stop();
-      if (!reduced && !paused && !document.hidden) timer = window.setInterval(() => show(current + 1), INTERVAL);
+      if (active?.moves && !reduced && !paused && !document.hidden)
+        timer = window.setInterval(() => active.show(active.current + 1), INTERVAL);
     };
 
-    dots.forEach((dot, i) =>
-      dot.addEventListener('click', () => {
-        show(i);
+    // One carousel per set; only the one on screen moves.
+    const sets: Set[] = [];
+    for (const root of card.querySelectorAll<HTMLElement>('.recent-card__set')) {
+      const slides = [...root.querySelectorAll<HTMLElement>('.recent-card__slide')];
+      const dots = [...root.querySelectorAll<HTMLButtonElement>('.recent-card__dot')];
+      // More than SHOWN only when projects to come are in the markup.
+      for (const extra of [...slides.splice(SHOWN), ...dots.splice(SHOWN)]) extra.remove();
+      if (slides.length === 0) {
+        root.remove();
+        continue;
+      }
+      if (slides.length < 2) root.querySelector('.recent-card__dots')?.remove();
+
+      const set: Set = {
+        root,
+        key: root.dataset.set,
+        current: 0,
+        on: false,
+        moves: slides.length > 1,
+        show(index) {
+          set.current = (index + slides.length) % slides.length;
+          slides.forEach((slide, i) => {
+            const shown = i === set.current;
+            slide.classList.toggle('is-active', shown);
+            if (shown && set.on) {
+              slide.removeAttribute('aria-hidden');
+              slide.removeAttribute('tabindex');
+            } else {
+              slide.setAttribute('aria-hidden', 'true');
+              slide.setAttribute('tabindex', '-1');
+            }
+          });
+          dots.forEach((dot, i) => (i === set.current ? dot.setAttribute('aria-current', 'true') : dot.removeAttribute('aria-current')));
+        },
+      };
+      dots.forEach((dot, i) =>
+        dot.addEventListener('click', () => {
+          set.show(i);
+          start();
+        }),
+      );
+      root.querySelectorAll<HTMLButtonElement>('.recent-card__arrow').forEach((arrow) =>
+        arrow.addEventListener('click', () => {
+          set.show(set.current + Number(arrow.dataset.step));
+          start();
+        }),
+      );
+      sets.push(set);
+    }
+    if (sets.length === 0) continue;
+
+    // A set that lost all its projects takes its button with it.
+    const modes = [...card.querySelectorAll<HTMLButtonElement>('.recent-card__mode')].filter((mode) => {
+      if (sets.some((set) => set.key === mode.dataset.mode)) return true;
+      mode.remove();
+      return false;
+    });
+    if (modes.length < 2) card.querySelector('.recent-card__modes')?.remove();
+
+    const choose = (key: string | undefined) => {
+      active = sets.find((set) => set.key === key) ?? sets[0];
+      for (const set of sets) {
+        set.on = set === active;
+        set.root.classList.toggle('is-on', set.on);
+        if (set.on) set.root.removeAttribute('aria-hidden');
+        else set.root.setAttribute('aria-hidden', 'true');
+        set.show(set.on ? 0 : set.current);
+      }
+      modes.forEach((mode) => mode.setAttribute('aria-pressed', String(mode.dataset.mode === active.key)));
+    };
+    for (const mode of modes)
+      mode.addEventListener('click', () => {
+        choose(mode.dataset.mode);
         start();
-      }),
-    );
-    card.querySelectorAll<HTMLButtonElement>('.recent-card__arrow').forEach((arrow) =>
-      arrow.addEventListener('click', () => {
-        show(current + Number(arrow.dataset.step));
-        start();
-      }),
-    );
+      });
+
     for (const [on, off] of [['mouseenter', 'mouseleave'], ['focusin', 'focusout']] as const) {
       card.addEventListener(on, () => ((paused = true), stop()));
       card.addEventListener(off, () => ((paused = false), start()));
@@ -133,7 +211,7 @@ const { projects, heading = 'Check out my recent projects', shown = 10 } = Astro
     document.addEventListener('visibilitychange', start);
 
     card.classList.add('is-enhanced');
-    show(0);
+    choose(sets[0].key);
     start();
   }
 </script>
@@ -151,12 +229,26 @@ const { projects, heading = 'Check out my recent projects', shown = 10 } = Astro
     margin: 0 0 0.6rem;
   }
 
+  /* Both sets, and all slides within a set, share one grid cell, so the card
+     keeps the height of the tallest and nothing below it jumps as they change. */
+  .recent-card__sets,
   .recent-card__slides {
     display: grid;
   }
 
-  /* All slides share one grid cell, so the card keeps the height of the
-     tallest and nothing below it jumps as the slides change. */
+  .recent-card__set {
+    grid-area: 1 / 1;
+  }
+
+  .recent-card.is-enhanced .recent-card__set:not(.is-on) {
+    visibility: hidden;
+  }
+
+  /* Without JavaScript only the first set shows. */
+  .recent-card:not(.is-enhanced) .recent-card__set ~ .recent-card__set {
+    display: none;
+  }
+
   .recent-card__slide {
     grid-area: 1 / 1;
     display: flex;
@@ -172,7 +264,7 @@ const { projects, heading = 'Check out my recent projects', shown = 10 } = Astro
     transition: opacity 0.4s ease, visibility 0.4s;
   }
 
-  .recent-card.is-enhanced .recent-card__slide.is-active {
+  .recent-card.is-enhanced .recent-card__set.is-on .recent-card__slide.is-active {
     opacity: 1;
     visibility: visible;
   }
@@ -190,24 +282,6 @@ const { projects, heading = 'Check out my recent projects', shown = 10 } = Astro
     object-fit: cover;
     border: 1px solid var(--rule);
     border-radius: var(--radius);
-  }
-
-  .recent-card__image {
-    position: relative;
-    display: block;
-  }
-
-  /* On a white disc so it reads over any map. :global because the pin's own
-     markup belongs to PinIcon, and Astro scopes these rules to this file. */
-  .recent-card__image :global(.recent-card__pin) {
-    position: absolute;
-    top: 0.4rem;
-    right: 0.4rem;
-    padding: 0.3rem;
-    border-radius: 50%;
-    background: var(--bg-surface);
-    border: 1px solid var(--rule);
-    color: var(--text);
   }
 
   .recent-card__title {
@@ -291,6 +365,41 @@ const { projects, heading = 'Check out my recent projects', shown = 10 } = Astro
     stroke-width: 1.75;
     stroke-linecap: round;
     stroke-linejoin: round;
+  }
+
+  /* Featured / Recent, under the dots. They only work with JavaScript. */
+  .recent-card__modes {
+    display: none;
+    justify-content: center;
+    gap: 0.4rem;
+    margin-top: 0.6rem;
+  }
+
+  .recent-card.is-enhanced .recent-card__modes {
+    display: flex;
+  }
+
+  .recent-card__mode {
+    padding: 0.2rem 0.85rem;
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+
+  .recent-card__mode:hover,
+  .recent-card__mode:focus-visible {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .recent-card__mode[aria-pressed='true'] {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--bg-surface);
   }
 
   @media (prefers-reduced-motion: reduce) {
