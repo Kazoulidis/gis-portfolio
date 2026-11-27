@@ -10,7 +10,7 @@
 
 /** The summary paragraph at the top of the CV. */
 export const summary =
-  "Spatial Planning and Development Engineer (5-year integrated master's degree from Aristotle University of Thessaloniki, equivalent to MSc) with experience in the preparation, processing and quality control of raster and vector geospatial data using Python, QGIS and ArcGIS Pro. Experienced in the spatial downscaling of gridded emissions data to the road network level, with datasets from 120+ countries, and in documenting deliverables for European research projects. Uses Docker and Linux for reproducible workflows. Native Greek speaker, fluent in English (C2) and basic knowledge of German (A2).";
+  "Spatial Planning and Development Engineer (5-year integrated master's degree from Aristotle University of Thessaloniki, equivalent to MSc) with surveying coursework in total station, levelling and GNSS, and field data collection with a handheld GPS during the 2021 census. Processes and quality-checks geospatial data in Python, ArcGIS Pro and QGIS, including raw multibeam soundings gridded and checked against IHO S-44, GNSS positions from raw observations with RTKLIB, coordinate transformations in the Greek Grid, and Sentinel-2 flood mapping in ESA SNAP. Developed a Python workflow that downscales road-transport emissions to the road network, processing UNFCCC data for 120+ countries. Native Greek speaker, fluent in English (C2) and basic knowledge of German (A2).";
 
 /** Newest first. */
 export const roles = [
@@ -86,11 +86,14 @@ export const interests = [
 /** The sidebar groups, in the CV's order. */
 export const skills = [
   {
-    heading: 'Surveying & Geodesy',
+    heading: 'Surveying, Geodesy & Hydrography',
     items: [
       'Total station and traversing',
       'Levelling and trigonometric heighting',
       'GNSS processing (RTKLIB)',
+      'GNSS PPP and station velocities',
+      'Handheld GPS field data collection',
+      'Multibeam bathymetry processing and IHO S-44 QC',
       'Coordinate systems and transformations',
       'AutoCAD',
     ],
@@ -103,6 +106,8 @@ export const skills = [
       'GDAL/OGR',
       'Raster and vector processing',
       'Viewshed and terrain analysis',
+      'Network analysis',
+      'SWAN wave modelling',
       'Map layout and symbology',
     ],
   },
@@ -114,20 +119,22 @@ export const skills = [
       'Point clouds',
       'Digital Terrain Models (DTM)',
       '3D modeling',
+      'ESA SNAP',
+      'Sentinel-2 and MODIS',
       'Copernicus satellite data',
     ],
   },
   {
     heading: 'Programming & Data',
     items: [
-      'Python (NumPy, geopandas, shapely, pyproj, GDAL, arcpy, scikit-learn, osmnx)',
+      'Python (NumPy, SciPy, geopandas, shapely, rasterio, pyproj, GDAL, arcpy, scikit-learn, osmnx)',
       'SQL and PostGIS',
       'Data quality control',
     ],
   },
   {
     heading: 'Web & Tools',
-    items: ['Leaflet', 'WMS/WFS', 'Git', 'Docker', 'Linux', 'Nginx', 'Microsoft Office'],
+    items: ['Leaflet', 'MapLibre GL', 'three.js', 'WMS/WFS', 'Git', 'Docker', 'Linux', 'Nginx', 'Microsoft Office'],
   },
   // Languages are their own section on the About page rather than a skills
   // group, so they are deliberately absent here.
