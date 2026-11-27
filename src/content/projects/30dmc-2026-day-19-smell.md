@@ -36,6 +36,7 @@ map: '/data/30dmc-2026-day-19-smell.json'
 mapComponent: 'smell-map'
 mapCaption: 'Choose ten summers, a month, or a single day of 2026; on a day, the arrow shows that afternoon''s wind over the bay. Click the sea for the chlorophyll at a spot. Chlorophyll is measured from space and shows algae, not smell.'
 draft: true
+featured: true
 ---
 
 **Prompt:** Senses: Smell.

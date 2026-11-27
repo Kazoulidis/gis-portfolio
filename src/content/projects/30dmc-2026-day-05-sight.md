@@ -34,6 +34,7 @@ dataSource:
   - label: '© OpenStreetMap contributors - names and positions of the summits (ODbL)'
     href: 'https://www.openstreetmap.org/copyright'
 draft: true
+featured: true
 ---
 
 **Prompt:** Senses: Sight.

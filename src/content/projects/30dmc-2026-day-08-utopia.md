@@ -38,6 +38,7 @@ dataSource:
   - label: 'T. Okada (2017), Zeugitai and Hoplites - a summary of published farm sizes'
     href: 'https://clsoc.jp/JASCA/2017/2017_vol3_03_Okada.pdf'
 draft: true
+featured: true
 ---
 
 **Prompt:** Utopia.

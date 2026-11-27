@@ -40,6 +40,7 @@ map: '/data/30dmc-2026-day-28-shaking.json'
 mapComponent: 'shaking-map'
 mapCaption: 'The shaking expected once in 475 years, as felt intensity. Click anywhere on land for what it would feel like there. Switch on Samos 2020 for the ShakeMap and the places that reported what they felt, each against its 475-year level.'
 draft: true
+featured: true
 ---
 
 **Prompt:** Senses: Feeling.

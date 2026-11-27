@@ -42,6 +42,7 @@ map: '/data/30dmc-2026-day-27-flood.json'
 mapComponent: 'flood-map'
 mapCaption: 'Sentinel-2 in natural colour, with the water found on each date. Pick a date, switch on what the official Copernicus EMS map of 10 September adds in red, or compare any date with 21 August by dragging the line. Click anywhere for the water there on each date.'
 draft: true
+featured: true
 ---
 
 **Prompt:** New tool.
