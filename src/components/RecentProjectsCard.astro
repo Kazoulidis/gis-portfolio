@@ -234,10 +234,23 @@ const sets = [
   .recent-card__sets,
   .recent-card__slides {
     display: grid;
+    /* minmax(0, 1fr), not auto: an auto column grows to fit the 900 px
+       thumbnails and pushes the picture out past the card. */
+    grid-template-columns: minmax(0, 1fr);
   }
 
+  /* The dots sit at the foot of the set, so they stay put above the buttons
+     whichever set, and however long a title, is showing. */
   .recent-card__set {
     grid-area: 1 / 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .recent-card__set .recent-card__dots {
+    margin-top: auto;
+    padding-top: 0.6rem;
   }
 
   .recent-card.is-enhanced .recent-card__set:not(.is-on) {
